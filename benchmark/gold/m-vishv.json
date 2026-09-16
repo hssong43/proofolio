@@ -1,0 +1,84 @@
+{
+  "id": "m-vishv",
+  "source_sha256": "1b39d86a773c46200c2ace91955986f541b48cef3d6a51370cba473470693c15",
+  "reviewer": "Codex visual inspection; not a human expert",
+  "created_at": "2026-09-14T11:06:43.058Z",
+  "reviewed_pages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "projects": [
+    {
+      "title": "Aggregate capabilities and outcomes",
+      "pages": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "title": "E-commerce ROAS/POAS case",
+      "pages": [
+        5
+      ]
+    },
+    {
+      "title": "SaaS acquisition case",
+      "pages": [
+        6
+      ]
+    },
+    {
+      "title": "Creative portfolio",
+      "pages": [
+        7
+      ]
+    }
+  ],
+  "points": [
+    {
+      "id": "p1",
+      "pages": [
+        5
+      ],
+      "observation": "E-commerce case describes paid funnel/landing-page changes with a POAS change from 2 to 5x and a 90-day timeframe.",
+      "required_context_pages": [
+        5
+      ]
+    },
+    {
+      "id": "p2",
+      "pages": [
+        6
+      ],
+      "observation": "SaaS case lists MAU growth, CAC reduction and activation improvement as separate metrics; exact denominators are not supplied by a creative screenshot.",
+      "required_context_pages": [
+        6
+      ]
+    },
+    {
+      "id": "p3",
+      "pages": [
+        7
+      ],
+      "observation": "Creative gallery demonstrates different landing pages/ads; its proximity does not identify all clients or connect it to every aggregate outcome.",
+      "required_context_pages": [
+        7
+      ]
+    }
+  ],
+  "cautions": [
+    "POAS, ROAS and ROI are different names; preserve the PDF's wording even if inconsistent.",
+    "Page 4 aggregate achievements must not be silently assigned to the individual page 5 or 6 campaigns.",
+    "Long gallery page has small details; do not invent tiny text or infer A/B testing just from variants.",
+    "All-page visual contact-sheet review with text-layer aid where available. Independent source notes by Codex, not human expert or real-world truth verification."
+  ]
+}

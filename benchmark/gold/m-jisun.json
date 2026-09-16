@@ -1,0 +1,213 @@
+{
+  "id": "m-jisun",
+  "source_sha256": "7efebd0234bc0d5281bf3dc0386232afcc1a649879505e6c9495a661f1d3d021",
+  "reviewer": "Codex visual inspection; not a human expert",
+  "created_at": "2026-09-14T11:06:43.063Z",
+  "reviewed_pages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57
+  ],
+  "projects": [
+    {
+      "title": "Personal blog",
+      "pages": [
+        6,
+        7
+      ]
+    },
+    {
+      "title": "Personal Instagram",
+      "pages": [
+        8,
+        9
+      ]
+    },
+    {
+      "title": "TMI team channel",
+      "pages": [
+        10
+      ]
+    },
+    {
+      "title": "2025 mentoring process",
+      "pages": [
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18
+      ]
+    },
+    {
+      "title": "Infographics",
+      "pages": [
+        19,
+        20,
+        21
+      ]
+    },
+    {
+      "title": "Brand proposals",
+      "pages": [
+        23,
+        24,
+        25
+      ]
+    },
+    {
+      "title": "AI creatives",
+      "pages": [
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33
+      ]
+    },
+    {
+      "title": "Video campaigns",
+      "pages": [
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43
+      ]
+    },
+    {
+      "title": "Competitions",
+      "pages": [
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53
+      ]
+    },
+    {
+      "title": "Supporter activities",
+      "pages": [
+        55,
+        56
+      ]
+    }
+  ],
+  "points": [
+    {
+      "id": "p1",
+      "pages": [
+        14,
+        15,
+        16
+      ],
+      "observation": "Mentoring case explicitly separates reference, planning, feedback and finish; the before/after lettering and final college carousel must stay linked.",
+      "required_context_pages": [
+        14,
+        15,
+        16
+      ]
+    },
+    {
+      "id": "p2",
+      "pages": [
+        27,
+        28,
+        29
+      ],
+      "observation": "LG Gram AI grid creative shows source assets, production cautions and composed final; it is not a photograph proving a real endorsement.",
+      "required_context_pages": [
+        27,
+        28,
+        29
+      ]
+    },
+    {
+      "id": "p3",
+      "pages": [
+        23,
+        24,
+        25
+      ],
+      "observation": "Coffee, pizza and museum pages are promotional proposals, with goals/plans that should not be recast as realized campaign results.",
+      "required_context_pages": [
+        23,
+        24,
+        25
+      ]
+    }
+  ],
+  "cautions": [
+    "Entire PDF is image-only; preserve unreadable text as unknown.",
+    "Competition participation, stated award, mentoring and actual client employment are distinct.",
+    "Map-app user counts in infographic page 19 describe the apps, not the author's acquisition performance.",
+    "All-page visual contact-sheet review with text-layer aid where available. Independent source notes by Codex, not human expert or real-world truth verification."
+  ]
+}

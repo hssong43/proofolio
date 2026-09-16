@@ -1,0 +1,165 @@
+{
+  "id": "m-dahun",
+  "source_sha256": "40c0725f79dd88d464dba7aa6909b04f0ed4128d359a2d3d9dc0e9a0bcd23f41",
+  "reviewer": "Codex visual inspection; not a human expert",
+  "created_at": "2026-09-14T11:06:43.064Z",
+  "reviewed_pages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45
+  ],
+  "projects": [
+    {
+      "title": "Video projects",
+      "pages": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ]
+    },
+    {
+      "title": "Personal graphics",
+      "pages": [
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23
+      ]
+    },
+    {
+      "title": "Brand proposals",
+      "pages": [
+        25,
+        26,
+        27,
+        28,
+        29,
+        30
+      ]
+    },
+    {
+      "title": "Mentoring SNS",
+      "pages": [
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41
+      ]
+    },
+    {
+      "title": "Halftime football SNS",
+      "pages": [
+        42,
+        43,
+        44
+      ]
+    }
+  ],
+  "points": [
+    {
+      "id": "p1",
+      "pages": [
+        25,
+        26
+      ],
+      "observation": "Red Button proposal is stated to have been sent to the business; Hamingteon is a mobile renewal proposal with Figma. Submission/prototype does not prove launch.",
+      "required_context_pages": [
+        25,
+        26
+      ]
+    },
+    {
+      "id": "p2",
+      "pages": [
+        32,
+        35,
+        36
+      ],
+      "observation": "Mentoring context and tourism carousels connect target/seasonal content decisions; do not infer paid travel-campaign results.",
+      "required_context_pages": [
+        32,
+        35,
+        36
+      ]
+    },
+    {
+      "id": "p3",
+      "pages": [
+        42,
+        43,
+        44
+      ],
+      "observation": "Personal football feed curates rankings and match results. Source-media rankings and match scores are content, not marketer performance metrics.",
+      "required_context_pages": [
+        42,
+        43,
+        44
+      ]
+    }
+  ],
+  "cautions": [
+    "Awarded group videos include specific role/team statements, not solo authorship.",
+    "AI Avengers and edited sports footage are distinguishable from original filming.",
+    "Before-after growth charts inside proposals may be research or expected outcomes; do not infer execution.",
+    "All-page visual contact-sheet review with text-layer aid where available. Independent source notes by Codex, not human expert or real-world truth verification."
+  ]
+}

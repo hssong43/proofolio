@@ -1,0 +1,23 @@
+{
+  "created_at": "2026-09-16T13:02:39.627Z",
+  "version": "0.6.0",
+  "code_sha256": "d62590895df5acd44d48d2f90b21e76dd4e089a7e5b5074daeaf364ce1f5a443",
+  "model": "gemini-3.8-flash",
+  "skim_thinking": "LOW",
+  "review_thinking": "MEDIUM",
+  "scope": "focused",
+  "page_budget": 5,
+  "documents": [
+    "d-asad",
+    "d-soumyashree",
+    "d-kyungmin",
+    "m-vishv",
+    "m-damyul",
+    "m-hyunmin"
+  ],
+  "evaluation": "Known-source regression, not unseen holdout or human expert evaluation",
+  "baseline_usd": 4.91949795,
+  "additional_limit_krw": 10000,
+  "budget_krw_per_usd": 2000,
+  "absolute_ceiling_usd": 9.91949795
+}

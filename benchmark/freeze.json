@@ -1,0 +1,12 @@
+{
+  "created_at": "2026-09-14T11:30:36.402Z",
+  "model": "gemini-3.8-flash",
+  "scope": "focused",
+  "page_budget": 5,
+  "repeat_documents": ["d-jeongyoun", "m-hyunmin"],
+  "generation_settings": {"maxOutputTokens":16384,"temperature":"provider_default","thinking":"provider_default","seed":"not_set"},
+  "review_note":"Separate Codex source inspection, not a human expert audit. Preserve raw questions and all failed cases. The model service itself may vary despite frozen request settings.",
+  "code_sha256": "0cd9200c9d8e60e066c7f78c7b6f685e952814bc300eb9171d2420d19e9a3ea8",
+  "corpus_sha256": "02fb0896e879655ea6bbeb93001a2629484111ab432cdcdc7693b4bee86d9b83",
+  "gold_sha256": "c13db9eb2eeaee826100938f8951546ac36b5ccaedbd3cd1e1ac199b3ee8311c"
+}

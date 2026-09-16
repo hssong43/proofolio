@@ -1,0 +1,166 @@
+{
+  "id": "d-shuu",
+  "source_sha256": "1b9bf0df2db18de9c54ce875f91e16d04c6b42225cff232a401dfeaeb79074d3",
+  "reviewer": "Codex visual inspection; not a human expert",
+  "created_at": "2026-09-14T11:00:23.116Z",
+  "reviewed_pages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+  ],
+  "projects": [
+    {
+      "title": "NCT birthday event",
+      "pages": [
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "title": "Winter fan slogan",
+      "pages": [
+        7,
+        8
+      ]
+    },
+    {
+      "title": "Self infographic",
+      "pages": [
+        9
+      ]
+    },
+    {
+      "title": "Adoption poster",
+      "pages": [
+        10
+      ]
+    },
+    {
+      "title": "Hanastory SNS",
+      "pages": [
+        11,
+        12
+      ]
+    },
+    {
+      "title": "College cardnews",
+      "pages": [
+        13,
+        14
+      ]
+    },
+    {
+      "title": "Data contest",
+      "pages": [
+        15,
+        16
+      ]
+    },
+    {
+      "title": "Blind Rang",
+      "pages": [
+        17,
+        18,
+        19
+      ]
+    },
+    {
+      "title": "KitKat motion",
+      "pages": [
+        20
+      ]
+    },
+    {
+      "title": "Hat reference animation",
+      "pages": [
+        21
+      ]
+    },
+    {
+      "title": "AI music video",
+      "pages": [
+        22
+      ]
+    },
+    {
+      "title": "Mega Coffee AI",
+      "pages": [
+        23
+      ]
+    },
+    {
+      "title": "Onitsuka AI",
+      "pages": [
+        24
+      ]
+    },
+    {
+      "title": "Dalseo AI contest",
+      "pages": [
+        25
+      ]
+    }
+  ],
+  "points": [
+    {
+      "id": "p1",
+      "pages": [
+        5,
+        6
+      ],
+      "observation": "NCT birthday fan-event design uses pink cherry and character motifs; intent and application are linked.",
+      "required_context_pages": [
+        5
+      ]
+    },
+    {
+      "id": "p2",
+      "pages": [
+        11,
+        12
+      ],
+      "observation": "Hanastory SNS description, contribution percentage and post examples; do not assume full ownership.",
+      "required_context_pages": [
+        11
+      ]
+    },
+    {
+      "id": "p3",
+      "pages": [
+        21
+      ],
+      "observation": "Hat motion graphic explicitly animates an image collected from Pinterest.",
+      "required_context_pages": []
+    }
+  ],
+  "cautions": [
+    "Displayed contribution percentages vary by project; do not carry 100% across pages.",
+    "Brand-themed AI videos and fan goods are not proof of official sponsorship or release.",
+    "Image-heavy PDF: exact visible text takes precedence over lossy OCR/text-layer content.",
+    "All-page contact-sheet visual review plus text-layer aid; source notes are not a human expert or real-world truth audit."
+  ]
+}

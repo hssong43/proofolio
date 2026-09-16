@@ -1,0 +1,137 @@
+{
+  "id": "m-april",
+  "source_sha256": "2099b73f10d202d3b82e3f34995b9c31374db25bf24fac95b3b791fc1ff2fd90",
+  "reviewer": "Codex visual inspection; not a human expert",
+  "created_at": "2026-09-14T11:06:43.059Z",
+  "reviewed_pages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31
+  ],
+  "projects": [
+    {
+      "title": "Essential Elements x Koa Smith",
+      "pages": [
+        9,
+        10
+      ]
+    },
+    {
+      "title": "Live Conscious sustainability",
+      "pages": [
+        11,
+        12
+      ]
+    },
+    {
+      "title": "Elephedge / Laurel Art Garden",
+      "pages": [
+        13,
+        14,
+        15
+      ]
+    },
+    {
+      "title": "Myte",
+      "pages": [
+        16
+      ]
+    },
+    {
+      "title": "OrthoFX",
+      "pages": [
+        17,
+        18,
+        19,
+        20
+      ]
+    },
+    {
+      "title": "Top Tier Admissions",
+      "pages": [
+        21,
+        22,
+        23,
+        24,
+        25,
+        26
+      ]
+    }
+  ],
+  "points": [
+    {
+      "id": "p1",
+      "pages": [
+        9,
+        10
+      ],
+      "observation": "Brand refresh lists impressions, placements, emails and open rate as distinct outcomes, supported by summary text and creative examples rather than a raw dashboard.",
+      "required_context_pages": [
+        9,
+        10
+      ]
+    },
+    {
+      "id": "p2",
+      "pages": [
+        17,
+        18,
+        19
+      ],
+      "observation": "OrthoFX event plan states timeline, small budget and roles. 'What to expect' appointments are projected, not completed appointments.",
+      "required_context_pages": [
+        17,
+        18,
+        19
+      ]
+    },
+    {
+      "id": "p3",
+      "pages": [
+        21,
+        23,
+        25
+      ],
+      "observation": "Top Tier Admissions contains audit observations and channel/content recommendations, not evidence that those recommendations produced measured growth.",
+      "required_context_pages": [
+        21,
+        23,
+        25
+      ]
+    }
+  ],
+  "cautions": [
+    "A global consumer sustainability statistic is background research, not a campaign result.",
+    "Moodboards and inspiration visuals are not all original finished client work.",
+    "Do not equate proposed budget, expected appointments and realized sales.",
+    "All-page visual contact-sheet review with text-layer aid where available. Independent source notes by Codex, not human expert or real-world truth verification."
+  ]
+}

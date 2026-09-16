@@ -1,0 +1,37 @@
+{
+  "reviewer": "Codex visual inspection; not a human expert",
+  "created_at": "2026-09-14T11:15:17.008Z",
+  "cases": [
+    {
+      "case": "jeongyoun",
+      "poppler": [
+        2200,
+        1238
+      ],
+      "pdfjs": [
+        2200,
+        1238
+      ],
+      "mean_abs_rgb_difference_at_1100": 1.506027806334753
+    },
+    {
+      "case": "damyul",
+      "poppler": [
+        2200,
+        1238
+      ],
+      "pdfjs": [
+        2200,
+        1238
+      ],
+      "mean_abs_rgb_difference_at_1100": 1.0134057864590982
+    }
+  ],
+  "observations": [
+    "d-jeongyoun physical page 7: Korean concept paragraph, typography, mobile/web mockups and color labels align; no visible missing glyphs or layout shift in this comparison.",
+    "m-damyul physical page 6: native image dashboard preserves reach versus impressions and posting/as-of dates; small values remain readable at enlarged view.",
+    "Pixel differences reflect rendering/interpolation and are descriptive, not an accuracy threshold.",
+    "Synthetic automated tests separately verify 90/180/270 rotation, CropBox, region crop color and text position. These samples do not prove compatibility with every font or PDF."
+  ],
+  "artifacts": "output/migration/render-qa (local only; not redistributed)"
+}

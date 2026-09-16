@@ -1,0 +1,206 @@
+{
+  "id": "d-doa",
+  "source_sha256": "a57e69eec6baca4e75e93b094231040fc2de11780b166a38146b60c173c788f5",
+  "reviewer": "Codex visual inspection; not a human expert",
+  "created_at": "2026-09-14T11:00:23.116Z",
+  "reviewed_pages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32
+  ],
+  "projects": [
+    {
+      "title": "Tarot style frames",
+      "pages": [
+        5
+      ]
+    },
+    {
+      "title": "Reference-based cat style frame",
+      "pages": [
+        6
+      ]
+    },
+    {
+      "title": "Self infographic",
+      "pages": [
+        7
+      ]
+    },
+    {
+      "title": "Messenger comparison",
+      "pages": [
+        8
+      ]
+    },
+    {
+      "title": "Amorepacific infographic",
+      "pages": [
+        9
+      ]
+    },
+    {
+      "title": "Traditional medicine mascot",
+      "pages": [
+        10,
+        11
+      ]
+    },
+    {
+      "title": "English SNS channel",
+      "pages": [
+        13
+      ]
+    },
+    {
+      "title": "Daiso A'pieu",
+      "pages": [
+        14
+      ]
+    },
+    {
+      "title": "LG Gram",
+      "pages": [
+        15
+      ]
+    },
+    {
+      "title": "LG StanbyME",
+      "pages": [
+        16
+      ]
+    },
+    {
+      "title": "Hyundai Card",
+      "pages": [
+        17
+      ]
+    },
+    {
+      "title": "College cardnews",
+      "pages": [
+        18,
+        19
+      ]
+    },
+    {
+      "title": "IES clinic internship",
+      "pages": [
+        20,
+        21
+      ]
+    },
+    {
+      "title": "Dalseo AI music video",
+      "pages": [
+        23
+      ]
+    },
+    {
+      "title": "Seogu tourism",
+      "pages": [
+        24
+      ]
+    },
+    {
+      "title": "K-cosmetics motion",
+      "pages": [
+        25
+      ]
+    },
+    {
+      "title": "Uiseong tourism",
+      "pages": [
+        26
+      ]
+    },
+    {
+      "title": "Daiso video",
+      "pages": [
+        27
+      ]
+    },
+    {
+      "title": "College video",
+      "pages": [
+        28
+      ]
+    },
+    {
+      "title": "Animal hospital proposal",
+      "pages": [
+        30
+      ]
+    },
+    {
+      "title": "KOSAC proposal",
+      "pages": [
+        31
+      ]
+    }
+  ],
+  "points": [
+    {
+      "id": "p1",
+      "pages": [
+        6
+      ],
+      "observation": "Cat style frame explicitly based on a Pinterest-collected illustration; reference and execution must be distinguished.",
+      "required_context_pages": []
+    },
+    {
+      "id": "p2",
+      "pages": [
+        10,
+        11
+      ],
+      "observation": "Traditional medicine mascot character sheet and goods applications; separate concept intent from real adoption.",
+      "required_context_pages": [
+        10
+      ]
+    },
+    {
+      "id": "p3",
+      "pages": [
+        20,
+        21
+      ],
+      "observation": "IES clinic content is labeled internship/personal work; verify which copy/layout decisions were the candidate's.",
+      "required_context_pages": []
+    }
+  ],
+  "cautions": [
+    "Almost all pages are image-only; missing text-layer text is not missing evidence.",
+    "Mentoring, team projects, individual work and internship are separate labels. K-cosmetics export statistics are context, not candidate performance.",
+    "All-page contact-sheet visual review plus text-layer aid; source notes are not a human expert or real-world truth audit."
+  ]
+}

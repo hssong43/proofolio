@@ -1,0 +1,107 @@
+{
+  "id": "d-asad",
+  "source_sha256": "27516ee85ca46c0a10dd9c0fce4bcdddca6be398906924fcc7c581614f39d5b1",
+  "reviewer": "Codex visual inspection; not a human expert",
+  "created_at": "2026-09-14T11:00:23.116Z",
+  "reviewed_pages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14
+  ],
+  "projects": [
+    {
+      "title": "HIPA",
+      "pages": [
+        2,
+        3
+      ]
+    },
+    {
+      "title": "IM Safe",
+      "pages": [
+        4,
+        5
+      ]
+    },
+    {
+      "title": "Autoflex",
+      "pages": [
+        6,
+        7
+      ]
+    },
+    {
+      "title": "Dar Ashjar",
+      "pages": [
+        8,
+        9
+      ]
+    },
+    {
+      "title": "E-Accounting",
+      "pages": [
+        10,
+        11
+      ]
+    },
+    {
+      "title": "Sheikh Award",
+      "pages": [
+        12,
+        13
+      ]
+    }
+  ],
+  "points": [
+    {
+      "id": "p1",
+      "pages": [
+        2,
+        3
+      ],
+      "observation": "HIPA My Contribution lists planning, prototypes/wireframes, UI and website development; screens are linked examples.",
+      "required_context_pages": [
+        2
+      ]
+    },
+    {
+      "id": "p2",
+      "pages": [
+        6,
+        7
+      ],
+      "observation": "Autoflex wireframes and colored screens are shown together; no explicit experiment or before-after result.",
+      "required_context_pages": [
+        6
+      ]
+    },
+    {
+      "id": "p3",
+      "pages": [
+        10,
+        11
+      ],
+      "observation": "E-Accounting screens and stated landing-page/design role; not proof of mobile backend implementation.",
+      "required_context_pages": [
+        10
+      ]
+    }
+  ],
+  "cautions": [
+    "Own portfolio of work at Innovation Box, with individual contact and My Contribution labels; not a company introduction deck.",
+    "Printed page numbers restart; use physical PDF positions. Some font mappings are garbled in the text layer.",
+    "Adjacent mockups are not automatically sequential flow or validated alternatives.",
+    "All-page contact-sheet visual review plus text-layer aid; source notes are not a human expert or real-world truth audit."
+  ]
+}

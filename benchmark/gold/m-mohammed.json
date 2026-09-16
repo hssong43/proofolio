@@ -1,0 +1,128 @@
+{
+  "id": "m-mohammed",
+  "source_sha256": "a071b01b63a13482e77726e33a66a25ab7e8d5ca0e607de2609a87dc59957dd4",
+  "reviewer": "Codex visual inspection; not a human expert",
+  "created_at": "2026-09-14T11:06:43.059Z",
+  "reviewed_pages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16
+  ],
+  "projects": [
+    {
+      "title": "Meetup ZA",
+      "pages": [
+        3
+      ]
+    },
+    {
+      "title": "myPiitch",
+      "pages": [
+        4
+      ]
+    },
+    {
+      "title": "Dololo",
+      "pages": [
+        5
+      ]
+    },
+    {
+      "title": "Day One / Standard Bank",
+      "pages": [
+        6,
+        7
+      ]
+    },
+    {
+      "title": "Grammar Flow",
+      "pages": [
+        8,
+        9
+      ]
+    },
+    {
+      "title": "Biltong festival",
+      "pages": [
+        10,
+        11
+      ]
+    },
+    {
+      "title": "PayPulse",
+      "pages": [
+        12,
+        13
+      ]
+    },
+    {
+      "title": "Pampers",
+      "pages": [
+        14
+      ]
+    },
+    {
+      "title": "Always",
+      "pages": [
+        15
+      ]
+    }
+  ],
+  "points": [
+    {
+      "id": "p1",
+      "pages": [
+        6,
+        7
+      ],
+      "observation": "Day One attributes copy/concept to Mohammed and art direction to Janeke. Creative continuation spans two pages.",
+      "required_context_pages": [
+        6,
+        7
+      ]
+    },
+    {
+      "id": "p2",
+      "pages": [
+        10,
+        11
+      ],
+      "observation": "Biltong festival credits concept/design, copy and art direction to different people; attendance belongs to the event narrative, not proven marketing conversion.",
+      "required_context_pages": [
+        10,
+        11
+      ]
+    },
+    {
+      "id": "p3",
+      "pages": [
+        12,
+        13
+      ],
+      "observation": "PayPulse game's creative and caption have explicit separate concept/copy, design and art-direction credits.",
+      "required_context_pages": [
+        12,
+        13
+      ]
+    }
+  ],
+  "cautions": [
+    "Do not infer single-person authorship from a visual adjacent to a name.",
+    "Pampers reach is a portfolio statement, not a visible independently verified analytics export.",
+    "Do not assign one campaign's reach to another campaign or confuse creative production with media buying.",
+    "All-page visual contact-sheet review with text-layer aid where available. Independent source notes by Codex, not human expert or real-world truth verification."
+  ]
+}

@@ -1,0 +1,130 @@
+{
+  "id": "m-joshua",
+  "source_sha256": "37e527f23c324783812fe6ef9e88f510e1502bfdbbb6b63c074e69602b2ae3cf",
+  "reviewer": "Codex visual inspection; not a human expert",
+  "created_at": "2026-09-14T11:06:43.059Z",
+  "reviewed_pages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23
+  ],
+  "projects": [
+    {
+      "title": "Copy Chief",
+      "pages": [
+        2
+      ]
+    },
+    {
+      "title": "Frontrvnners",
+      "pages": [
+        3,
+        11,
+        12,
+        13,
+        21
+      ]
+    },
+    {
+      "title": "Chai Ghai",
+      "pages": [
+        4,
+        5,
+        6,
+        7,
+        17,
+        18,
+        19,
+        22
+      ]
+    },
+    {
+      "title": "Navas Lab",
+      "pages": [
+        8,
+        9,
+        10
+      ]
+    },
+    {
+      "title": "Mixed client calendars",
+      "pages": [
+        14,
+        15,
+        16
+      ]
+    },
+    {
+      "title": "Vancity",
+      "pages": [
+        20
+      ]
+    }
+  ],
+  "points": [
+    {
+      "id": "p1",
+      "pages": [
+        5,
+        7
+      ],
+      "observation": "Chai Ghai paid advertising narrative includes a 12.6x ROAS claim and dashboard; metric definition, reporting window and attribution still need explanation.",
+      "required_context_pages": [
+        5,
+        7
+      ]
+    },
+    {
+      "id": "p2",
+      "pages": [
+        8,
+        9,
+        10
+      ],
+      "observation": "Navas Lab narrative says 'up to' ROAS, with creatives and a dashboard on separate pages; peak is not an overall average.",
+      "required_context_pages": [
+        8,
+        9,
+        10
+      ]
+    },
+    {
+      "id": "p3",
+      "pages": [
+        11,
+        21
+      ],
+      "observation": "Frontrvnners funnel work and growth screenshot are far apart; comparing screenshots requires their original reporting periods, not assumed equal windows.",
+      "required_context_pages": [
+        11,
+        21
+      ]
+    }
+  ],
+  "cautions": [
+    "Contact sheets make small dashboard labels unreadable; do not infer exact tiny values without a readable crop.",
+    "GA4/CAPI implementation claims do not establish incremental causality.",
+    "Calendar pages include multiple brands and cannot all be attributed to the adjacent case.",
+    "All-page visual contact-sheet review with text-layer aid where available. Independent source notes by Codex, not human expert or real-world truth verification."
+  ]
+}

@@ -1,0 +1,169 @@
+{
+  "id": "m-damyul",
+  "source_sha256": "0550543b714d02aaab29232944187cae8ffe3691743faa61d01db1d705c07548",
+  "reviewer": "Codex visual inspection; not a human expert",
+  "created_at": "2026-09-14T11:06:43.063Z",
+  "reviewed_pages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43
+  ],
+  "projects": [
+    {
+      "title": "뜨거운 20대 channel",
+      "pages": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ]
+    },
+    {
+      "title": "College student council channel",
+      "pages": [
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24
+      ]
+    },
+    {
+      "title": "Videos",
+      "pages": [
+        26,
+        27,
+        28,
+        29
+      ]
+    },
+    {
+      "title": "Graphic works",
+      "pages": [
+        31,
+        32,
+        33
+      ]
+    },
+    {
+      "title": "Brand SNS content",
+      "pages": [
+        35,
+        36,
+        37,
+        38,
+        39
+      ]
+    },
+    {
+      "title": "Golf rental proposal",
+      "pages": [
+        41
+      ]
+    },
+    {
+      "title": "Misong pub proposal",
+      "pages": [
+        42
+      ]
+    }
+  ],
+  "points": [
+    {
+      "id": "p1",
+      "pages": [
+        5,
+        6,
+        7
+      ],
+      "observation": "Channel overview and promoted posts: author selected posts already having high reach and chose active days from insights; paid total reach is not clean causal lift.",
+      "required_context_pages": [
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "id": "p2",
+      "pages": [
+        8,
+        9,
+        10
+      ],
+      "observation": "Popular posts rank by reach and show interaction/profile metrics separately; reach and impressions/engagement must not be merged.",
+      "required_context_pages": [
+        8,
+        9,
+        10
+      ]
+    },
+    {
+      "id": "p3",
+      "pages": [
+        41,
+        42
+      ],
+      "observation": "Golf rental and Misong pages propose strategies and SNS improvements; their survey/market numbers are not actual campaign outcomes.",
+      "required_context_pages": [
+        41,
+        42
+      ]
+    }
+  ],
+  "cautions": [
+    "Dates of posting and analytics-as-of differ; retain both.",
+    "Team leader role on the channel and five-person planning role on later brand content are not transferable to every project.",
+    "A repeated creative on pages 15/22 is not an independent second outcome.",
+    "All-page visual contact-sheet review with text-layer aid where available. Independent source notes by Codex, not human expert or real-world truth verification."
+  ]
+}

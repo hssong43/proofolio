@@ -1,0 +1,100 @@
+{
+  "id": "m-hyunmin",
+  "source_sha256": "fd2177c9cdd52ea7c04bf01877e2f8469d13615742a269d7bf1c34652d0fb076",
+  "reviewer": "Codex visual inspection; not a human expert",
+  "created_at": "2026-09-14T11:06:43.058Z",
+  "reviewed_pages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "projects": [
+    {
+      "title": "Startup association events",
+      "pages": [
+        2
+      ]
+    },
+    {
+      "title": "Campus newspaper",
+      "pages": [
+        3
+      ]
+    },
+    {
+      "title": "YouTube channel",
+      "pages": [
+        4
+      ]
+    },
+    {
+      "title": "Blog",
+      "pages": [
+        5
+      ]
+    },
+    {
+      "title": "Family Ieum prototype",
+      "pages": [
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "title": "Startup festival / SNS",
+      "pages": [
+        9
+      ]
+    }
+  ],
+  "points": [
+    {
+      "id": "p1",
+      "pages": [
+        4
+      ],
+      "observation": "YouTube overview uses a multi-month cumulative period while the analytics capture uses a recent 28-day window; they are not the same metric scope.",
+      "required_context_pages": [
+        4
+      ]
+    },
+    {
+      "id": "p2",
+      "pages": [
+        5
+      ],
+      "observation": "Blog summary average/max and the screenshot's recent traffic must retain their different periods and aggregation.",
+      "required_context_pages": [
+        5
+      ]
+    },
+    {
+      "id": "p3",
+      "pages": [
+        6,
+        7,
+        8
+      ],
+      "observation": "Family Ieum describes a prototype and user survey; the survey allows two multiple-choice answers from 38 respondents, so counts are not exclusive respondents.",
+      "required_context_pages": [
+        6,
+        7,
+        8
+      ]
+    }
+  ],
+  "cautions": [
+    "Image-only PDF; no text layer is not absence of statements.",
+    "Event budget/planning is not independently verified actual spend.",
+    "Prototype, survey and launch are separate. Do not turn survey responses into conversion or an A/B experiment.",
+    "All-page visual contact-sheet review with text-layer aid where available. Independent source notes by Codex, not human expert or real-world truth verification."
+  ]
+}

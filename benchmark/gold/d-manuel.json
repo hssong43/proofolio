@@ -1,0 +1,331 @@
+{
+  "id": "d-manuel",
+  "source_sha256": "5826656da8ff586fef1e9ed23472e2d192074de2f739b9882d333f9eb034bd3b",
+  "reviewer": "Codex visual inspection; not a human expert",
+  "created_at": "2026-09-14T11:00:23.116Z",
+  "reviewed_pages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60
+  ],
+  "projects": [
+    {
+      "title": "Sukoon campaign",
+      "pages": [
+        3
+      ]
+    },
+    {
+      "title": "iRead identity",
+      "pages": [
+        4
+      ]
+    },
+    {
+      "title": "Mophradat",
+      "pages": [
+        5
+      ]
+    },
+    {
+      "title": "Megalomania",
+      "pages": [
+        6
+      ]
+    },
+    {
+      "title": "Super Health",
+      "pages": [
+        7
+      ]
+    },
+    {
+      "title": "Wordmark selection",
+      "pages": [
+        8
+      ]
+    },
+    {
+      "title": "Park and Design",
+      "pages": [
+        9
+      ]
+    },
+    {
+      "title": "Conference exercise",
+      "pages": [
+        10
+      ]
+    },
+    {
+      "title": "Lecture poster",
+      "pages": [
+        11
+      ]
+    },
+    {
+      "title": "Exchange identity",
+      "pages": [
+        12
+      ]
+    },
+    {
+      "title": "International Gathering",
+      "pages": [
+        13
+      ]
+    },
+    {
+      "title": "University yearbook",
+      "pages": [
+        14
+      ]
+    },
+    {
+      "title": "Die Physiker",
+      "pages": [
+        15
+      ]
+    },
+    {
+      "title": "Pepe Heykoop website",
+      "pages": [
+        16
+      ]
+    },
+    {
+      "title": "Copcopine website",
+      "pages": [
+        17
+      ]
+    },
+    {
+      "title": "Klub7 website",
+      "pages": [
+        18
+      ]
+    },
+    {
+      "title": "Dialogue type collection",
+      "pages": [
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27
+      ]
+    },
+    {
+      "title": "Chelsea FC superfamily",
+      "pages": [
+        28,
+        29,
+        30,
+        31
+      ]
+    },
+    {
+      "title": "MotoGP display",
+      "pages": [
+        32,
+        33,
+        34
+      ]
+    },
+    {
+      "title": "Sciboy",
+      "pages": [
+        35
+      ]
+    },
+    {
+      "title": "Akzidanse",
+      "pages": [
+        36
+      ]
+    },
+    {
+      "title": "Variable explorations",
+      "pages": [
+        37
+      ]
+    },
+    {
+      "title": "Bolton Arabic",
+      "pages": [
+        38
+      ]
+    },
+    {
+      "title": "Gawhar",
+      "pages": [
+        39
+      ]
+    },
+    {
+      "title": "Poster Naskh work in progress",
+      "pages": [
+        40
+      ]
+    },
+    {
+      "title": "Dobb engineering/use",
+      "pages": [
+        41,
+        42
+      ]
+    },
+    {
+      "title": "Workshop teaching",
+      "pages": [
+        44
+      ]
+    },
+    {
+      "title": "Variables of Type teaching material",
+      "pages": [
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51
+      ]
+    },
+    {
+      "title": "Movie-character student typefaces",
+      "pages": [
+        52,
+        53
+      ]
+    },
+    {
+      "title": "Music student typefaces",
+      "pages": [
+        54,
+        55,
+        56
+      ]
+    },
+    {
+      "title": "Modular letterpress",
+      "pages": [
+        57
+      ]
+    },
+    {
+      "title": "Rana Wassef teaching outcome",
+      "pages": [
+        58
+      ]
+    },
+    {
+      "title": "Sara El Sayad teaching outcome",
+      "pages": [
+        59
+      ]
+    }
+  ],
+  "points": [
+    {
+      "id": "p1",
+      "pages": [
+        28,
+        31
+      ],
+      "observation": "Chelsea superfamily caption explicitly separates lead design for X-Sharp/Flare from other collaborators and scripts.",
+      "required_context_pages": [
+        28
+      ]
+    },
+    {
+      "id": "p2",
+      "pages": [
+        41,
+        42
+      ],
+      "observation": "Dobb credits type design to Nour El-Shamy and identifies mastering/font engineering; applied festival graphics are a separate use.",
+      "required_context_pages": [
+        41
+      ]
+    },
+    {
+      "id": "p3",
+      "pages": [
+        54,
+        55,
+        56
+      ],
+      "observation": "Teaching section shows student typeface processes and named student outcomes, not all works designed by the teacher.",
+      "required_context_pages": [
+        55
+      ]
+    }
+  ],
+  "cautions": [
+    "60-page mixed-script stress case. English captions identify scope; Arabic decorative specimens are not all readable from text extraction.",
+    "Super Health is captioned conceptual; Sciboy/Akzidanse unpublished. Printed screenshot page numbers differ from physical PDF pages.",
+    "Teaching examples and explicit collaborator credits must not become sole-author claims.",
+    "All-page contact-sheet visual review plus text-layer aid; source notes are not a human expert or real-world truth audit."
+  ]
+}

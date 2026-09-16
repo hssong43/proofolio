@@ -1,0 +1,14 @@
+{
+  "created_at": "2026-09-14T11:13:03.815Z",
+  "reviewer": "Codex visual inspection; not a human expert",
+  "entries": [
+    {
+      "id": "m-vishv",
+      "original_gold": "points.p2",
+      "original": "MAU growth",
+      "correction": "The enlarged physical page 6 says +64% MoM paid user growth and MoM User Growth; not monthly active users (MAU).",
+      "timing": "Discovered after dev-02 model output while separately inspecting source overlay. Original pre-model gold retained. No holdout model outputs viewed.",
+      "effect": "Do not use MAU as a supported metric or question premise. Original gold p2 is not counted covered merely by an unrelated strategy question."
+    }
+  ]
+}

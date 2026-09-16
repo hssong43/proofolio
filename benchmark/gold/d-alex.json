@@ -1,0 +1,67 @@
+{
+  "id": "d-alex",
+  "source_sha256": "62ec7592af248adfb4895a8e4b5d855516b4fe7449875849a047da59ec7a9e64",
+  "reviewer": "Codex visual inspection; not a human expert",
+  "created_at": "2026-09-14T11:06:43.057Z",
+  "reviewed_pages": [
+    1
+  ],
+  "projects": [
+    {
+      "title": "Equativ / Smart AdServer",
+      "pages": [
+        1
+      ]
+    },
+    {
+      "title": "Akwai",
+      "pages": [
+        1
+      ]
+    },
+    {
+      "title": "Overtakes",
+      "pages": [
+        1
+      ]
+    }
+  ],
+  "points": [
+    {
+      "id": "p1",
+      "pages": [
+        1
+      ],
+      "observation": "Equativ: interview quotes and findings from 12+ users; UX needs and job workflow are shown, not independent adoption evidence.",
+      "required_context_pages": [
+        1
+      ]
+    },
+    {
+      "id": "p2",
+      "pages": [
+        1
+      ],
+      "observation": "Equativ explicitly labels menu before/after and user-centered reorganization; do not infer that every adjacent screen is a before/after pair.",
+      "required_context_pages": [
+        1
+      ]
+    },
+    {
+      "id": "p3",
+      "pages": [
+        1
+      ],
+      "observation": "Akwai usability section distinguishes an under-30-second completion goal and a results heading; interview/task conditions are not raw experiment data.",
+      "required_context_pages": [
+        1
+      ]
+    }
+  ],
+  "cautions": [
+    "One 1920 x 40503 physical page contains three projects. All page references must remain page 1.",
+    "Whole-page outline plus independent zooms at approximate vertical positions 0.165, 0.242 and 0.699 reviewed. Tiny text outside inspected zooms remains uncertain.",
+    "Department co-lead, PM/PO and solo development belong to different projects; do not transfer roles.",
+    "All-page visual contact-sheet review with text-layer aid where available. Independent source notes by Codex, not human expert or real-world truth verification."
+  ]
+}

@@ -1,0 +1,123 @@
+{
+  "id": "d-jeongyoun",
+  "source_sha256": "5a6cebf4a306ed6b3474d097fd628dac18b6567a0373ad45f765c5763583d5ec",
+  "reviewer": "Codex visual inspection; not a human expert",
+  "created_at": "2026-09-14T11:00:23.116Z",
+  "reviewed_pages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18
+  ],
+  "projects": [
+    {
+      "title": "Personal identity",
+      "pages": [
+        4,
+        5
+      ]
+    },
+    {
+      "title": "ADERERROR redesign",
+      "pages": [
+        6,
+        7
+      ]
+    },
+    {
+      "title": "BIGHITMUSIC redesign",
+      "pages": [
+        6,
+        8
+      ]
+    },
+    {
+      "title": "KOLMAR redesign",
+      "pages": [
+        6,
+        9
+      ]
+    },
+    {
+      "title": "MKS identity",
+      "pages": [
+        10,
+        11
+      ]
+    },
+    {
+      "title": "Self-introduction magazine",
+      "pages": [
+        12
+      ]
+    },
+    {
+      "title": "Book cover and poster concepts",
+      "pages": [
+        13
+      ]
+    },
+    {
+      "title": "Unofficial BTS fanbase identity",
+      "pages": [
+        14,
+        15,
+        16,
+        17
+      ]
+    }
+  ],
+  "points": [
+    {
+      "id": "p1",
+      "pages": [
+        7
+      ],
+      "observation": "ADERERROR royal-blue visual direction with target, role and period displayed; redesign is not a commercial commission claim.",
+      "required_context_pages": []
+    },
+    {
+      "id": "p2",
+      "pages": [
+        10,
+        11
+      ],
+      "observation": "MKS monochrome logo/type system and website/business-card applications are linked.",
+      "required_context_pages": [
+        10
+      ]
+    },
+    {
+      "id": "p3",
+      "pages": [
+        15,
+        16,
+        17
+      ],
+      "observation": "Unofficial fanbase comparison feeds a style plan and Instagram mockup.",
+      "required_context_pages": [
+        15,
+        16
+      ]
+    }
+  ],
+  "cautions": [
+    "Cover spells the Korean name 김정윤. Earlier source-discovery romanization was ambiguous.",
+    "Mockup followers are not measured account growth. 100% contribution is the submitted claim, not verified sole ownership. Brand-name redesign is not proof of employment.",
+    "All-page contact-sheet visual review plus text-layer aid; source notes are not a human expert or real-world truth audit."
+  ]
+}

@@ -1,0 +1,164 @@
+{
+  "id": "m-seoha",
+  "source_sha256": "e81d7cc0491a62f151a0d2d4cece15a7f2c35cda9fcff8eca658f95b480549de",
+  "reviewer": "Codex visual inspection; not a human expert",
+  "created_at": "2026-09-14T11:06:43.060Z",
+  "reviewed_pages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40
+  ],
+  "projects": [
+    {
+      "title": "Graphic/content projects",
+      "pages": [
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21
+      ]
+    },
+    {
+      "title": "Video",
+      "pages": [
+        23,
+        24,
+        25
+      ]
+    },
+    {
+      "title": "Personal blog and Instagram",
+      "pages": [
+        27,
+        28,
+        29
+      ]
+    },
+    {
+      "title": "Job information channel",
+      "pages": [
+        30
+      ]
+    },
+    {
+      "title": "Norang Tongdak",
+      "pages": [
+        31,
+        32
+      ]
+    },
+    {
+      "title": "Holika Holika",
+      "pages": [
+        33,
+        34,
+        35
+      ]
+    },
+    {
+      "title": "Minsok beef",
+      "pages": [
+        36,
+        37
+      ]
+    },
+    {
+      "title": "College content",
+      "pages": [
+        38,
+        39
+      ]
+    }
+  ],
+  "points": [
+    {
+      "id": "p1",
+      "pages": [
+        27,
+        28
+      ],
+      "observation": "Personal blog and search-result screenshots demonstrate content/search placement snapshots, not conversion or sustained top ranking.",
+      "required_context_pages": [
+        27,
+        28
+      ]
+    },
+    {
+      "id": "p2",
+      "pages": [
+        30
+      ],
+      "observation": "Job-information SNS targets people in their twenties and shows contest/job cards. Prize money in cards is not the author's campaign revenue.",
+      "required_context_pages": [
+        30
+      ]
+    },
+    {
+      "id": "p3",
+      "pages": [
+        36,
+        37
+      ],
+      "observation": "Minsok beef content is a five-person mentoring project. The 99% new-member offer is creative discount copy, not a measured performance increase.",
+      "required_context_pages": [
+        36,
+        37
+      ]
+    }
+  ],
+  "cautions": [
+    "Mixed design/content-marketing body; not a pure performance-marketing portfolio.",
+    "Team size does not specify the author's exact responsibility.",
+    "Screenshots of popular posts do not establish organic/paid attribution or causal lift.",
+    "All-page visual contact-sheet review with text-layer aid where available. Independent source notes by Codex, not human expert or real-world truth verification."
+  ]
+}

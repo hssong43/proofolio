@@ -1,0 +1,143 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,readFile,writeFile,stat} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {PDFDocument,PDFName,rgb,degrees,StandardFonts} from 'pdf-lib';
+import {loadImage,createCanvas} from '@napi-rs/canvas';
+import {analyzePdf,validateMap,selectPages,validateReviews,localEvidenceChecks} from '../src/pipeline.ts';
+import * as S from '../src/schema.ts';
+import {readPdf,slicePdf,openRenderer,renderPage,renderPng,savePreviews,textSpans,quoteLocationCheck} from '../src/pdf.ts';
+import {SchemaValidationError} from '../src/gemini.ts';
+import type {Generate,ModelRequest} from '../src/gemini.ts';
+import {runCli,loadEnv} from '../src/cli.ts';
+import {questionErrors} from '../src/questions.ts';
+
+export async function pdfBytes(count=3){const pdf=await PDFDocument.create();for(let i=0;i<count;i++)pdf.addPage([200+i,300]);return pdf.save({addDefaultPage:false});}
+export const point=(project_key:string,anchor_page:number,focus:S.FocusTarget['focus'],changes:Partial<S.FocusTarget>={})=>({project_key,anchor_page,focus,
+  specificity:focus==='artifact'?'artifact_only' as const:'concrete_action' as const,context_status:'located' as const,reason:'구체적 작업 설명',required_context_pages:[],optional_context_pages:[],...changes});
+export const mapped=():S.DocumentMap=>({pages:[{page:1,role:'cover',readability:'readable',note:'표지'},
+  {page:2,role:'project',readability:'readable',note:'A'},{page:3,role:'project',readability:'readable',note:'B'}],
+  projects:[{key:'a',title:'A',pages:[2]},{key:'b',title:'B',pages:[3]}],focus_targets:[point('a',2,'contribution'),point('b',3,'artifact')]});
+export const anchor=():S.Anchor=>({page:1,region_key:'r1',location:'오른쪽 설명',kind:'text',purpose:'claim',quote:'디자인 담당',visual_description:null});
+export const inventory=():S.VisualInventory=>({coverage:'complete',limitations:[],links:[],regions:[{key:'r1',kind:'text_block',box:[0,0,1000,1000],
+  description:'설명 영역',salient_text:'디자인 담당',identification:'clear',readability:'readable',source_role:'unknown',role_basis:null}]});
+export const details=(track:S.Track,category:string)=>Object.entries(track==='design'?S.DESIGN_FIELDS:S.MARKETING_FIELDS)
+  .find(([key])=>key===category)![1].map((field:string)=>({field,value:null as string|null,anchor_indices:[] as number[]}));
+export function item(track:S.Track):S.Evidence {
+  if(track==='marketing')return {focus_target_id:null,statement:'ROAS 목표 300%',basis:'portfolio_claim',category:'metric',
+    anchors:[{...anchor(),quote:'ROAS 목표 300%'}],details:details(track,'metric'),metric:{name:'ROAS',reported_value:'300%',result_type:'target',
+      baseline:null,period:null,denominator:null,data_source:null,attribution_method:null}};
+  const d=details('design','contribution');d[0]={field:'own_scope',value:'디자인 담당',anchor_indices:[1]};
+  return {focus_target_id:null,statement:'디자인 담당',basis:'portfolio_claim',category:'contribution',anchors:[anchor()],details:d};
+}
+export function fake(track:S.Track,options:{map?:S.DocumentMap;statuses?:S.Review['status'][];transform?:(request:ModelRequest,raw:any)=>unknown}={}){
+  const calls:ModelRequest[]=[];let reviewIndex=0;
+  const generate:Generate=async request=>{calls.push(request);let raw:any;
+    if(request.kind==='DocumentMap')raw=structuredClone(options.map??mapped());
+    else if(request.kind==='VisualInventory')raw=inventory();
+    else if(request.kind.endsWith('Extraction')){const e=item(track),context=JSON.parse(request.prompt.split('대상 프로젝트 데이터: ')[1].split('\n')[0]);
+      if(context.focus_targets_local_pages[0]){e.focus_target_id=context.focus_targets_local_pages[0].id;e.anchors[0].page=context.focus_targets_local_pages[0].anchor_page;}
+      raw={evidence:[e]};
+    }else if(request.kind==='Reviews'){const candidates=JSON.parse(request.prompt.split('근거 후보 데이터:\n')[1].split('\n')[0]);
+      const status=(options.statuses??['supported','unsupported'])[reviewIndex++]??'supported';raw={reviews:candidates.map((e:any)=>({
+        evidence_id:e.evidence_id,status,reason:'가짜 계약 응답; 시각 품질 평가가 아님',document_support:{status:status==='supported'?'needs_explanation':'not_assessed',reason:'추가 설명',anchor_indices:[]}}))};
+    }else if(request.kind==='QuestionSet'){const source=JSON.parse(request.prompt.split('근거 데이터:\n')[1].split('\n')[0])[0];raw={questions:[{evidence_id:source.id,
+      anchor_indices:[1],angle:'ownership'}]};
+    }else if(request.kind==='QuestionReviews'){const rows=JSON.parse(request.prompt.split('\n').find(s=>s.startsWith('[{'))!);raw={reviews:rows.map((r:any)=>({question_id:r.question_id,status:'supported',reason:'가짜 전제 검사',region_support:true,no_added_premise:true,distinct_answer:true,addresses_focus:true,substantive:false}))};}
+    else throw new Error('Unknown fake request');
+    return options.transform?options.transform(request,raw):raw;
+  };return {generate,calls};
+}
+const run=async(track:S.Track='design',options:Parameters<typeof fake>[1]={},overrides:Partial<Parameters<typeof analyzePdf>[1]>={})=>{
+  const f=fake(track,options);return {result:await analyzePdf(await pdfBytes(options.map?.pages.length??3),{track,model:'gemini-test',generate:f.generate,...overrides}),calls:f.calls};};
+
+test('01 separate tracks and original-page provenance',async()=>{for(const track of ['design','marketing'] as const){const {result:r,calls}=await run(track);
+  assert.equal(calls.length,10);assert.deepEqual(r.evidence.map(e=>e.anchors[0].page),[2,3]);assert.equal(r.questions[0].anchors[0].region_id,'p2:r1');
+  assert.equal(r.evidence[1].question_eligible,false);assert.equal(r.evidence[0].verification_scope,'presence_in_pdf_only');
+  const extracted=calls.filter(c=>c.kind.endsWith('Extraction'));assert.deepEqual(await Promise.all(extracted.map(async c=>(await readPdf(c.pdf!)).getPage(0).getWidth())),[201,202]);}});
+test('02 missing duplicate unknown review IDs fail after one retry',async()=>{for(const mode of ['missing','duplicate','unknown'])await assert.rejects(run('design',{transform:(q,r)=>{
+  if(q.kind==='Reviews'){if(mode==='missing')r.reviews=[];else if(mode==='duplicate')r.reviews.push(r.reviews[0]);else r.reviews[0].evidence_id='invented';}return r;}}),/ID/);});
+test('03 uncertain unreadable sources cannot make questions',async()=>{const m=mapped();m.pages[1].readability='unreadable';const {result}=await run('design',{map:m,statuses:['uncertain']});assert.equal(result.status,'insufficient_evidence');assert.equal(result.questions.length,0);});
+test('04 invalid maps and cross-project anchors fail',async()=>{for(const mutation of [(m:S.DocumentMap)=>m.pages.pop(),(m:S.DocumentMap)=>m.projects[0].pages.push(1),
+  (m:S.DocumentMap)=>m.projects[1].key='a',(m:S.DocumentMap)=>m.projects.pop()]){const m=mapped();mutation(m);assert.throws(()=>validateMap(m,3));}
+  const {result}=await run('design',{transform:(q,r)=>{if(q.kind.endsWith('Extraction'))r.evidence[0].anchors[0].page=3;return r;}});assert.equal(result.questions.length,0);assert.equal(result.rejected_candidates.length,2);});
+test('05 PDF preflight and slicing order',async()=>{for(const bytes of [Buffer.from('not pdf'),Buffer.from('%PDF-broken'),await pdfBytes(0),await pdfBytes(61)])await assert.rejects(readPdf(bytes));
+  const encrypted=await PDFDocument.create();encrypted.addPage();encrypted.context.trailerInfo.Encrypt=encrypted.context.register(encrypted.context.obj({Filter:PDFName.of('Standard')}));
+  await assert.rejects(readPdf(await encrypted.save()),/암호화/);
+  const p=await readPdf(await slicePdf(await readPdf(await pdfBytes()),[3,1]));assert.deepEqual(p.getPages().map(p=>p.getWidth()),[202,200]);await assert.rejects(slicePdf(p,[1,1]));});
+test('06 empty document and extraction remain insufficient',async()=>{const m=mapped();m.projects=[];m.focus_targets=[];m.pages.forEach(p=>p.role='other');assert.equal((await run('design',{map:m})).result.status,'insufficient_evidence');
+  assert.equal((await run('design',{transform:(q,r)=>q.kind.endsWith('Extraction')?{evidence:[]}:r})).result.questions.length,0);});
+test('07 domain and anchor contracts strict',()=>{for(const changes of [{quote:null},{page:true},{page:0},{quote:'  '},{kind:'visual',visual_description:'화면'}])assert.equal(S.Anchor.safeParse({...anchor(),...changes}).success,false);
+  assert.equal(S.DesignEvidence.safeParse({...item('design'),basis:'visual_observation'}).success,false);
+  assert.equal(S.DesignEvidence.safeParse(item('marketing')).success,false);assert.equal(S.MarketingEvidence.safeParse({...item('marketing'),metric:null}).success,false);
+  const e=item('design');e.details[0].anchor_indices=[2];assert.equal(S.DesignEvidence.safeParse(e).success,false);});
+test('08 regions and inspection mode',async()=>{for(const box of [[0,0,0,1000],[0,0,1001,1000],[0,0,500],[0,true,500,500]])assert.equal(S.Region.safeParse({...inventory().regions[0],box}).success,false);
+  assert.equal(S.VisualInventory.safeParse({...inventory(),links:[{from_key:'r1',to_key:'r2',relation:'caption_for',basis:'캡션'}]}).success,false);
+  const {result,calls}=await run('design',{}, {inspectOnly:true});assert.equal(calls.length,3);assert.equal(result.status,'visual_inspection_only');});
+test('09 unknown and uncertain regions cannot pass',async()=>{for(const mode of ['unknown','uncertain']){const {result}=await run('design',{statuses:['supported','supported'],transform:(q,r)=>{
+  if(mode==='uncertain'&&q.kind==='VisualInventory')r.regions[0].identification='uncertain';if(mode==='unknown'&&q.kind.endsWith('Extraction'))r.evidence[0].anchors[0].region_key='r99';return r;}});assert.equal(result.questions.length,0);}});
+test('10 actual crops rotation CropBox text coordinates and previews',async()=>{const pdf=await PDFDocument.create(),page=pdf.addPage([200,300]);
+  page.drawRectangle({x:0,y:150,width:100,height:150,color:rgb(1,0,0)});page.drawRectangle({x:100,y:150,width:100,height:150,color:rgb(0,1,0)});
+  const inspect=async(b:Uint8Array,box:number[])=>{const r=await openRenderer(b);try{const c=await renderPage(r,1,box);return [...c.getContext('2d').getImageData(c.width/2,c.height/2,1,1).data];}finally{await r.loadingTask.destroy();}};
+  assert.deepEqual(await inspect(await pdf.save(),[0,0,500,500]),[255,0,0,255]);page.setRotation(degrees(90));assert.deepEqual(await inspect(await pdf.save(),[0,500,500,1000]),[255,0,0,255]);
+  page.setRotation(degrees(180));assert.deepEqual(await inspect(await pdf.save(),[500,500,1000,1000]),[255,0,0,255]);
+  page.setRotation(degrees(270));assert.deepEqual(await inspect(await pdf.save(),[500,0,1000,500]),[255,0,0,255]);
+  page.setRotation(degrees(0));page.setCropBox(0,150,100,150);assert.deepEqual(await inspect(await pdf.save(),[0,0,1000,1000]),[255,0,0,255]);
+  const dir=await mkdtemp(join(tmpdir(),'portfolio-render-'));await savePreviews(await pdf.save(),[{page:1,...inventory()}],join(dir,'preview'));
+  await assert.rejects(savePreviews(await pdf.save(),[],join(dir,'preview')));assert.ok((await stat(join(dir,'preview/page-001.png'))).size>0);
+  await assert.rejects(renderPng(await pdf.save(),1,[500,0,0,500]));
+  const text=await PDFDocument.create(),tp=text.addPage([200,300]);tp.drawText('ROAS target 300%',{x:15,y:230,size:12,font:await text.embedFont(StandardFonts.Helvetica)});
+  const r=await openRenderer(await text.save());try{const spans=await textSpans(r,1);assert.equal(quoteLocationCheck('ROAS target 300%',[0,0,400,1000],spans),'matched');
+    assert.equal(quoteLocationCheck('ROAS target 300%',[800,0,1000,1000],spans),'outside_region');}finally{await r.loadingTask.destroy();}});
+test('11 focused caps full selection and ordered progress',async()=>{const events:any[]=[];const {result,calls}=await run('design',{}, {pageBudget:1,skimModel:'gemini-skim',onEvent:e=>events.push(e)});
+  assert.equal(result.analysis_plan.selected_pages.length,1);assert.equal(calls[0].model,'gemini-skim');assert.ok(calls.slice(1).every(c=>c.model==='gemini-test'));
+  assert.deepEqual(events.map(e=>e.sequence),events.map((_,i)=>i+1));assert.equal(events.at(-1).type,'complete');assert.equal(result.metrics.model_calls,calls.length);
+  assert.deepEqual(selectPages(mapped(),'full',1).selected_pages,[2,3]);const m=mapped();m.focus_targets=[];assert.deepEqual(selectPages(m,'focused',2).selected_pages,[2,3]);});
+test('12 context bundles atomic optional pages cannot starve points',()=>{const m:S.DocumentMap={pages:Array.from({length:9},(_,i)=>({page:i+1,role:'project',readability:'readable',note:'작업'})),
+  projects:[{key:'a',title:'A',pages:[1,2,3,4]},{key:'b',title:'B',pages:[5,6,7]},{key:'c',title:'C',pages:[8,9]}],focus_targets:[
+    point('a',2,'decision',{required_context_pages:[1],optional_context_pages:[3,4]}),point('b',6,'contribution',{required_context_pages:[5]}),
+    point('a',3,'process',{required_context_pages:[1]}),point('c',8,'decision',{required_context_pages:[9]})]};
+  validateMap(m,9);const p=selectPages(m,'focused',5);assert.deepEqual(p.selected_pages,[1,2,3,5,6]);assert.equal(p.covered_axes.length,3);assert.deepEqual(selectPages(m,'focused',1).selected_pages,[]);
+  m.focus_targets[0].context_status='unresolved';assert.ok(selectPages(m).deferred_points.some(p=>p.defer_reason==='unresolved_context'));});
+test('13 point references and shared pages do not add projects',async()=>{const {result}=await run('design',{transform:(q,r)=>{if(q.kind.endsWith('Extraction'))r.evidence[0].focus_target_id='invented';return r;}});assert.equal(result.questions.length,0);
+  const m=mapped();m.projects[1].pages=[2,3];m.focus_targets[1]=point('b',2,'artifact',{required_context_pages:[3]});assert.deepEqual((await run('design',{map:m},{pageBudget:1})).result.analysis_plan.selected_project_keys,['a']);});
+test('14 a bad candidate does not remove a valid sibling',async()=>{const {result}=await run('design',{transform:(q,r)=>{if(q.kind.endsWith('Extraction'))r.evidence.push({...structuredClone(r.evidence[0]),focus_target_id:'invented'});return r;}});
+  assert.equal(result.evidence.length,2);assert.equal(result.rejected_candidates.length,2);assert.equal(result.questions.length,1);});
+test('15 support checks separate presence and proof, batch size four',async()=>{const {result,calls}=await run('design',{statuses:['supported','supported','supported','supported'],transform:(q,r)=>{if(q.kind.endsWith('Extraction'))r.evidence=Array.from({length:5},()=>structuredClone(r.evidence[0]));return r;}});
+  assert.equal(result.evidence.length,10);assert.equal(calls.filter(c=>c.kind==='Reviews').length,4);
+  const e=item('design');for(const status of ['documented','conflicting'] as const)assert.throws(()=>validateReviews([e],[{evidence_id:'e',status:'supported',reason:'검사',document_support:{status,reason:'검사',anchor_indices:[1]}}],['e']));});
+test('16 unknown duplicate empty question candidates are excluded (v0.5 contract)',async()=>{for(const mode of ['unknown','duplicate','empty']){const {result}=await run('design',{transform:(q,r)=>{
+  if(q.kind==='QuestionSet'){if(mode==='unknown')r.questions[0].evidence_id='invented';if(mode==='duplicate')r.questions.push(r.questions[0]);if(mode==='empty')r.questions=[];}return r;}});
+  assert.equal(result.questions.length,mode==='duplicate'?1:0);if(mode!=='empty')assert.ok(result.question_checks.some(c=>c.status==='rejected'));}});
+test('19 CLI events guide exclusive writes and environment precedence',async()=>{const {result}=await run();const dir=await mkdtemp(join(tmpdir(),'portfolio-cli-')),pdf=join(dir,'in.pdf'),output=join(dir,'result.json'),guide=join(dir,'questions.txt');
+  await writeFile(pdf,await pdfBytes());const envPath=join(dir,'.env');await writeFile(envPath,'export GEMINI_API_KEY="key=123" # comment\nGEMINI_MODEL=gemini-env\nUNRELATED=ignored\n');
+  const stdout:string[]=[],stderr:string[]=[];let calls=0;
+  const args=[pdf,'--track','design','--model','gemini-cli','--events','--output',output,'--guide-output',guide,'--budget-ledger',join(dir,'budget.jsonl')];
+  const deps={envPath,env:{GEMINI_API_KEY:'existing'},stdout:(s:string)=>stdout.push(s),stderr:(s:string)=>stderr.push(s),analyze:async(_b:Uint8Array,options:Parameters<typeof analyzePdf>[1])=>{
+    calls++;assert.equal(options.apiKey,'existing');assert.equal(options.model,'gemini-cli');options.onEvent?.({sequence:1,type:'complete',elapsed_ms:1,data:result});return result;}};
+  assert.equal(await runCli(args,deps),0);assert.equal(stdout.length,1);assert.match(await readFile(guide,'utf8'),/페이지 2/);assert.equal((await stat(output)).mode&0o777,0o600);
+  assert.equal(await runCli(args,deps),1);assert.equal(calls,1);});
+test('26 env allowlist quoting and existing variable precedence',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'portfolio-env-')),envPath=join(dir,'.env');
+  await writeFile(envPath,'export GEMINI_API_KEY="key=123" # comment\nGEMINI_MODEL=gemini-env\nUNRELATED=ignored\n');
+  const env:NodeJS.ProcessEnv={};loadEnv(envPath,env);assert.equal(env.GEMINI_API_KEY,'key=123');assert.equal(env.GEMINI_MODEL,'gemini-env');assert.equal(env.UNRELATED,undefined);
+  env.GEMINI_API_KEY='existing';loadEnv(envPath,env);assert.equal(env.GEMINI_API_KEY,'existing');
+  await writeFile(envPath,"GEMINI_API_KEY='do-not-print\n");assert.throws(()=>loadEnv(envPath,{}),e=>!String(e).includes('do-not-print'));});
+test('23 only schema failures retry once and failure events never complete',async()=>{const original=fake('design'),events:any[]=[];let attempts=0;
+  const result=await analyzePdf(await pdfBytes(),{track:'design',model:'gemini-test',generate:async r=>{if(attempts++===0)throw new SchemaValidationError('schema');return original.generate(r);}});
+  assert.equal(result.metrics.model_calls,original.calls.length+1);
+  for(const error of [new SchemaValidationError('again'),new Error('HTTP 429')]){let calls=0;await assert.rejects(analyzePdf(await pdfBytes(),{track:'design',model:'gemini-test',onEvent:e=>events.push(e),generate:async()=>{calls++;throw error;}}));assert.equal(calls,error instanceof SchemaValidationError?2:1);}
+  assert.ok(events.every(e=>e.type!=='complete'));});
+test('24 review rules get the same single bounded retry',async()=>{let n=0;const {result}=await run('design',{statuses:['supported','supported','unsupported'],transform:(q,r)=>{
+  if(q.kind==='Reviews'&&n++===0)r.reviews[0].document_support={status:'documented',reason:'bad',anchor_indices:[1]};return r;}});assert.equal(result.metrics.model_calls,11);});
+test('25 artifact usage cannot infer collaboration',()=>{const e={...item('design'),category:'artifact',basis:'visual_observation',details:details('design','artifact'),anchors:[{...anchor(),quote:'Application 활용'}]};
+  e.details[3]={field:'stated_usage',value:'Application 활용',anchor_indices:[1]};assert.equal(S.DesignEvidence.safeParse(e).success,true);
+  e.details[3].value='Application 활용 (아티스트 협업 프로젝트)';assert.equal(S.DesignEvidence.safeParse(e).success,false);});
+test('regression: numeral subject target actual percentage-point and ROI substitution',()=>{const d=item('design');d.category='decision';d.details=details('design','decision');d.anchors[0].quote='3가지의 타입이 포함된 타입패밀리';d.statement='3개 타입패밀리';assert.ok(localEvidenceChecks(d).includes('claim_statement_not_verbatim'));
+  for(const change of [{reported_value:'300%p'},{name:'ROI'},{result_type:'reported_actual'}]){const m=item('marketing') as S.Evidence&{metric:zMetric};Object.assign(m.metric,change);assert.ok(localEvidenceChecks(m).length>0);}
+  const q={evidence_id:'e',question:'전환율 300%p를 달성한 방법은?',intent:'확인',listen_for:['실적']};assert.ok(questionErrors(q,undefined,new Set(),new Set()).includes('numeric_premise_requires_source_quote'));});
+type zMetric={name:string;reported_value:string;result_type:string};
+test('regression: source summaries and skim hypotheses are not question inputs',async()=>{const {calls}=await run();const data=JSON.parse(calls.find(c=>c.kind==='QuestionSet')!.prompt.split('근거 데이터:\n')[1]);
+  assert.ok(data.every((e:any)=>!('statement'in e)&&!('source_check'in e)&&!('question_focus'in e)));});
+test('regression: unsupported semantic question review excludes final question',async()=>{const {result}=await run('design',{transform:(q,r)=>{if(q.kind==='QuestionReviews')r.reviews[0].status='unsupported';return r;}});assert.equal(result.questions.length,0);assert.equal(result.status,'insufficient_evidence');});

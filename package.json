@@ -1,0 +1,23 @@
+{
+  "name": "portfolio-evidence",
+  "version": "0.6.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24 <25" },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "node --test tests/*.test.ts",
+    "analyze": "node src/cli.ts",
+    "benchmark": "node src/benchmark.ts"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "1.0.9",
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "6.3.289",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "7.0.2"
+  }
+}

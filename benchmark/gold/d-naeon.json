@@ -1,0 +1,289 @@
+{
+  "id": "d-naeon",
+  "source_sha256": "4ab183362062383d08b1b822db7895a4a8f221a3cae720397d6034438bd5b16a",
+  "reviewer": "Codex visual inspection; not a human expert",
+  "created_at": "2026-09-14T11:00:23.116Z",
+  "reviewed_pages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46
+  ],
+  "projects": [
+    {
+      "title": "Get Show AI video",
+      "pages": [
+        5
+      ]
+    },
+    {
+      "title": "Dalseo AI video",
+      "pages": [
+        6
+      ]
+    },
+    {
+      "title": "Benz AI concept",
+      "pages": [
+        7
+      ]
+    },
+    {
+      "title": "Burger King AI concept",
+      "pages": [
+        8
+      ]
+    },
+    {
+      "title": "MP3-on SNS",
+      "pages": [
+        10,
+        11
+      ]
+    },
+    {
+      "title": "Blog",
+      "pages": [
+        12
+      ]
+    },
+    {
+      "title": "Hyundai metal cards",
+      "pages": [
+        13,
+        14
+      ]
+    },
+    {
+      "title": "LG spring",
+      "pages": [
+        15,
+        16
+      ]
+    },
+    {
+      "title": "Clio cosmetics",
+      "pages": [
+        17,
+        18
+      ]
+    },
+    {
+      "title": "OK Savings concepts",
+      "pages": [
+        19,
+        20
+      ]
+    },
+    {
+      "title": "Safety contest",
+      "pages": [
+        21
+      ]
+    },
+    {
+      "title": "Self newspaper",
+      "pages": [
+        23
+      ]
+    },
+    {
+      "title": "Anniversary tarot",
+      "pages": [
+        24
+      ]
+    },
+    {
+      "title": "Hobby infographic",
+      "pages": [
+        25
+      ]
+    },
+    {
+      "title": "University comparison",
+      "pages": [
+        26
+      ]
+    },
+    {
+      "title": "Forest-fire infographic",
+      "pages": [
+        27
+      ]
+    },
+    {
+      "title": "Fan slogan",
+      "pages": [
+        28
+      ]
+    },
+    {
+      "title": "Fan coffee banners",
+      "pages": [
+        29,
+        30
+      ]
+    },
+    {
+      "title": "Lee Junhyuk internship poster",
+      "pages": [
+        31
+      ]
+    },
+    {
+      "title": "KOSAC tourism",
+      "pages": [
+        33
+      ]
+    },
+    {
+      "title": "Yumsaem competition",
+      "pages": [
+        34
+      ]
+    },
+    {
+      "title": "Boeun tourism",
+      "pages": [
+        35
+      ]
+    },
+    {
+      "title": "Kelly/Cass film",
+      "pages": [
+        36
+      ]
+    },
+    {
+      "title": "Environment contest",
+      "pages": [
+        37
+      ]
+    },
+    {
+      "title": "Overseas safety",
+      "pages": [
+        38
+      ]
+    },
+    {
+      "title": "NC opening vlog",
+      "pages": [
+        39
+      ]
+    },
+    {
+      "title": "Sapporo vlog",
+      "pages": [
+        40
+      ]
+    },
+    {
+      "title": "Cookie Run motion",
+      "pages": [
+        41
+      ]
+    },
+    {
+      "title": "Maze Runner motion",
+      "pages": [
+        42
+      ]
+    },
+    {
+      "title": "NC Dinos motion",
+      "pages": [
+        43
+      ]
+    },
+    {
+      "title": "Title motion",
+      "pages": [
+        44
+      ]
+    },
+    {
+      "title": "Hunger Games motion",
+      "pages": [
+        45
+      ]
+    }
+  ],
+  "points": [
+    {
+      "id": "p1",
+      "pages": [
+        10,
+        11
+      ],
+      "observation": "Music-recommendation SNS team operation and ads have visible insights captures; source relation spans both pages.",
+      "required_context_pages": [
+        10
+      ]
+    },
+    {
+      "id": "p2",
+      "pages": [
+        24
+      ],
+      "observation": "Anniversary tarot-card infographic describes its visual metaphor.",
+      "required_context_pages": []
+    },
+    {
+      "id": "p3",
+      "pages": [
+        31
+      ],
+      "observation": "Actor fan-signing poster has an internship label and explicit actual-use date; scope is this poster, not the whole event.",
+      "required_context_pages": []
+    }
+  ],
+  "cautions": [
+    "Mixed marketing/design portfolio; this case evaluates graphic/content design, not the author's job title.",
+    "Many brand videos are AI-generated team concepts. A named brand or face does not prove paid collaboration.",
+    "Keep advertising capture numbers tied to their metric and period; they are not general portfolio credibility scores.",
+    "All-page contact-sheet visual review plus text-layer aid; source notes are not a human expert or real-world truth audit."
+  ]
+}
