@@ -117,15 +117,35 @@ export async function textSpans(document: Renderer, pageNumber: number): Promise
   }
   return spans;
 }
+export function textInBox(box:Box,spans:TextSpan[]) {
+  return spans.filter(s => {
+    const cy=(s.box[0]+s.box[2])/2, cx=(s.box[1]+s.box[3])/2;
+    return cy>=box[0]-8 && cy<=box[2]+8 && cx>=box[1]-8 && cx<=box[3]+8;
+  }).map(s=>s.text).join(' ');
+}
+export function numericQuoteIssue(quote:string,box:Box,spans:TextSpan[]):string|null {
+  if(!/\p{N}/u.test(quote))return null;
+  if(/\p{N}\s+\p{N}{1,2}(?!\p{N})/u.test(quote))return 'ambiguous_numeric_spacing';
+  const source=textInBox(box,spans),fold=(s:string)=>s.normalize('NFKC').replace(/[‐‑‒–—−]/g,'-');
+  if(normalize(source).replace(/\s/g,'').includes(normalize(quote).replace(/\s/g,'')))return null;
+  if(fold(source).replace(/\s/g,'').includes(fold(quote).replace(/\s/g,'')))return 'nonverbatim_symbol_transcription';
+  const chars=[...fold(source)],kept=chars.flatMap((c,i)=>/[\p{L}\p{N}]/u.test(c)?[{c,i}]:[]);
+  const needle=[...fold(quote)].filter(c=>/[\p{L}\p{N}]/u.test(c)).join(''),at=kept.map(x=>x.c).join('').indexOf(needle);
+  if(!needle||at<0)return null; // A missing text layer is not evidence that image text is absent.
+  const start=kept[at].i,end=kept[at+needle.length-1]?.i;
+  if(end===undefined)return null;
+  // Include leading/trailing measurement symbols but never repair text from this approximate match.
+  const prefix=chars.slice(0,start).join('').match(/[+\-~<>≤≥=$€£₩]\s*$/)?.[0]??'';
+  const suffix=chars.slice(end+1).join('').match(/^\s*[%‰×]/)?.[0]??'';
+  const slice=prefix+chars.slice(start,end+1).join('')+suffix;
+  const signature=(s:string)=>(fold(s).replace(/\s/g,'').match(/\p{N}+(?:[.,]\p{N}+)*|[+\-~→<>≤≥=%‰×/$€£₩]/gu)??[]).join('|');
+  return signature(slice)!==signature(quote)?'numeric_text_layer_mismatch':null;
+}
 export function quoteLocationCheck(quote: string, box: Box, spans: TextSpan[]): 'matched'|'outside_region'|'not_found'|'unavailable' {
   if (!spans.length) return 'unavailable';
   const compact = (s: string) => normalize(s).replace(/\s/g,'');
   const needle = compact(quote);
-  const inside = spans.filter(s => {
-    const cy=(s.box[0]+s.box[2])/2, cx=(s.box[1]+s.box[3])/2;
-    return cy>=box[0]-8 && cy<=box[2]+8 && cx>=box[1]-8 && cx<=box[3]+8;
-  });
-  if (compact(inside.map(s=>s.text).join(' ')).includes(needle)) return 'matched';
+  if (compact(textInBox(box,spans)).includes(needle)) return 'matched';
   if (compact(spans.map(s=>s.text).join(' ')).includes(needle)) return 'outside_region';
   // A mixed PDF can have text-layer captions and image-only dashboard text. Absence is not disproof.
   return 'not_found';

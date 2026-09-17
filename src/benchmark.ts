@@ -81,18 +81,20 @@ async function run(phase:string,runId:string,ids:string[]){
   if(phase==='mvp')budget.capAdditionalKrw(10000,2000);
   fresh(join(directory,'run.json'),{phase,runId,code_sha256:hash,model,started_at:new Date().toISOString(),documents:selected.map(s=>s.id),budget_before:budget.snapshot()});
   let stop=false;
+  const controller=new AbortController(),pause=()=>{stop=true;controller.abort(new Error('사용자 중단: 전송된 요청만 정산하고 종료합니다.'));};
+  process.on('SIGINT',pause);process.on('SIGTERM',pause);
   try{for(const s of selected){const dir=join(directory,s.id);mkdirSync(dir,{mode:0o700});
-    if(stop){fresh(join(dir,'error.json'),{status:'unattempted_budget',budget:budget.snapshot()});continue;}
+    if(stop){fresh(join(dir,'error.json'),{status:controller.signal.aborted?'unattempted_user_pause':'unattempted_budget',budget:budget.snapshot()});continue;}
     let raw=0;const started=performance.now();
     try{const bytes=await readPdfFile(join(root,'sources',s.id,'source.pdf'));if(sha256(bytes)!==s.sha256)throw new Error('Source hash mismatch.');
-      const result=await analyzePdf(bytes,{track:s.track,model,apiKey:process.env.GEMINI_API_KEY,budget,
+      const result=await analyzePdf(bytes,{track:s.track,model,apiKey:process.env.GEMINI_API_KEY,budget,signal:controller.signal,
         onEvent:event=>{appendFileSync(join(dir,'events.jsonl'),JSON.stringify(event)+'\n',{mode:0o600});console.log(JSON.stringify({id:s.id,event:event.type,elapsed_ms:event.elapsed_ms}));},
         onResponse:(kind,response)=>fresh(join(dir,`raw-${String(++raw).padStart(3,'0')}-${kind}.json`),response)});
       fresh(join(dir,'result.json'),result);writeFileSync(join(dir,'questions.txt'),interviewGuide(result),{flag:'wx',mode:0o600});
       await savePreviews(bytes,result.visual_inventory,join(dir,'regions'));
       fresh(join(dir,'completion.json'),{status:'completed',elapsed_ms:Math.round(performance.now()-started),budget:budget.snapshot()});
-    }catch(e){stop=e instanceof BudgetError||budget.blocked;fresh(join(dir,'error.json'),{status:'failed',error:(e as Error).message,elapsed_ms:Math.round(performance.now()-started),budget:budget.snapshot()});console.log(JSON.stringify({id:s.id,error:(e as Error).message,stop}));}
-  }}finally{fresh(join(directory,'budget-after.json'),budget.snapshot());budget.close();}
+    }catch(e){stop=controller.signal.aborted||e instanceof BudgetError||budget.blocked;fresh(join(dir,'error.json'),{status:controller.signal.aborted?'interrupted_user_pause':'failed',error:(e as Error).message,elapsed_ms:Math.round(performance.now()-started),budget:budget.snapshot()});console.log(JSON.stringify({id:s.id,error:(e as Error).message,stop}));}
+  }}finally{process.off('SIGINT',pause);process.off('SIGTERM',pause);try{fresh(join(directory,'budget-after.json'),budget.snapshot());}finally{budget.close();}}
 }
 export const Audit=z.object({reviewer:z.literal('Codex visual inspection; not a human expert'),result_sha256:z.string(),
   questions:z.array(z.object({id:z.string(),grounded:z.boolean(),wrong_page_or_evidence:z.boolean(),unsupported_premise:z.boolean(),duplicate:z.boolean(),note:z.string()})),

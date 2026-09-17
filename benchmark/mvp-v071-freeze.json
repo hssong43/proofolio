@@ -1,0 +1,14 @@
+{
+  "created_at":"2026-09-17T11:34:50.178Z",
+  "version":"0.7.1",
+  "code_sha256":"248fd5505dcc4c727b9bb9e54db874792fcc3f0fd67ec4726189351c92766681",
+  "model":"gemini-3.8-flash",
+  "scope":"focused",
+  "page_budget":5,
+  "change":"Remove point-angle over-deduplication; keep source-angle and semantic duplicate checks. Numeric observations require text anchors.",
+  "evaluation":"Known-source regression. Reused evidence question-stage checks are reported separately from complete PDF reanalysis.",
+  "baseline_usd":4.91949795,
+  "additional_limit_krw":10000,
+  "budget_krw_per_usd":2000,
+  "absolute_ceiling_usd":9.91949795
+}

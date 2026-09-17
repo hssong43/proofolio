@@ -1,0 +1,19 @@
+{
+  "created_at":"2026-09-17T12:48:14Z",
+  "version":"0.8.2",
+  "result_schema":"0.8",
+  "code_sha256":"6a8cb4b956764305c863b80afa84e17ae5a66069a885dbb01082c63e11ab2cd8",
+  "model":"gemini-3.8-flash",
+  "thinking":{"Reviews":"MEDIUM","QuestionReviews":"MEDIUM","other":"LOW"},
+  "scope":"focused",
+  "page_budget":5,
+  "change":"Decision plans can choose a fixed explanation aspect, no free-form premises. answer_target identifies the primary source region and specific task. Questions display selected quotes separately and reference actual visual regions without repeating fallible visual prose. Metric extraction requests subject/campaign captions with labels and values.",
+  "evaluation":"Start with immutable mvp-09 evidence for a question-stage-only regression; not a fresh full-PDF or holdout evaluation. Preserve every old failure.",
+  "initial_documents":["d-kyungmin","m-damyul","m-hyunmin"],
+  "baseline_usd":4.91949795,
+  "continuation_baseline_usd":7.4165562,
+  "budget_before_usd":8.31726495,
+  "additional_limit_krw":10000,
+  "budget_krw_per_usd":2000,
+  "absolute_ceiling_usd":9.91949795
+}

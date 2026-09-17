@@ -1,0 +1,15 @@
+{
+  "created_at":"2026-09-17T11:58:19.920Z",
+  "version":"0.7.4",
+  "code_sha256":"ecd0ce94930e0b7507df0c6f89d9e1970ef612808a7d0383ecb6143568d48776",
+  "model":"gemini-3.8-flash",
+  "scope":"focused",
+  "page_budget":5,
+  "change":"Invalid cross-project or duplicate focus candidates are deferred whole in selection. Invalid document pages/project structure still fail; no missing context is trimmed or invented.",
+  "evaluation":"Known-source regression, not unseen holdout. Preserve mvp-05 failure; no manual question edits.",
+  "full_documents":["d-asad","m-vishv","m-damyul","m-hyunmin"],
+  "baseline_usd":4.91949795,
+  "additional_limit_krw":10000,
+  "budget_krw_per_usd":2000,
+  "absolute_ceiling_usd":9.91949795
+}

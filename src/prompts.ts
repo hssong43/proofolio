@@ -19,7 +19,8 @@ projects의 key는 고유 영문 소문자 식별자, title은 원문, pages는 
 project 페이지는 한 개 이상의 프로젝트에 속해야 한다. 한 페이지에 여러 작업이 있으면 중복 배정할 수 있다.
 같은 작업의 문제/과정/결과는 함께 묶되 서로 다른 프로젝트를 추측으로 합치지 않는다.
 프로젝트가 없으면 projects=[], focus_targets=[]다. 제목 없는 작업은 중립적으로 표시한다.
-focus_targets에는 순위가 아니라 후보 작업/선택/행동을 최대 12개 기록한다. 가능하면 프로젝트마다 후보가 있게 한다.
+focus_targets에는 설명 가치 순으로 후보 작업/선택/행동을 최대 12개 기록한다.
+모든 프로젝트에 하나씩 배분할 필요는 없다. 설명할 구체적 판단이 많은 주요 프로젝트에서는 서로 다른 핵심 포인트를 2~3개씩 제안한다.
 focus는 contribution(역할), decision(선택), process(과정/변경), measurement(측정 조건), artifact(산출물 구성)다.
 anchor_page는 해당 작업을 실제 지정할 중심 페이지, reason은 선택 이유다. 과장/허위/신뢰도는 판정하지 않는다.
 specificity는 concrete_action/artifact_only/generic_summary이며 시각적 완성도와 무관하다.
@@ -28,7 +29,8 @@ required_context_pages에는 해당 포인트를 오해 없이 대조하는 데 
 optional_context_pages는 없어도 이해 가능한 추가 배경만 최대 2개다. 중심/필수/선택 페이지는 중복하지 않는다.
 context_status는 필수 자료를 같은 페이지 또는 연결 페이지에서 찾으면 located, 문서가 참조하는 필수 자료를
 찾지 못하면 unresolved다. 단순 설명 부족은 unresolved가 아니다. 완성 화면도 독립적 artifact 후보가 될 수 있다.
-동일 프로젝트/anchor_page/focus 후보는 합친다. 브랜드명/인명/URL만 보고 협업이나 고용 관계를 덧붙이지 않는다.
+동일 프로젝트/anchor_page/focus라도 서로 다른 구체적인 판단을 묻는 topic은 분리한다. 같은 답을 요구하는 topic만 합친다.
+브랜드명/인명/URL만 보고 협업이나 고용 관계를 덧붙이지 않는다.
 최종 선정은 코드가 수행한다. 모든 작업에 조사/실험/수치 성과가 있어야 한다고 가정하지 않는다.
 프로젝트 개수와 집중 분석 개수는 다르다. 발견한 프로젝트는 최대 60개까지 기록한다.
 각 후보에 importance=core/supporting/minor와 topic(질문으로 설명받을 구체적인 결정/문제/성과 조건)을 기록한다.
@@ -36,8 +38,20 @@ core는 프로젝트를 이해하는 핵심 문제, 선택 이유, 변경 과정
 약력/역할 나열/위촉장/일반 완성 화면은 핵심 결정과 성과의 설명이 없는 한 supporting 또는 minor다.
 문서 앞쪽이거나 적은 페이지로 끝난다는 이유로 core를 부여하지 않는다.
 서로 다른 포인트는 서로 다른 답을 요구해야 한다. 같은 작업의 이름만 바꾼 중복 후보를 만들지 않는다.
-전체 프로젝트 중 가장 설명 가치가 큰 핵심 후보를 먼저 기록하되, 이 순서만으로 최종 채택되지는 않는다.
+topic은 실제로 보이는 핵심 자료를 설명받는 과제다. 조회수 그래프만 있는데 키워드 전략/유입 원인/인과 효과가 입증됐다고 topic에 덧붙이지 않는다.
+원인이나 방법이 문서에 없으면 해당 결과의 측정 조건 또는 제시된 표현/구성 선택을 묻는다.
+topic 하나에는 하나의 핵심 설명 과제만 둔다. 다른 지표/작업 여러 개를 묶어 일부만 물어도 통과하는 후보를 만들지 않는다.
+focus는 topic의 실제 질문 목적과 일치해야 한다. 기사 소재/콘텐츠 구성 선택은 decision, 그 조회수의 측정 조건은 measurement다.
+전체 프로젝트 중 가장 설명 가치가 큰 핵심 후보를 먼저 기록한다. 같은 중요도·관점·구체성에서는 이 순서를 페이지 번호/저렴한 페이지 수보다 우선한다.
+목차의 명시적 제목이 어느 프로젝트와 같으면 그 페이지를 인접한 다른 프로젝트로 옮기지 않는다. 프로젝트 페이지는 연속 구간일 필요가 없다.
 `;
+export const SCAN_TRACK_PROMPT = {
+  design: `선택 직군: design (디자인). 문제와 대상, 시각 체계/화면/구성 선택의 이유, 대안과 수정 과정을 우선 찾는다.
+UX/UI뿐 아니라 브랜딩·그래픽·편집의 핵심 판단도 동등하게 본다. 예쁜 완성 화면이나 숫자가 있다는 이유만으로 핵심으로 지정하지 않는다.`,
+  marketing: `선택 직군: marketing (마케팅). 타깃·메시지·채널 선택, 콘텐츠/SNS 운영 판단, 예산·실행 과정, 성과 지표의 측정 조건을 우선 찾는다.
+이런 설명이 있는 캠페인/채널 운영 사례가 있으면 단독 포스터·영상 캡처·일반 디자인 구성보다 우선한다.
+측정 수치가 없어도 구체적인 타깃/메시지/채널 선택은 핵심이다. 목표·제안·실적을 구분하고 작업물만으로 집행이나 효과를 추정하지 않는다.`,
+};
 export const INDEX_PROMPT=`첨부 PDF 조각의 모든 페이지를 짧은 목차로 만든다. 프로젝트 분석/질문 생성은 아직 하지 않는다.
 page는 첨부 순서 1부터. project_title, heading은 보이는 제목 원문, 없으면 null.
 key_content는 핵심 작업/선택/수치의 대상과 조건/과정 단서를 두 문장 안에 기록한다. 인물 역할을 추정하지 않는다.
@@ -54,6 +68,7 @@ links.from_key/to_key도 실제 regions.key와 동일한 r 형식을 사용한�
 box는 렌더링 이미지 전체 기준 [top,left,bottom,right], 0~1000 정규화 좌표다.
 설명문과 시각 자료를 한 덩어리로 합치지 않는다. 표/차트는 제목, 축, 범례, 날짜, 필터, 각주를 포함한다.
 장식은 제외한다. salient_text에는 명확히 읽히는 핵심 연속 원문만 쓰고 안 보이면 null이다. 추측 OCR 금지.
+기사 제목·요약·본문 등 서로 다른 문장이나 칸을 하나의 인용으로 이어 붙이지 않는다. 잘린 말끝은 복원하지 않는다.
 identification은 경계/종류가 명확하면 clear, 아니면 uncertain. readability도 솔직히 기록한다.
 source_role은 명시 캡션/원문이 있을 때만 candidate_work/reference/template/data_capture로 지정하고
 role_basis에 그 원문을 쓴다. 근거가 없으면 unknown/null이다. 유명 브랜드나 완성도로 역할을 추측하지 않는다.
@@ -82,6 +97,7 @@ category: objective=목표, audience=타깃, insight=자료 해석, strategy=전
 creative=메시지/소재, execution=운영 행동, experiment=실험 주장, metric=수치, contribution=기여 주장.
 metric/experiment/contribution은 portfolio_claim이다. 광고 시안만으로 집행/비용/도달/성과를 확정하지 않는다.
 metric인 경우만 metric 객체를 채운다. name/reported_value 및 non-null 필드는 원문 연속 문자열 그대로다.
+수치만 단독 인용하지 말고 같은 지표 영역에서 보이는 지표명·수치·단위를 하나의 연속 text anchor로 보존한다. 그 수치가 어떤 캠페인/콘텐츠의 것인지 식별할 제목·캡션도 별도 context anchor로 연결한다.
 %와 %p, ROAS와 ROI를 바꾸거나 금액/비율을 역산하거나 그래프 눈금을 추정하지 않는다.
 result_type은 명시한 실적 reported_actual, 목표 target, 가상 simulation, 불분명 unclear다. 외부 사실 검증은 아니다.
 baseline, period, denominator, data_source, attribution_method는 원문이 없으면 null이다.
@@ -91,8 +107,13 @@ CTR/CVR 분모를 관례로 채우지 않는다. 비교 날짜/필터가 다르�
 `;
 export const EXTRACTION_RULES = `
 최대 8개 근거, 없으면 evidence=[]다. 각 선택 포인트에 최소 한 근거를 시도하되 원문이 없으면 만들지 않는다.
+하나의 포인트에도 독립적으로 설명할 구체적인 선택/구성/조건이 여럿 있으면 각각 별도 근거로 추출한다.
+여러 화면/프레임 전체를 하나의 장황한 관찰로 묶지 않는다. 색 대비, 정보 위계, 흐름 등 실제로 다른 답이 필요한 경우만 나눈다.
+시각 관찰과 details에서도 숫자로 객체를 세거나 '6단계'처럼 새 수량/순서를 만들지 않는다. 숫자는 명시된 text anchor 원문에만 둔다.
 역할 나열보다 선택 포인트의 핵심 작업/결정/문제/측정 조건을 우선한다. statement 하나에 독립적인 사실 하나만 담는다.
 portfolio_claim의 statement는 직접 연결된 text anchor의 연속 원문을 그대로 인용한다. 해석/번역/페이지 번호를 덧붙이지 않는다.
+text anchor 하나는 한 제목 또는 한 문단의 연속 구절이다. 분리된 제목/본문/캡션을 이어 붙이지 않는다.
+잘린 텍스트 조각은 핵심 인용으로 사용하지 말고 읽히는 완결된 구절을 선택한다. 목록의 ①/②, 괄호 형태도 보이는 원문대로 유지한다.
 visual_observation의 statement는 연결된 visual_description과 동일한 관찰만 쓴다. 숫자/의도/역할을 추가하지 않는다.
 details에는 해당 category 체크리스트 필드를 빠짐없이 기록한다. 없거나 안 읽히면 value=null, anchor_indices=[]다.
 value가 있으면 이 항목의 anchors 순번(1부터)을 연결한다. 다른 페이지의 내용은 반드시 별도 anchor를 추가한다.
@@ -100,9 +121,13 @@ value가 있으면 이 항목의 anchors 순번(1부터)을 연결한다. 다른
 미기재는 해당 활동을 하지 않았다는 뜻이 아니다. 분석하지 않은 페이지에 자료가 없다고 말하지 않는다.
 anchors.purpose는 claim(주장), artifact(작업물/자료), context(조건/설명)를 구분한다.
 focus_target_id는 선택 후보 ID다. 각 항목에 해당 중심 페이지 anchor가 있어야 한다.
+해당 포인트의 required_context_pages도 각각 관련 원문/작업물 anchor로 연결한다. 없으면 근거를 만들지 않는다. 같은 페이지 배경이나 제목만 가져와 맥락을 채우지 않는다.
 후보 설명 자체는 미검증 가설이므로 사실 근거로 사용하지 않는다. 원문과 다르면 해당 후보를 추출하지 않는다.
 시각 영역 목록은 보조 자료다. page/region_key를 연결하되 새 영역 ID를 만들거나 다른 작업의 자료를 가져오지 않는다.
 하나의 visual anchor는 그 region_key의 box 안에서 보이는 것만 설명한다. 전후 화면 등 여러 영역을 설명하려면 각 영역에 별도 anchor를 붙인다.
+text_layer_quote_hints는 위치별 텍스트 레이어 참고이며 보이는 원문과의 전사 대조에만 사용한다. 시각 판독을 대체하거나 보이지 않는 사실을 추가하지 않는다.
+숫자 범위의 –/-/~, 변화의 →, ≤/≥, +/-, 소수점, %/%p를 공백으로 바꾸지 않는다. '2–3 min'을 '2 3 min'으로 쓰면 탈락한다.
+성과 포인트는 성과 자체와 측정 조건, 과정 포인트는 변경/행동 자체의 원문을 추출한다. 같은 페이지의 배경 설명만 연결해 해당 포인트를 다뤘다고 하지 않는다.
 `;
 
 export const REVIEW_PROMPT = `
@@ -114,6 +139,7 @@ uncertain=흐림, 모호한 귀속/위치 등으로 확인 불가. unsupported=�
 portfolio_claim의 supported는 그 주장이 문서에 있다는 뜻이지 실제 저자/성과 진위 확인이 아니다.
 각 details.value와 metric 필드를 하나씩 확인한다. 일부만 맞거나 다른 영역에만 있는 내용이면 통과하지 않는다.
 box가 인용/객체를 실제로 담는지, 주변 캡션을 다른 화면에 붙였는지 확인한다. 확대해도 안 보이면 uncertain이다.
+글자들이 개별적으로 보이더라도 서로 다른 제목/본문을 붙인 인용, 잘린 문장의 잔해를 합친 인용은 unsupported다.
 같은 PDF 페이지에 보여도 연결된 box 밖의 객체로 anchor를 보완하지 않는다. 한 화면의 box에 전후 두 화면이 있다고 쓰면 unsupported다.
 참고자료/템플릿을 원저작으로 바꾸거나 이름/URL로 협업을 추정하면 unsupported다.
 reason에는 페이지 숫자 대신 영역 ID와 내용을 쓴다. 분석한 페이지 범위만 말한다.
@@ -127,19 +153,25 @@ documented/conflicting에는 실제 대조한 anchor 순번을 기록한다. 주
 
 export const QUESTION_PROMPT = `
 제공한 원문/관찰 중 설명 가치가 큰 근거를 골라 질문 계획을 최대 5개 만든다. 질문 문장은 코드가 작성한다.
-각 계획에는 evidence_id, anchor_indices, angle만 기록한다. question/intent/listen_for/새 사실은 작성하지 않는다.
+각 계획에는 evidence_id, anchor_indices, angle과 필요한 경우 aspect만 기록한다. question/intent/listen_for/새 사실은 작성하지 않는다.
 각 질문은 알려진 evidence_id 하나만 참조하고 같은 ID를 중복하지 않는다. 가능한 프로젝트/주제를 다양화한다.
 각 질문의 사실 표현은 그 evidence_id의 anchors만으로 뒷받침되어야 한다. 다른 근거의 내용이나 같은 페이지의 미연결 영역을 가져오지 않는다.
 근거는 제공한 anchors뿐이다. 이름/링크로 협업, 직접 제작, 집행을 단정하지 않는다.
-anchor_indices는 anchors 순번으로 반드시 1부터 시작한다. 0은 금지다. 첫 anchor의 인용/관찰이 그대로 질문에 표시된다.
+anchor_indices는 anchors 순번으로 반드시 1부터 시작한다. 0은 금지다. 선택한 text anchor는 서로 합쳐 재해석하지 않고 각각 원문 그대로 표시한다. visual anchor는 해당 원본 영역을 질문 대상으로 삼는다.
 첫 anchor는 해당 포인트의 핵심 문제/작업/선택/성과 문구를 선택한다. 나머지에는 해석에 꼭 필요한 같은 근거의 자료를 연결한다.
 역할 나열보다 실제 작업물/핵심 선택을 우선한다. 단편적인 숫자나 잘린 문구만 첫 anchor로 고르지 않는다.
+숫자가 별도 anchor인 측정 자료는 지표명·대상·조건을 읽을 수 있는 같은 근거의 관련 anchor도 함께 선택한다. 다른 프로젝트의 지표로 의미를 채우지 않는다.
 angle=problem(문제/대상 해석), decision(선택 기준/장단점), process(작업 과정/변경 여부),
 measurement(주장 해석의 조건/검증 여부), ownership(자료와 본인의 관계/담당 범위). ownership은 전체 최대 한 개다.
-같은 focus_target_id에서 같은 angle을 반복하지 않는다. 표현만 달라도 같은 답을 요구하면 제외한다.
+decision에는 실제 영역과 연결되는 설명 과제를 aspect로 구체화한다: visual_style(색/형태/서체), information_hierarchy(정보 우선순위/배치), flow(화면·단계의 연결 해석), message(대상과 소재/문구/키워드), channel(채널/전달 형식).
+aspect는 decision에만 쓴다. 같은 원문/객체의 같은 설명을 aspect 이름만 바꾸어 반복하지 않는다. 다른 영역이나 다른 설명 과제의 답이 실질적으로 다를 때만 별개 질문이다.
+같은 focus_target_id라도 서로 다른 구체적 작업·판단을 설명받는 근거라면 같은 angle을 사용할 수 있다.
+같은 원문/관찰을 다시 묻거나 표현만 달라도 같은 답을 요구하면 제외한다. 포인트 ID가 같다는 이유만으로 다른 작업까지 제외하지 않는다.
 각 선택 focus_target_id를 빠짐없이 다루는 3~5개 질문을 목표로 한다. 검증된 근거가 부족하면 채우지 않는다.
 참여가 불명확해도 자료에 제시된 선택의 이유나 수치 해석을 중립적으로 물을 수 있다. 매번 참여 확인으로 대체하지 않는다.
 최소 두 개는 참여 확인이 아닌 핵심 판단/과정/조건을 묻는 관점으로 고른다.
+각 근거의 required_angle을 반드시 사용한다. 측정 포인트를 problem 질문으로 대체하는 등 관점을 바꿔 커버리지를 채우지 않는다.
+required_pages의 모든 페이지에 있는 관련 anchor를 선택해야 한다. 제공한 anchors만으로 필요한 페이지를 모두 연결할 수 없다면 그 근거는 선택하지 않는다.
 작업물의 출처/저자/실제 성과를 확정하지 않는다. 원문 문장과 질문 안내/숫자/페이지 위치는 코드가 보존한다.
 `;
 export const QUESTION_REVIEW_PROMPT = `
@@ -150,11 +182,16 @@ supported는 질문/intent/listen_for에 원문에 없는 사실 전제가 없�
 자기 source.anchors 원문에 본인 참여가 없는데 '어떤 역할을 맡았나요'로 역할 보유를 전제하고 참여 여부를 확인하지 않는 질문도 unsupported다. listen_for만 조심스럽다고 질문 본문의 전제가 해결되지는 않는다.
 수량 대상, 목표/실적, 레퍼런스/제작물 혼동, 자료와 무관한 질문도 unsupported다. 불명확하면 uncertain이다.
 전체 질문을 함께 비교해 같은 자료에 같은 답을 요구하는 의미상 중복 질문은 뒤쪽 질문을 unsupported로 표시한다.
+같은 프로젝트·focus ID·angle·문장 형식이라는 이유만으로 중복으로 보지 않는다. 첫 anchor의 실제 대상과 answer_target/aspect를 비교한다. 서로 다른 영역의 시각 표현과 정보 우선순위처럼 필요한 설명이 다른 경우는 구분한다.
 첨부된 이미지에는 question_id와 region_id가 표시된다. 자기 질문에 연결된 이미지 안에서만 근거를 확인한다.
 region_support: 인용문과 질문이 가리키는 객체가 정확히 해당 이미지 안에 존재하고 읽힌다.
 no_added_premise: 질문/intent/listen_for 어느 곳에도 없는 전제를 추가하지 않았다. 질문형 문장도 전제를 갖는다.
 distinct_answer: 다른 질문과 다른 판단/답을 요구한다. angle 이름이 달라도 사실상 같은 답이면 false.
-addresses_focus: source의 검증된 근거 내용을 실제로 묻는다. 참여 여부만으로 대체하지 않는다.
+addresses_focus: selected_target_hypothesis의 구체적인 핵심 주제를 실제로 묻는다. ID/페이지가 같거나 관련된 배경이라는 이유만으로 true를 주지 않는다.
+selected_target_hypothesis는 미검증 선정 의도이며 사실 출처가 아니다. 주제와 source의 연결은 이미지에서 확인해야 한다. 없는 주제라면 false다.
+예: CAC 절감/활성화 개선을 선정했는데 기존 이탈률 배경만 묻거나, RTL 배치 선택을 선정했는데 일반 대상 설명만 묻는 질문은 false다.
+인용문의 숫자 범위 기호, 단위, 변화/비교 부호가 이미지와 다르면 region_support=false다. '2–3'과 '2 3'은 동일한 정확한 인용이 아니다.
+목록의 ①를 1로, 《》를 <>로 바꾸거나 분리된 제목/본문을 연결한 인용도 정확한 연속 원문이 아니다. 잘린 문구만으로 질문 대상을 짐작해야 하면 region_support=false다.
 단, contribution 근거에 대한 유일한 ownership 질문은 담당 범위 확인 자체가 목적이므로 addresses_focus=true일 수 있다.
 substantive: 참여 확인 외 구체적인 판단/해석/과정/측정 조건을 묻는다. ownership만 묻는 질문은 false다.
 앞의 네 조건 중 하나라도 false이면 supported가 아니다. 불명확한 이미지면 uncertain이다.

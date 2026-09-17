@@ -124,7 +124,9 @@ export const QuestionSet = z.strictObject({questions: z.array(InterviewQuestion)
 export const QuestionPlan = z.strictObject({evidence_id:Text,
   anchor_indices:z.array(PageNumber).min(1).max(6),
   angle:z.enum(['problem','decision','process','measurement','ownership']),
-}).refine(q=>new Set(q.anchor_indices).size===q.anchor_indices.length,'Duplicate question anchors.');
+  aspect:z.enum(['visual_style','information_hierarchy','flow','message','channel']).optional(),
+}).refine(q=>new Set(q.anchor_indices).size===q.anchor_indices.length,'Duplicate question anchors.')
+  .refine(q=>!q.aspect||q.angle==='decision','Specific decision aspects require the decision angle.');
 export const QuestionDrafts=z.strictObject({questions:z.array(QuestionPlan).max(5)});
 export type QuestionPlan=z.infer<typeof QuestionPlan>;
 export type QuestionDraft=Question & QuestionPlan & {answer_target:string};
@@ -138,7 +140,8 @@ export const QuestionReviews = z.strictObject({reviews: z.array(z.strictObject({
 export type Question = z.infer<typeof InterviewQuestion>;
 export type QuestionCard = Question & {id: string; project_key: string; anchors: ResolvedAnchor[];
   focus_target_id: string | null; document_support: z.infer<typeof SupportAssessment>;
-  angle?:QuestionDraft['angle'];answer_target?:string;
+  angle?:QuestionDraft['angle'];aspect?:QuestionPlan['aspect'];answer_target?:string;
+  focus_check?:{matches:boolean;method:string;reason:string};
   source_excerpt?:Array<{region_id:string;quote:string|null;observation:string|null}>};
 
 // Gemini gets a compatible shape; refinements remain strict local trust-boundary checks.

@@ -1,6 +1,6 @@
 {
   "name": "portfolio-evidence",
-  "version": "0.6.0",
+  "version": "0.8.2",
   "private": true,
   "type": "module",
   "engines": { "node": ">=24 <25" },

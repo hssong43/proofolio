@@ -1,0 +1,18 @@
+{
+  "created_at": "2026-09-17T11:27:04.232Z",
+  "version": "0.7.0",
+  "code_sha256": "6587a6cbd86845a3403b8fa7c1e86b40b8693388678bb5a1c14f18e6bf5296a8",
+  "model": "gemini-3.8-flash",
+  "skim_thinking": "LOW",
+  "review_thinking": "MEDIUM",
+  "scope": "focused",
+  "page_budget": 5,
+  "end_to_end_documents": ["d-kyungmin", "m-damyul", "m-hyunmin"],
+  "question_stage_regression_documents": ["d-asad", "m-vishv", "d-soumyashree"],
+  "evaluation": "Known-source regression; question-stage reuse is not a new end-to-end run or unseen holdout.",
+  "baseline_usd": 4.91949795,
+  "resume_spent_usd": 5.8248537,
+  "additional_limit_krw": 10000,
+  "budget_krw_per_usd": 2000,
+  "absolute_ceiling_usd": 9.91949795
+}

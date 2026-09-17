@@ -36,7 +36,7 @@ export function checkDestinations(paths:Array<string|undefined>) {
     if(!existsSync(dirname(path))||!statSync(dirname(path)).isDirectory())throw new Error('출력 상위 폴더가 없습니다.');}
 }
 export async function runCli(argv=process.argv.slice(2),deps:{analyze?:typeof analyzePdf;env?:NodeJS.ProcessEnv;
-  envPath?:string;stdout?:(text:string)=>void;stderr?:(text:string)=>void}={}) {
+  envPath?:string;signal?:AbortSignal;stdout?:(text:string)=>void;stderr?:(text:string)=>void}={}) {
   const stdout=deps.stdout??(s=>process.stdout.write(s+'\n')),stderr=deps.stderr??(s=>process.stderr.write(s+'\n'));
   let budget:Budget|undefined;
   try{
@@ -55,7 +55,7 @@ export async function runCli(argv=process.argv.slice(2),deps:{analyze?:typeof an
     budget=new Budget(v['budget-ledger'],Number(v['max-cost-usd']));
     if(v['additional-budget-krw'])budget.capAdditionalKrw(Number(v['additional-budget-krw']),Number(v['krw-per-usd']));
     const options:AnalyzeOptions={track,apiKey:env.GEMINI_API_KEY,model:v.model??env.GEMINI_MODEL??'gemini-3.8-flash',skimModel:v['skim-model'],reviewModel:v['review-model'],
-      scope:v.scope,pageBudget:Number(v['page-budget']),inspectOnly:v['inspect-only'],budget,
+      scope:v.scope,pageBudget:Number(v['page-budget']),inspectOnly:v['inspect-only'],budget,signal:deps.signal,
       onEvent:v.events?event=>stdout(JSON.stringify(event)):undefined};
     const result:AnalysisResult=await(deps.analyze??analyzePdf)(bytes,options);
     if(v['preview-dir'])await savePreviews(bytes,result.visual_inventory,v['preview-dir']);
@@ -66,4 +66,9 @@ export async function runCli(argv=process.argv.slice(2),deps:{analyze?:typeof an
   }catch(e){stderr('분석 실패: '+(e instanceof Error?e.message:'알 수 없는 오류'));return 1;}
   finally{budget?.close();}
 }
-if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url)process.exitCode=await runCli();
+if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
+  const controller=new AbortController(),pause=()=>controller.abort(new Error('사용자 중단: 전송된 요청만 정산하고 종료합니다.'));
+  process.on('SIGINT',pause);process.on('SIGTERM',pause);
+  try{process.exitCode=await runCli(undefined,{signal:controller.signal});}
+  finally{process.off('SIGINT',pause);process.off('SIGTERM',pause);}
+}

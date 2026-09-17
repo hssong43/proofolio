@@ -1,0 +1,17 @@
+{
+  "created_at":"2026-09-17T12:26:57Z",
+  "version":"0.8.0",
+  "code_sha256":"b812ca7a2602e2ad7e98f2915493a1f16faa7d443bae465b62116c267137f04d",
+  "model":"gemini-3.8-flash",
+  "thinking":{"DocumentMap":"MEDIUM","Reviews":"MEDIUM","QuestionReviews":"MEDIUM","other":"LOW"},
+  "scope":"focused",
+  "page_budget":5,
+  "change":"Validate explicit indexed project titles, preserve ranked core priority ahead of cheap/early pages, keep independent same-page topics separate, and reject numeric-symbol compatibility substitutions. Extraction and review require continuous source excerpts.",
+  "evaluation":"Known regression sources; no new holdout claim. Prior raw results and failures remain immutable.",
+  "initial_documents":["d-kyungmin","m-damyul","m-hyunmin"],
+  "baseline_usd":4.91949795,
+  "continuation_baseline_usd":7.4165562,
+  "additional_limit_krw":10000,
+  "budget_krw_per_usd":2000,
+  "absolute_ceiling_usd":9.91949795
+}

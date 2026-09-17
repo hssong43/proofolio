@@ -1,0 +1,15 @@
+{
+  "created_at":"2026-09-17T11:47:19.242Z",
+  "version":"0.7.3",
+  "code_sha256":"a2f97d7ca90009588c026a5d53e7858ea97df82c4a12dd9776e84b15379a18d1",
+  "model":"gemini-3.8-flash",
+  "scope":"focused",
+  "page_budget":5,
+  "change":"Track-aware map/chunk/tile scan, atomic focus topics, failed-source quarantine and explicitly conditional process questions, in addition to numeric and coverage guards.",
+  "evaluation":"Known-source regression, not unseen holdout. Full PDF reanalysis and question-stage-only checks are reported separately.",
+  "initial_full_documents":["d-soumyashree","d-kyungmin","m-damyul"],
+  "baseline_usd":4.91949795,
+  "additional_limit_krw":10000,
+  "budget_krw_per_usd":2000,
+  "absolute_ceiling_usd":9.91949795
+}

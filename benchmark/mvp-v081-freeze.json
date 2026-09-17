@@ -1,0 +1,18 @@
+{
+  "created_at":"2026-09-17T12:36:34Z",
+  "version":"0.8.1",
+  "code_sha256":"0f7a67e77fcd3e68a2b660f785bfd82ced1539fca99c371e750c98152e414d79",
+  "model":"gemini-3.8-flash",
+  "thinking":{"Reviews":"MEDIUM","QuestionReviews":"MEDIUM","other":"LOW"},
+  "scope":"focused",
+  "page_budget":5,
+  "change":"Split same-page, visual-only artifact lists into independently reviewed source objects; parent details are unknown, never copied into children. Keep mixed claims/comparisons/context intact. Design decision questions explicitly ask about visual composition or user flow. Revert expensive DocumentMap MEDIUM after a bounded retry hit MAX_TOKENS.",
+  "evaluation":"Known regression sources; no new holdout. Prior failures and raw outputs retained.",
+  "initial_documents":["d-kyungmin","m-damyul","m-hyunmin"],
+  "baseline_usd":4.91949795,
+  "continuation_baseline_usd":7.4165562,
+  "budget_before_usd":7.8078492,
+  "additional_limit_krw":10000,
+  "budget_krw_per_usd":2000,
+  "absolute_ceiling_usd":9.91949795
+}
