@@ -1,9 +1,8 @@
-import { QUESTION_COUNT } from "@/lib/data";
 import { CheckIcon } from "../icons";
 
-type Props = { roleLabel: string; answeredCount: number; elapsed: string; onHome: () => void };
+type Props = { roleLabel: string; answeredCount: number; questionCount: number; elapsed: string; saveError: string | null; onHome: () => void };
 
-export function CompleteScreen({ roleLabel, answeredCount, elapsed, onHome }: Props) {
+export function CompleteScreen({ roleLabel, answeredCount, questionCount, elapsed, saveError, onHome }: Props) {
   return (
     <div className="screen" style={{ alignItems: "center", animation: "fadeIn .3s ease-out" }}>
       <div style={{ width: 80, height: 80, borderRadius: "50%", background: "#18181B", display: "grid", placeItems: "center" }}>
@@ -17,9 +16,10 @@ export function CompleteScreen({ roleLabel, answeredCount, elapsed, onHome }: Pr
           수고하셨습니다.
         </p>
       </div>
+      {saveError && <div className="error-box" role="alert" style={{ width: "100%" }}>답변 저장에 실패했어요: {saveError}</div>}
       <div className="card" style={{ width: "100%", padding: 8, display: "grid", gridTemplateColumns: "repeat(3, 1fr)" }}>
         <Stat label="직무" value={roleLabel} />
-        <Stat label="답변한 질문 수" value={`${answeredCount} / ${QUESTION_COUNT}`} bordered />
+        <Stat label="답변한 질문 수" value={`${answeredCount} / ${questionCount}`} bordered />
         <Stat label="총 소요 시간" value={elapsed} />
       </div>
       <button type="button" className="btn-secondary focus-ring" onClick={onHome}>

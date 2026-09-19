@@ -3,6 +3,7 @@ import { CheckIcon, CodeIcon, MegaphoneIcon, PaletteIcon } from "../icons";
 
 type Props = {
   role: RoleId | null;
+  demo: boolean;
   onSelect: (role: RoleId) => void;
   onNext: () => void;
 };
@@ -13,7 +14,7 @@ const ICONS: Record<RoleId, () => React.JSX.Element> = {
   mkt: () => <MegaphoneIcon />,
 };
 
-export function RoleScreen({ role, onSelect, onNext }: Props) {
+export function RoleScreen({ role, demo, onSelect, onNext }: Props) {
   return (
     <div className="screen">
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -25,6 +26,7 @@ export function RoleScreen({ role, onSelect, onNext }: Props) {
           {ROLES.map((r) => {
             const Icon = ICONS[r.id];
             const selected = role === r.id;
+            const available = demo || r.track !== null;
             return (
               <button
                 key={r.id}
@@ -32,11 +34,18 @@ export function RoleScreen({ role, onSelect, onNext }: Props) {
                 className="role-card focus-ring"
                 data-selected={selected}
                 aria-pressed={selected}
+                disabled={!available}
+                title={available ? undefined : "아직 분석을 지원하지 않는 직무예요"}
                 onClick={() => onSelect(r.id)}
               >
                 <Icon />
                 {selected && (
                   <CheckIcon size={20} strokeWidth={2.5} color="#18181B" style={{ position: "absolute", top: 16, right: 16 }} />
+                )}
+                {!available && (
+                  <span style={{ position: "absolute", top: 16, right: 16, fontSize: 11, fontWeight: 600, color: "#71717A", background: "#F4F4F5", borderRadius: 4, padding: "2px 6px" }}>
+                    준비 중
+                  </span>
                 )}
                 <span style={{ fontSize: 18, fontWeight: 600, color: "#18181B" }}>{r.label}</span>
               </button>

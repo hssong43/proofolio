@@ -1,13 +1,12 @@
-import { QUESTION_COUNT } from "@/lib/data";
 import { InfoIcon } from "../icons";
 
-type Props = { totalSeconds: number; onStart: () => void };
+type Props = { totalSeconds: number; questionCount: number; onStart: () => void };
 
-export function ReadyScreen({ totalSeconds, onStart }: Props) {
+export function ReadyScreen({ totalSeconds, questionCount, onStart }: Props) {
   return (
     <div className="screen">
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <h2 className="screen-title">질문 {QUESTION_COUNT}개, 각 {totalSeconds}초예요</h2>
+        <h2 className="screen-title">질문 {questionCount}개, 각 {totalSeconds}초예요</h2>
         <p className="screen-subtitle">답변은 한 번만 가능하고, 시간이 끝나면 자동 제출돼요</p>
       </div>
       <div className="card" style={{ padding: 32, display: "flex", flexDirection: "column", gap: 32 }}>
@@ -25,7 +24,7 @@ export function ReadyScreen({ totalSeconds, onStart }: Props) {
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ fontSize: 13, color: "#71717A" }}>질문 미리보기</div>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            {Array.from({ length: QUESTION_COUNT }, (_, i) => (
+            {Array.from({ length: questionCount }, (_, i) => (
               <div
                 key={i}
                 style={{ width: 56, height: 56, borderRadius: "50%", border: "1px solid #D4D4D8", display: "grid", placeItems: "center", fontSize: 13, fontWeight: 500, color: "#71717A" }}

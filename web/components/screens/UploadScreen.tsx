@@ -4,14 +4,17 @@ import { useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent 
 import { CloseIcon, FileIcon, UploadIcon } from "../icons";
 
 export type UploadTab = "pdf" | "link";
-export type UploadedFile = { name: string; size: string };
+export type UploadedFile = { name: string; size: string; file: File | null };
 
 type Props = {
   roleLabel: string;
+  demo: boolean;
   tab: UploadTab;
   file: UploadedFile | null;
   link: string;
   canAnalyze: boolean;
+  submitting: boolean;
+  error: string | null;
   onTabChange: (tab: UploadTab) => void;
   onFile: (file: File | undefined) => void;
   onRemoveFile: () => void;
@@ -19,7 +22,7 @@ type Props = {
   onAnalyze: () => void;
 };
 
-export function UploadScreen({ roleLabel, tab, file, link, canAnalyze, onTabChange, onFile, onRemoveFile, onLinkChange, onAnalyze }: Props) {
+export function UploadScreen({ roleLabel, demo, tab, file, link, canAnalyze, submitting, error, onTabChange, onFile, onRemoveFile, onLinkChange, onAnalyze }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -92,7 +95,7 @@ export function UploadScreen({ roleLabel, tab, file, link, canAnalyze, onTabChan
               <span style={{ fontSize: 14, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{file.name}</span>
               <span style={{ fontSize: 12, color: "#71717A" }}>{file.size}</span>
             </div>
-            <button type="button" className="icon-btn focus-ring" aria-label="파일 제거" onClick={onRemoveFile}>
+            <button type="button" className="icon-btn focus-ring" aria-label="파일 제거" onClick={onRemoveFile} disabled={submitting}>
               <CloseIcon />
             </button>
           </div>
@@ -108,13 +111,17 @@ export function UploadScreen({ roleLabel, tab, file, link, canAnalyze, onTabChan
               inputMode="url"
               aria-label="포트폴리오 링크"
             />
-            <div style={{ fontSize: 13, color: "#71717A" }}>Behance, GitHub, Notion, 개인 사이트 모두 가능해요</div>
+            <div style={{ fontSize: 13, color: "#71717A" }}>
+              {demo ? "Behance, GitHub, Notion, 개인 사이트 모두 가능해요" : "링크 분석은 준비 중이에요. 지금은 PDF 업로드만 분석할 수 있어요."}
+            </div>
           </div>
         )}
 
+        {error && <div className="error-box" role="alert">{error}</div>}
+
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button type="button" className="btn-primary focus-ring" disabled={!canAnalyze} onClick={onAnalyze}>
-            AI 분석 시작
+          <button type="button" className="btn-primary focus-ring" disabled={!canAnalyze || submitting} onClick={onAnalyze}>
+            {submitting ? "업로드 중..." : "AI 분석 시작"}
           </button>
         </div>
       </div>

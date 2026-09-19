@@ -352,3 +352,36 @@ button {
     grid-template-columns: 1fr !important;
   }
 }
+
+.role-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.role-card:disabled:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: #e4e4e7;
+}
+
+.quote-box {
+  border-left: 3px solid #18181b;
+  background: #fafafa;
+  border-radius: 0 6px 6px 0;
+  padding: 10px 14px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #3f3f46;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.error-box {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-size: 14px;
+  line-height: 1.5;
+}

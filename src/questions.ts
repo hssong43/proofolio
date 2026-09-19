@@ -91,10 +91,11 @@ export function questionQuality(cards:QuestionCard[],selectedPointIds:string[]) 
   return {status:issues.length?'needs_review' as const:'ready' as const,coverage,missing_focus_target_ids:missing,
     substantive_questions:substantive,issues,verification:'automated_source_checks_not_independent_accuracy_proof'};
 }
+export const DEFAULT_MAX_QUESTIONS=5;
 export async function generateQuestions(evidence:ResolvedEvidence[],request:Request,options:{
-  track?:Track;selectedPoints:SelectedPoint[];imagesFor:(cards:Array<{question_id:string;source:ResolvedEvidence}>)=>Promise<Array<[string,Uint8Array]>>;
+  track?:Track;selectedPoints:SelectedPoint[];maxQuestions?:number;imagesFor:(cards:Array<{question_id:string;source:ResolvedEvidence}>)=>Promise<Array<[string,Uint8Array]>>;
 }) {
-  const eligible=evidence.filter(e=>e.question_eligible);
+  const eligible=evidence.filter(e=>e.question_eligible),maxQuestions=options.maxQuestions??DEFAULT_MAX_QUESTIONS;
   const checks:QuestionCheck[]=[];let cards:QuestionCard[]=[];
   if(!eligible.length)return {cards,checks};
   const selectedPointIds=options.selectedPoints.map(p=>p.id),pointById=new Map(options.selectedPoints.map(p=>[p.id,p]));
@@ -128,7 +129,7 @@ export async function generateQuestions(evidence:ResolvedEvidence[],request:Requ
     const primary=(anchors:ResolvedEvidence['anchors'])=>normalize(anchors[0]?.quote??anchors[0]?.visual_description??'');
     if([...cards,...pending.map(p=>({...p.question,anchors:p.source.anchors}))].some(c=>
       c.angle===q.angle&&c.aspect===q.aspect&&primary(c.anchors)===primary(source.anchors)))errors.push('repeated_source_angle');
-    if(cards.length+pending.length>=5)errors.push('question_limit');
+    if(cards.length+pending.length>=maxQuestions)errors.push('question_limit');
     if(errors.length){checks.push({candidate_index:offset+index+1,evidence_id:q.evidence_id,status:'rejected',reasons:errors,round});continue;}
     seenIds.add(q.evidence_id);seenText.add(normalize(q.question).replace(/[\p{P}\p{S}\s]/gu,''));
     pending.push({question_id:'candidate-'+(offset+index+1),question:q,source:source!,index:offset+index});

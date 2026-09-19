@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type ChangeEvent, type KeyboardEvent } from "react";
-import { ANSWER_MAX_LENGTH, QUESTION_COUNT, type Question } from "@/lib/data";
+import { ANSWER_MAX_LENGTH, type UiQuestion } from "@/lib/data";
 
 const RING_RADIUS = 72;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
@@ -10,18 +10,20 @@ const MIN_TEXTAREA_HEIGHT = 200;
 
 type Props = {
   index: number;
-  question: Question;
+  questionCount: number;
+  question: UiQuestion;
   answer: string;
   secondsLeft: number;
   totalSeconds: number;
-  skills: string[];
+  chipsLabel: string;
+  chips: string[];
   onAnswerChange: (value: string) => void;
   onSubmit: () => void;
 };
 
-export function QuestionScreen({ index, question, answer, secondsLeft, totalSeconds, skills, onAnswerChange, onSubmit }: Props) {
+export function QuestionScreen({ index, questionCount, question, answer, secondsLeft, totalSeconds, chipsLabel, chips, onAnswerChange, onSubmit }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const isLast = index >= QUESTION_COUNT - 1;
+  const isLast = index >= questionCount - 1;
   const warn = secondsLeft <= WARN_AT;
   const ringColor = warn ? "#EF4444" : "#18181B";
 
@@ -51,10 +53,10 @@ export function QuestionScreen({ index, question, answer, secondsLeft, totalSeco
       <div key={index} style={{ display: "flex", flexDirection: "column", gap: 20, animation: `${index % 2 ? "slideB" : "slideA"} .2s ease-out` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: "#71717A", letterSpacing: ".04em" }}>
-            Q{index + 1} / {QUESTION_COUNT}
+            Q{index + 1} / {questionCount}
           </span>
-          <div style={{ display: "flex", gap: 6, alignItems: "center" }} aria-hidden>
-            {Array.from({ length: QUESTION_COUNT }, (_, i) => {
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }} aria-hidden>
+            {Array.from({ length: questionCount }, (_, i) => {
               const style =
                 i < index
                   ? { background: "#18181B", border: "none", boxShadow: "none" }
@@ -66,9 +68,19 @@ export function QuestionScreen({ index, question, answer, secondsLeft, totalSeco
           </div>
         </div>
         <div className="card" style={{ padding: 32, display: "flex", flexDirection: "column", gap: 24 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <h3 style={{ margin: 0, fontSize: 24, fontWeight: 600, lineHeight: 1.4, letterSpacing: "-.01em", textWrap: "pretty" }}>{question.text}</h3>
-            <p style={{ margin: 0, fontSize: 14, color: "#71717A" }}>포트폴리오의 {question.project} 프로젝트 기반</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {question.quotes.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {question.quotes.map((quote, i) => (
+                  <blockquote key={i} className="quote-box" style={{ margin: 0 }}>{quote}</blockquote>
+                ))}
+              </div>
+            )}
+            {question.notes.map((note, i) => (
+              <p key={i} style={{ margin: 0, fontSize: 13, color: "#71717A" }}>{note}</p>
+            ))}
+            <h3 style={{ margin: 0, fontSize: 24, fontWeight: 600, lineHeight: 1.4, letterSpacing: "-.01em", textWrap: "pretty" }}>{question.prompt}</h3>
+            <p style={{ margin: 0, fontSize: 14, color: "#71717A" }}>{question.source}</p>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <textarea
@@ -128,15 +140,19 @@ export function QuestionScreen({ index, question, answer, secondsLeft, totalSeco
           <span style={{ fontSize: 13, color: warn ? "#EF4444" : "#71717A", fontWeight: 500 }}>{warn ? "남은 시간 · 곧 자동 제출돼요" : "남은 시간"}</span>
           <span style={{ fontSize: 14, fontWeight: 500, color: "#18181B" }}>핵심 근거를 먼저 말해보세요</span>
         </div>
-        <div style={{ width: "100%", height: 1, background: "#E4E4E7" }} />
-        <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: "#71717A", letterSpacing: ".06em" }}>추출된 핵심 역량</span>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {skills.map((s) => (
-              <span key={s} className="chip chip-sm">{s}</span>
-            ))}
-          </div>
-        </div>
+        {chips.length > 0 && (
+          <>
+            <div style={{ width: "100%", height: 1, background: "#E4E4E7" }} />
+            <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#71717A", letterSpacing: ".06em" }}>{chipsLabel}</span>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {chips.map((s) => (
+                  <span key={s} className="chip chip-sm">{s}</span>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
       </aside>
     </div>
   );

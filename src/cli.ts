@@ -41,11 +41,11 @@ export async function runCli(argv=process.argv.slice(2),deps:{analyze?:typeof an
   let budget:Budget|undefined;
   try{
     const {values:v,positionals}=parseArgs({args:argv,allowPositionals:true,options:{track:{type:'string'},model:{type:'string'},
-      'skim-model':{type:'string'},'review-model':{type:'string'},scope:{type:'string',default:'focused'},'page-budget':{type:'string',default:'5'},
+      'skim-model':{type:'string'},'review-model':{type:'string'},scope:{type:'string',default:'focused'},'page-budget':{type:'string',default:'5'},'max-questions':{type:'string',default:'5'},
       events:{type:'boolean'},output:{type:'string'},'guide-output':{type:'string'},'inspect-only':{type:'boolean'},'preview-dir':{type:'string'},
       'budget-ledger':{type:'string',default:'output/api-budget.jsonl'},'max-cost-usd':{type:'string',default:'10'},
       'additional-budget-krw':{type:'string'},'krw-per-usd':{type:'string',default:'2000'},help:{type:'boolean'}}});
-    if(v.help){stdout('npm run analyze -- FILE.pdf --track design|marketing [--output result.json] [--guide-output questions.txt] [--events] [--preview-dir NEW_DIR]\n기본: focused 5페이지, 누적 예산 10달러. --budget-ledger로 같은 예산 원장을 재사용하세요.');return 0;}
+    if(v.help){stdout('npm run analyze -- FILE.pdf --track design|marketing [--output result.json] [--guide-output questions.txt] [--events] [--preview-dir NEW_DIR] [--max-questions N]\n기본: focused 5페이지, 질문 최대 5개, 누적 예산 10달러. --budget-ledger로 같은 예산 원장을 재사용하세요.');return 0;}
     if(positionals.length!==1)throw new Error('PDF 경로 한 개가 필요합니다.');
     const env=deps.env??process.env;loadEnv(deps.envPath??resolve(dirname(fileURLToPath(import.meta.url)),'../.env'),env);
     const track=Track.parse(v.track);if(v.scope!=='focused'&&v.scope!=='full')throw new Error('scope은 focused/full입니다.');
@@ -55,7 +55,7 @@ export async function runCli(argv=process.argv.slice(2),deps:{analyze?:typeof an
     budget=new Budget(v['budget-ledger'],Number(v['max-cost-usd']));
     if(v['additional-budget-krw'])budget.capAdditionalKrw(Number(v['additional-budget-krw']),Number(v['krw-per-usd']));
     const options:AnalyzeOptions={track,apiKey:env.GEMINI_API_KEY,model:v.model??env.GEMINI_MODEL??'gemini-3.8-flash',skimModel:v['skim-model'],reviewModel:v['review-model'],
-      scope:v.scope,pageBudget:Number(v['page-budget']),inspectOnly:v['inspect-only'],budget,signal:deps.signal,
+      scope:v.scope,pageBudget:Number(v['page-budget']),maxQuestions:Number(v['max-questions']),inspectOnly:v['inspect-only'],budget,signal:deps.signal,
       onEvent:v.events?event=>stdout(JSON.stringify(event)):undefined};
     const result:AnalysisResult=await(deps.analyze??analyzePdf)(bytes,options);
     if(v['preview-dir'])await savePreviews(bytes,result.visual_inventory,v['preview-dir']);
