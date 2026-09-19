@@ -7,7 +7,7 @@ import {readPdf,slicePdf,openRenderer,renderPage,textSpans,textInBox,numericQuot
 import type {TextSpan} from './pdf.ts';
 import {Budget,fileSession,freshMetrics,SchemaValidationError} from './gemini.ts';
 import type {Generate,ModelRequest} from './gemini.ts';
-import {generateQuestions,questionQuality} from './questions.ts';
+import {generateQuestions,questionQuality,DEFAULT_MAX_QUESTIONS} from './questions.ts';
 import type {QuestionCheck,Request} from './questions.ts';
 import type {QuestionCard} from './schema.ts';
 import {MAP_PROMPT,INDEX_PROMPT,SCAN_TRACK_PROMPT,VISUAL_PROMPT,DESIGN_PROMPT,MARKETING_PROMPT,EXTRACTION_RULES,REVIEW_PROMPT,QUESTION_FOCUS} from './prompts.ts';
@@ -131,11 +131,12 @@ async function concurrent<T,R>(items:T[],fn:(item:T)=>Promise<R>,limit=3):Promis
   if(failed)throw error;return result;
 }
 export type Event={sequence:number;type:string;elapsed_ms:number;data:unknown};
-export type AnalyzeOptions={track:Track;apiKey?:string;model:string;skimModel?:string;reviewModel?:string;scope?:'focused'|'full';pageBudget?:number;
+export type AnalyzeOptions={track:Track;apiKey?:string;model:string;skimModel?:string;reviewModel?:string;scope?:'focused'|'full';pageBudget?:number;maxQuestions?:number;
   inspectOnly?:boolean;signal?:AbortSignal;onEvent?:(event:Event)=>void;generate?:Generate;budget?:Budget;onResponse?:(kind:string,raw:unknown)=>void};
 export async function analyzePdf(bytes:Uint8Array,options:AnalyzeOptions) {
-  Track.parse(options.track);const scope=options.scope??'focused',pageBudget=options.pageBudget??5;
+  Track.parse(options.track);const scope=options.scope??'focused',pageBudget=options.pageBudget??5,maxQuestions=options.maxQuestions??DEFAULT_MAX_QUESTIONS;
   if(!['focused','full'].includes(scope)||!Number.isInteger(pageBudget)||pageBudget<1||pageBudget>60)throw new Error('분석 범위/페이지 예산 오류.');
+  if(!Number.isInteger(maxQuestions)||maxQuestions<1||maxQuestions>20)throw new Error('최대 질문 수는 1~20입니다.');
   const pdf=await readPdf(bytes),started=performance.now(),stats=freshMetrics();let sequence=0;
   const emit=(type:string,data:unknown)=>{const elapsed_ms=Math.round(performance.now()-started);
     if(type==='evidence_ready'&&stats.first_evidence_ms===null&&(data as {evidence:ResolvedEvidence[]}).evidence.some(e=>e.question_eligible))stats.first_evidence_ms=elapsed_ms;
@@ -284,13 +285,13 @@ export async function analyzePdf(bytes:Uint8Array,options:AnalyzeOptions) {
     }
     let questions:QuestionCard[]=[],question_checks:QuestionCheck[]=[];
     if(!options.inspectOnly){emit('stage',{stage:'questions',eligible_evidence_count:evidence.filter(e=>e.question_eligible).length});
-      const generated=await generateQuestions(evidence,request,{track:options.track,selectedPoints:plan.selected_points,imagesFor:async candidates=>{
+      const generated=await generateQuestions(evidence,request,{track:options.track,selectedPoints:plan.selected_points,maxQuestions,imagesFor:async candidates=>{
         const images:Array<[string,Uint8Array]>=[];
         for(const p of candidates)for(const a of p.source.anchors)images.push([`question_id=${p.question_id}; region_id=${a.region_id}`,
           await pngFor(a.page,a.box)]);return images;
       }});questions=generated.cards;question_checks=generated.checks;emit('questions_ready',{questions,question_checks});}
     const quality=questionQuality(questions,plan.selected_points.map(p=>p.id));
-    const result={schema_version:'0.8',created_at:new Date().toISOString(),track:options.track,model:options.model,skim_model:options.skimModel??options.model,review_model:options.reviewModel??options.model,
+    const result={schema_version:'0.8',created_at:new Date().toISOString(),track:options.track,model:options.model,max_questions:maxQuestions,skim_model:options.skimModel??options.model,review_model:options.reviewModel??options.model,
       document:{sha256:digest,page_count:pdf.getPageCount()},document_map:map,analysis_plan:plan,
       status:options.inspectOnly?'visual_inspection_only':!questions.length?'insufficient_evidence':quality.status==='ready'?'evidence_ready':'needs_review',quality,evidence,rejected_candidates:rejected,
       question_evidence_ids:evidence.filter(e=>e.question_eligible).map(e=>e.id),questions,question_checks,
