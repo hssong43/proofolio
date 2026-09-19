@@ -125,16 +125,23 @@ export const QuestionPlan = z.strictObject({evidence_id:Text,
   anchor_indices:z.array(PageNumber).min(1).max(6),
   angle:z.enum(['problem','decision','process','measurement','ownership']),
   aspect:z.enum(['visual_style','information_hierarchy','flow','message','channel']).optional(),
-}).refine(q=>new Set(q.anchor_indices).size===q.anchor_indices.length,'Duplicate question anchors.')
-  .refine(q=>!q.aspect||q.angle==='decision','Specific decision aspects require the decision angle.');
-export const QuestionDrafts=z.strictObject({questions:z.array(QuestionPlan).max(5)});
+}).refine(q=>new Set(q.anchor_indices).size===q.anchor_indices.length,'Duplicate question anchors.');
+export const QuestionDrafts=z.strictObject({questions:z.array(QuestionPlan.safeExtend({
+  question:Text.max(500),intent:Text.max(200),listen_for:z.array(Text.max(200)).min(1).max(3),
+})).max(5)});
 export type QuestionPlan=z.infer<typeof QuestionPlan>;
 export type QuestionDraft=Question & QuestionPlan & {answer_target:string};
+export const CoverageSource=z.strictObject({region_id:z.string().regex(/^p[1-9][0-9]*:r[1-9][0-9]*$/),quote:Text.nullable()});
+export const FocusCoverage=z.strictObject({focus_target_id:Text,
+  checks:z.array(z.strictObject({aspect:Text,source_requirements:z.array(CoverageSource).max(8)
+    .refine(rows=>new Set(rows.map(r=>JSON.stringify(r))).size===rows.length,'Duplicate coverage sources.'),question_ids:z.array(Text).max(5)
+    .refine(ids=>new Set(ids).size===ids.length,'Duplicate coverage question IDs.')})).min(1).max(8)});
+export type FocusCoverage=z.infer<typeof FocusCoverage>;
 export const GroundedQuestionReviews=z.strictObject({reviews:z.array(z.strictObject({
   question_id:Text,status:z.enum(['supported','uncertain','unsupported']),reason:Text,
   region_support:z.boolean(),no_added_premise:z.boolean(),distinct_answer:z.boolean(),
   addresses_focus:z.boolean(),substantive:z.boolean(),
-})).max(5)});
+})).max(5),focus_coverage:z.array(FocusCoverage).max(72)});
 export const QuestionReviews = z.strictObject({reviews: z.array(z.strictObject({question_id: Text,
   status: z.enum(['supported','uncertain','unsupported']), reason: Text})).max(5)});
 export type Question = z.infer<typeof InterviewQuestion>;
@@ -145,7 +152,7 @@ export type QuestionCard = Question & {id: string; project_key: string; anchors:
   source_excerpt?:Array<{region_id:string;quote:string|null;observation:string|null}>};
 
 // Gemini gets a compatible shape; refinements remain strict local trust-boundary checks.
-export function responseSchema(schema: z.ZodType): Record<string, unknown> {
+export function responseSchema(schema: z.ZodType,closedObjects=false): Record<string, unknown> {
   const json = z.toJSONSchema(schema, {io: 'input'});
   function shape(value: unknown): unknown {
     if (Array.isArray(value)) return value.map(shape);
@@ -158,6 +165,7 @@ export function responseSchema(schema: z.ZodType): Record<string, unknown> {
       else if (['type','required','items','enum','anyOf'].includes(key)) result[key] = shape(item);
       else if (key === 'const') result.enum = [item];
     }
+    if(closedObjects&&obj.type==='object')result.additionalProperties=false;
     return result;
   }
   return shape(json) as Record<string, unknown>;

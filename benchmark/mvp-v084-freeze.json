@@ -1,0 +1,18 @@
+{
+  "created_at":"2026-09-19T00:40:18Z",
+  "version":"0.8.4",
+  "result_schema":"0.8",
+  "code_sha256":"fafc68ac1e3c34ac64ce0a2e82eb27068cd00b1d469a4be909ac0eae39d024f0",
+  "model":"gemini-3.8-flash",
+  "thinking":{"Reviews":"MEDIUM","QuestionReviews":"MEDIUM","other":"LOW"},
+  "scope":"focused",
+  "page_budget":5,
+  "change":"Source-aware exact-template deduplication while retaining visual semantic review; explicit anchor_index labels independent of region keys; preserve malformed original typography in source review; CLI guide includes canonical region IDs.",
+  "evaluation":"Known development regression PDFs, not a new holdout. First run problem cases, then other known cases if budget permits. Do not overwrite any prior run or original audit.",
+  "documents":["d-kyungmin","m-damyul","m-hyunmin","d-asad","m-vishv","d-soumyashree"],
+  "budget_before_usd":8.85863745,
+  "baseline_usd":4.91949795,
+  "additional_limit_krw":10000,
+  "budget_krw_per_usd":2000,
+  "absolute_ceiling_usd":9.91949795
+}

@@ -2,13 +2,14 @@ import {createHash} from 'node:crypto';
 import {performance} from 'node:perf_hooks';
 import * as z from 'zod';
 import {DocumentMap,PageIndex,DesignExtraction,MarketingExtraction,VisualInventory,Reviews,Track,normalize,DESIGN_FIELDS,MARKETING_FIELDS} from './schema.ts';
-import type {Box,FocusTarget,Project,Evidence,Review,ResolvedEvidence} from './schema.ts';
-import {readPdf,slicePdf,openRenderer,renderPage,textSpans,textInBox,numericQuoteIssue,quoteLocationCheck,pageTiles,mergeInventories} from './pdf.ts';
+import type {Box,FocusTarget,FocusCoverage,Project,Evidence,Review,ResolvedEvidence} from './schema.ts';
+import {readPdf,slicePdf,openRenderer,renderPage,textSpans,textInBox,alignRangeTypography,quoteTranscriptionIssue,quoteLocationCheck,pageTiles,mergeInventories} from './pdf.ts';
 import type {TextSpan} from './pdf.ts';
-import {Budget,fileSession,freshMetrics,SchemaValidationError} from './gemini.ts';
-import type {Generate,ModelRequest} from './gemini.ts';
-import {generateQuestions,questionQuality,DEFAULT_MAX_QUESTIONS} from './questions.ts';
-import type {QuestionCheck,Request} from './questions.ts';
+import {Budget,freshMetrics} from './llm.ts';
+import {OPENROUTER_MODELS,openRouterModel,openRouterSession} from './openrouter.ts';
+import type {Generate,ModelRequest} from './llm.ts';
+import {generateQuestions,questionQuality,modelRequest,DEFAULT_MAX_QUESTIONS} from './questions.ts';
+import type {QuestionCheck} from './questions.ts';
 import type {QuestionCard} from './schema.ts';
 import {MAP_PROMPT,INDEX_PROMPT,SCAN_TRACK_PROMPT,VISUAL_PROMPT,DESIGN_PROMPT,MARKETING_PROMPT,EXTRACTION_RULES,REVIEW_PROMPT,QUESTION_FOCUS} from './prompts.ts';
 export const sha256=(bytes:Uint8Array|string)=>createHash('sha256').update(bytes).digest('hex');
@@ -31,10 +32,12 @@ export function validateMap(map:DocumentMap,pageCount:number,index:z.infer<typeo
     p.pages.sort((a,b)=>a-b);p.pages.forEach(n=>assigned.add(n));}
   if(assigned.size!==pages.size)throw new Error('미배정 프로젝트 페이지.');
   // A whole-document summary cannot move an explicitly titled indexed page to another known project.
-  // Only exact, visible title matches constrain membership; generic headings and inferred aliases do not.
+  // Only visible titles constrain membership. Parenthesis spacing is layout, not a project alias.
+  const titleKey=(value:string)=>normalize(value).replace(/\s*([()])\s*/g,'$1');
   for(const page of index){
-    if(!page.project_title||!page.heading?.includes(page.project_title))continue;
-    const project=map.projects.find(p=>normalize(p.title)===normalize(page.project_title!));
+    if(!page.project_title||!page.heading||!titleKey(page.heading).includes(titleKey(page.project_title)))continue;
+    const matches=map.projects.filter(p=>titleKey(p.title)===titleKey(page.project_title!));
+    const project=matches.length===1?matches[0]:undefined; // Ambiguous same-title projects cannot establish ownership.
     if(project&&!project.pages.includes(page.page))throw new Error(`indexed_project_title_conflict: page=${page.page}, project=${project.key}`);
   }
   // Page/project structure is fatal; individual untrusted focus candidates are quarantined by selectPages.
@@ -126,44 +129,42 @@ export function atomicArtifacts(record:Evidence):Evidence[] {
 async function concurrent<T,R>(items:T[],fn:(item:T)=>Promise<R>,limit=3):Promise<R[]> {
   const result:R[]=new Array(items.length);let next=0,failed=false,error:unknown;
   await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{
-    while(!failed){const i=next++;if(i>=items.length)return;try{result[i]=await fn(items[i]);}catch(e){failed=true;error=e;}}
+    while(!failed){const i=next++;if(i>=items.length)return;try{result[i]=await fn(items[i]);}catch(e){if(!failed){failed=true;error=e;}}}
   }));
   if(failed)throw error;return result;
 }
 export type Event={sequence:number;type:string;elapsed_ms:number;data:unknown};
-export type AnalyzeOptions={track:Track;apiKey?:string;model:string;skimModel?:string;reviewModel?:string;scope?:'focused'|'full';pageBudget?:number;maxQuestions?:number;
-  inspectOnly?:boolean;signal?:AbortSignal;onEvent?:(event:Event)=>void;generate?:Generate;budget?:Budget;onResponse?:(kind:string,raw:unknown)=>void};
+export type AnalyzeOptions={track:Track;apiKey?:string;model:string;skimModel?:string;reviewModel?:string;questionModel?:string;
+  provider?:'openrouter';scope?:'focused'|'full';pageBudget?:number;maxQuestions?:number;
+  inspectOnly?:boolean;signal?:AbortSignal;onEvent?:(event:Event)=>void;generate?:Generate;budget?:Budget;onResponse?:(kind:string,raw:unknown,model:string)=>void};
 export async function analyzePdf(bytes:Uint8Array,options:AnalyzeOptions) {
   Track.parse(options.track);const scope=options.scope??'focused',pageBudget=options.pageBudget??5,maxQuestions=options.maxQuestions??DEFAULT_MAX_QUESTIONS;
   if(!['focused','full'].includes(scope)||!Number.isInteger(pageBudget)||pageBudget<1||pageBudget>60)throw new Error('분석 범위/페이지 예산 오류.');
-  if(!Number.isInteger(maxQuestions)||maxQuestions<1||maxQuestions>20)throw new Error('최대 질문 수는 1~20입니다.');
+  if(!Number.isInteger(maxQuestions)||maxQuestions<1||maxQuestions>DEFAULT_MAX_QUESTIONS)throw new Error('최대 질문 수는 1~5입니다.');
+  const questionModel=options.questionModel??(options.generate?options.model:OPENROUTER_MODELS.questions);
+  const opus=questionModel===OPENROUTER_MODELS.questions;
+  if(options.provider!==undefined&&options.provider!=='openrouter')throw new Error('OpenRouter만 지원합니다.');
+  if(!options.generate||options.provider==='openrouter'){
+    for(const model of [options.model,options.skimModel??options.model,options.reviewModel??options.model,questionModel])openRouterModel(model);
+    if([options.model,options.skimModel,options.reviewModel].includes(OPENROUTER_MODELS.questions))throw new Error('Opus는 질문 생성 단계에만 사용하세요.');
+  }
   const pdf=await readPdf(bytes),started=performance.now(),stats=freshMetrics();let sequence=0;
   const emit=(type:string,data:unknown)=>{const elapsed_ms=Math.round(performance.now()-started);
     if(type==='evidence_ready'&&stats.first_evidence_ms===null&&(data as {evidence:ResolvedEvidence[]}).evidence.some(e=>e.question_eligible))stats.first_evidence_ms=elapsed_ms;
     options.onEvent?.({sequence:++sequence,type,elapsed_ms,data});};
   if(!options.generate&&!options.budget)throw new Error('실제 API 호출에는 누적 예산 원장이 필요합니다.');
-  const session=options.generate?null:fileSession(options.apiKey??'',stats,options.budget!,{onResponse:options.onResponse});
-  const generate=options.generate??session!.generate;
-  const request:Request=async(kind,schema,args,check)=>{
-    const model=['DocumentMap','PageIndex'].includes(kind)?(options.skimModel??options.model):
-      ['Reviews','QuestionReviews'].includes(kind)?(options.reviewModel??options.model):options.model;
-    for(let attempt=1;attempt<=2;attempt++){
-      options.signal?.throwIfAborted(); // Let already-sent requests settle; never start the next paid call after cancellation.
-      stats.model_calls++;const start=performance.now();
-      try{const raw=await generate({kind,schema,model,thinkingLevel:['Reviews','QuestionReviews'].includes(kind)?'MEDIUM':'LOW',...args});let parsed;
-        try{parsed=schema.parse(raw);check?.(parsed);}catch(e){throw new SchemaValidationError(e instanceof z.ZodError?'출력 필드/스키마 오류.':(e as Error).message);}
-        return parsed;
-      }catch(e){if(!(e instanceof SchemaValidationError)||attempt===2)throw e;
-        args={...args,prompt:args.prompt+'\n이전 응답의 형식 검사 오류: '+e.message+'\n같은 원본을 보고 다시 작성한다. 출처를 만들거나 조건을 무시하지 않는다.'};
-      }finally{stats.stages.push({stage:kind,attempt,elapsed_ms:Math.round(performance.now()-start)});}
-    }throw new Error('Unreachable');
-  };
+  const session=!options.generate?openRouterSession(options.apiKey??'',stats,options.budget,
+    {onResponse:options.onResponse,signal:options.signal}):null;
+  const generate:Generate=options.generate??session!.generate;
+  const request=modelRequest(generate,stats,{...options,questionModel});
   const inventories=new Map<number,VisualInventory>(),spans=new Map<number,TextSpan[]>();
   let renderer:Awaited<ReturnType<typeof openRenderer>>|undefined;
   const rendered=new Map<string,Buffer>();
   const pngFor=async(page:number,box?:Box,target?:number)=>{const key=JSON.stringify([page,box,target]);
     let png=rendered.get(key);if(!png){png=(await renderPage(renderer!,page,box,target)).toBuffer('image/png');rendered.set(key,png);}return png;};
   try{
+    options.signal?.throwIfAborted();
+    if(session)await session.checkAccess();
     emit('stage',{stage:'skim',page_count:pdf.getPageCount()});
     renderer=await openRenderer(bytes);
     const trackPrompt=SCAN_TRACK_PROMPT[options.track],indexPrompt=INDEX_PROMPT+'\n'+trackPrompt;
@@ -223,8 +224,9 @@ export async function analyzePdf(bytes:Uint8Array,options:AnalyzeOptions) {
         optional_context_pages:p.optional_context_pages.filter(n=>project.pages.includes(n)).map(n=>project.pages.indexOf(n)+1)}));
       const context={key:project.key,title:project.title,original_pages:project.pages,
         unseen_project_pages:original.pages.filter(n=>!project.pages.includes(n)),focus_targets_local_pages:points};
+      // Inventory already caps regions at 160/page. An early-region cutoff hid late results on tall portfolios.
       const projectPdf=await slicePdf(pdf,project.pages),inventoryContext=project.pages.map((n,i)=>({page:i+1,...inventories.get(n)!,
-        text_layer_quote_hints:inventories.get(n)!.regions.map(r=>({region_key:r.key,text:textInBox(r.box,spans.get(n)??[]).slice(0,1200)})).filter(r=>/\p{N}/u.test(r.text)).slice(0,24)}));
+        text_layer_quote_hints:inventories.get(n)!.regions.map(r=>({region_key:r.key,text:textInBox(r.box,spans.get(n)??[]).slice(0,1200)})).filter(r=>/\p{N}/u.test(r.text))}));
       const detailImages:Array<[string,Uint8Array]>=[];
       for(const {page,parts} of images)if(parts.length>1)for(const part of parts)
         detailImages.push([`local page=${project.pages.indexOf(page)+1}; original page=${page}; tile=${part.box.join(',')}`,part.png]);
@@ -243,16 +245,26 @@ export async function analyzePdf(bytes:Uint8Array,options:AnalyzeOptions) {
       for(const [anchorIndex,record] of pieces.entries())try{
         if(records.length>=16)throw new Error('evidence_limit');
         validateAnchors(record,project,inventories,points,scope);
+        const checks:string[]=pieces.length>1?[`atomic_visual_anchor:${i+1}:${anchorIndex+1}`]:[];
+        for(const [index,a] of record.anchors.entries())if(a.quote){
+          const before=a.quote,page=project.pages[a.page-1],box=inventories.get(page)!.regions.find(r=>r.key===a.region_key)!.box;
+          a.quote=alignRangeTypography(before,box,spans.get(page)??[]);
+          if(a.quote!==before){
+            checks.push(`text_layer_range_alignment:anchor=${index+1}`);
+            // Only identical dependent literals move with their anchor; partial/paraphrased fields still fail strict checks.
+            for(const d of record.details)if(d.value===before&&d.anchor_indices.includes(index+1))d.value=a.quote;
+          }
+        }
         // Canonical source fact is copied, not independently rephrased by the model. Raw response remains archived.
         const canonical=record.anchors.find(a=>record.basis==='portfolio_claim'?a.kind==='text':a.kind==='visual');
         if(canonical)record.statement=(record.basis==='portfolio_claim'?canonical.quote:canonical.visual_description)!;
-        const failures=localEvidenceChecks(record),checks:string[]=pieces.length>1?[`atomic_visual_anchor:${i+1}:${anchorIndex+1}`]:[];
+        const failures=localEvidenceChecks(record);
         if(failures.length)throw new Error(failures.join('; '));
         for(const a of record.anchors)if(a.quote){const page=project.pages[a.page-1],region=inventories.get(page)!.regions.find(r=>r.key===a.region_key)!;
           const check=quoteLocationCheck(a.quote,region.box,spans.get(page)??[]);checks.push(`text_layer:${check}`);
           if(check==='outside_region')throw new Error('quote_outside_region');}
         for(const a of record.anchors)if(a.quote){const page=project.pages[a.page-1],box=inventories.get(page)!.regions.find(r=>r.key===a.region_key)!.box;
-          const issue=numericQuoteIssue(a.quote,box,spans.get(page)??[]);if(issue)throw new Error(issue);}
+          const issue=quoteTranscriptionIssue(a.quote,box,spans.get(page)??[]);if(issue)throw new Error(issue);}
         records.push(record);checksByRecord.push(checks);
       }catch(e){const row={project_key:project.key,candidate_index:i+1,...(pieces.length>1?{anchor_index:anchorIndex+1}:{}),reason:(e as Error).message};rejected.push(row);emit('evidence_rejected',row);}
       }
@@ -266,7 +278,7 @@ export async function analyzePdf(bytes:Uint8Array,options:AnalyzeOptions) {
           images.push([`page=${local}; region_key=${regionKey}`,await pngFor(page,region.box)]);}
         emit('stage',{stage:'review',project_key:project.key,batch:start/4+1});
         const checked=await request('Reviews',Reviews,{pdf:projectPdf,images,prompt:REVIEW_PROMPT+'\n프로젝트 데이터: '+JSON.stringify(context)+
-          '\n근거 후보 데이터:\n'+JSON.stringify(batch.map((r,i)=>({evidence_id:batchIds[i],...r,anchors:r.anchors.map(a=>({...a,
+          '\n근거 후보 데이터:\n'+JSON.stringify(batch.map((r,i)=>({evidence_id:batchIds[i],...r,anchors:r.anchors.map((a,j)=>({...a,anchor_index:j+1,
             ...{box:inventories.get(project.pages[a.page-1])!.regions.find(r=>r.key===a.region_key)!.box}}))})))},
           data=>validateReviews(batch,data.reviews,batchIds));reviews.push(...checked.reviews);
       }
@@ -283,15 +295,19 @@ export async function analyzePdf(bytes:Uint8Array,options:AnalyzeOptions) {
           question_eligible:eligible,question_focus:eligible?QUESTION_FOCUS[options.track+':'+record.category]:null,unknown_fields:record.details.filter(d=>d.value===null).map(d=>d.field),local_checks:checksByRecord[i]};
       });evidence.push(...resolved);emit('evidence_ready',{project_key:project.key,evidence:resolved});
     }
-    let questions:QuestionCard[]=[],question_checks:QuestionCheck[]=[];
+    let questions:QuestionCard[]=[],question_checks:QuestionCheck[]=[],focusCoverage:FocusCoverage[]=[];
     if(!options.inspectOnly){emit('stage',{stage:'questions',eligible_evidence_count:evidence.filter(e=>e.question_eligible).length});
-      const generated=await generateQuestions(evidence,request,{track:options.track,selectedPoints:plan.selected_points,maxQuestions,imagesFor:async candidates=>{
+      const contextImages:Array<[string,Uint8Array]>=opus?[]:await Promise.all(plan.selected_pages.map(async page=>
+        [`original_page=${page}; context only; use linked anchor boxes`,await pngFor(page,undefined,1600)] as [string,Uint8Array]));
+      const generated=await generateQuestions(evidence,request,{track:options.track,selectedPoints:plan.selected_points,contextImages,maxQuestions,
+        evidenceOnly:opus,imagesFor:async candidates=>{
         const images:Array<[string,Uint8Array]>=[];
         for(const p of candidates)for(const a of p.source.anchors)images.push([`question_id=${p.question_id}; region_id=${a.region_id}`,
           await pngFor(a.page,a.box)]);return images;
-      }});questions=generated.cards;question_checks=generated.checks;emit('questions_ready',{questions,question_checks});}
-    const quality=questionQuality(questions,plan.selected_points.map(p=>p.id));
-    const result={schema_version:'0.8',created_at:new Date().toISOString(),track:options.track,model:options.model,max_questions:maxQuestions,skim_model:options.skimModel??options.model,review_model:options.reviewModel??options.model,
+      }});questions=generated.cards;question_checks=generated.checks;focusCoverage=generated.focusCoverage;emit('questions_ready',{questions,question_checks});}
+    const quality=questionQuality(questions,plan.selected_points.map(p=>p.id),focusCoverage);
+    const result={schema_version:'0.13',created_at:new Date().toISOString(),track:options.track,model:options.model,max_questions:maxQuestions,skim_model:options.skimModel??options.model,review_model:options.reviewModel??options.model,
+      vision_provider:'openrouter',question_model:questionModel,question_provider:'openrouter',question_input:opus?'verified_evidence_only':'verified_evidence_and_images',
       document:{sha256:digest,page_count:pdf.getPageCount()},document_map:map,analysis_plan:plan,
       status:options.inspectOnly?'visual_inspection_only':!questions.length?'insufficient_evidence':quality.status==='ready'?'evidence_ready':'needs_review',quality,evidence,rejected_candidates:rejected,
       question_evidence_ids:evidence.filter(e=>e.question_eligible).map(e=>e.id),questions,question_checks,

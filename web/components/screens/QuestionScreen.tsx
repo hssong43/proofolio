@@ -79,7 +79,7 @@ export function QuestionScreen({ index, questionCount, question, answer, seconds
             {question.notes.map((note, i) => (
               <p key={i} style={{ margin: 0, fontSize: 13, color: "#71717A" }}>{note}</p>
             ))}
-            <h3 style={{ margin: 0, fontSize: 24, fontWeight: 600, lineHeight: 1.4, letterSpacing: "-.01em", textWrap: "pretty" }}>{question.prompt}</h3>
+            <h3 style={{ margin: 0, fontSize: 24, fontWeight: 600, lineHeight: 1.4, letterSpacing: "-.01em", textWrap: "pretty", whiteSpace: "pre-wrap" }}>{question.prompt}</h3>
             <p style={{ margin: 0, fontSize: 14, color: "#71717A" }}>{question.source}</p>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

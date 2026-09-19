@@ -1,0 +1,19 @@
+{
+  "comparison": "luna-pro-01",
+  "requested_by_user": "Luna High subagent versus Gemini using identical PDF and evidence; retain running Gemini process; compare before adoption",
+  "gemini_run": "mvp-23",
+  "gemini_model": "gemini-3.1-pro-preview",
+  "gemini_question_reasoning": "MEDIUM",
+  "luna_model": "gpt-5.6-luna",
+  "luna_reasoning": "high",
+  "documents": ["d-asad", "m-vishv", "d-naeon", "d-shuu", "m-jisun", "m-damyul"],
+  "quality_scope": "One first QuestionSet draft from each model on each completed Gemini evidence set. Same captured application prompt, eligible anchors, schema, and selected-page PNG bytes. Separate frozen full Gemini workflow results include any repair rounds.",
+  "blinding": "Each Luna worker has a fresh context and cannot read Gemini questions, results, metrics, gold or other document outputs. Parent source reviewer is not blind to model identity; this is not an independent human evaluation.",
+  "hard_pass": ["valid local schema and references", "correct linked source/page", "no unsupported premises in question, intent or listen_for", "distinct answer from earlier questions"],
+  "additional_review": ["specificity to the actual artifact", "useful explanation of judgment rather than source recitation", "selected topic and gold omissions", "bad boxes"],
+  "tokens": "Gemini provider usageMetadata and Luna dedicated-session token_count counters only. Missing fields remain null/unverified. Luna output_tokens includes reasoning_output_tokens; never double count reasoning. Session counters include tool/image loading and agent overhead.",
+  "retries": "Record generation batches, schema/application retries separately from model/tool turns. Provider-internal retries are unobservable for Luna and remain null.",
+  "cost": "Gemini usage-based standard API cost estimate, including thought tokens and retries. Luna actual Codex charge and cost per passed question remain null unless authoritative billing exists; public API price is not the Codex charge. Zero passed questions produce an undefined cost per pass, never zero.",
+  "limitations": ["Shared upstream Gemini extraction, not a test of Luna PDF extraction", "Different platform/system/tool wrappers and reasoning settings", "Potential image resize by the agent client", "Known six-document regression sample, not general model accuracy"],
+  "official_model_reference": "https://developers.openai.com/api/docs/models/gpt-5.6-luna"
+}

@@ -1,0 +1,18 @@
+{
+  "created_at":"2026-09-19T01:31:06Z",
+  "version":"0.9.0",
+  "result_schema":"0.9",
+  "code_sha256":"883642eb83608750380bd19d9b44f6bb46571facae775117e3a21675fbbde0ab",
+  "model":"gemini-3.8-flash",
+  "thinking":{"Reviews":"MEDIUM","QuestionReviews":"MEDIUM","other":"LOW"},
+  "scope":"focused",
+  "page_budget":5,
+  "change":"Separate per-question grounded relevance from set-level coverage of every selected topic aspect. Continue within the existing two rounds when three questions still omit an aspect; share this check between full analysis and question-only regression.",
+  "verification":"68/68 tests, strict coverage reference/retry tests, and saved m-vishv questions reclassified with separate source-audit coverage labels. Paid verification, if budget permits, reuses saved source evidence and is question-stage only, not a full PDF run.",
+  "evaluation":{"from":"mvp-13","documents":["m-vishv"],"new_holdout":false},
+  "budget_before_usd":9.6435192,
+  "baseline_usd":4.91949795,
+  "additional_limit_krw":10000,
+  "budget_krw_per_usd":2000,
+  "absolute_ceiling_usd":9.91949795
+}

@@ -1,0 +1,16 @@
+{
+  "version":"0.9.1",
+  "result_schema":"0.9",
+  "code_sha256":"a54c8bfbed8a5365028c5fbd354dde2c51fce7545499179d74db0a5776912169",
+  "model":"gemini-3.8-flash",
+  "thinking":{"Reviews":"MEDIUM","QuestionReviews":"MEDIUM","other":"LOW"},
+  "scope":"focused",
+  "page_budget":5,
+  "run":"mvp-16",
+  "evaluation":"Second question review only. Immutable evidence and the first three question-stage responses are replayed from the failed mvp-15. Not a new full PDF analysis, not an automatic full-pipeline success, and not a replacement of that failure.",
+  "documents":["m-vishv"],
+  "budget_before_usd":9.806481,
+  "baseline_usd":4.91949795,
+  "absolute_ceiling_usd":9.91949795,
+  "maximum_paid_calls":1
+}

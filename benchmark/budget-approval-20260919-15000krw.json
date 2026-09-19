@@ -1,0 +1,16 @@
+{
+  "approval_id": "user-20260919-mvp-pro-15000krw",
+  "user_message": "제미나이 15000원 남음. 충전해서. 수정하고 다시 테스트해봐. 최대한 mvp 수준으로만 나오면 돼",
+  "approved_krw": 15000,
+  "conservative_krw_per_usd": 2000,
+  "approved_additional_usd": 7.5,
+  "baseline_booked_usd": 13.28701725,
+  "previous_ceiling_usd": 13.34752025,
+  "new_absolute_ceiling_usd": 20.78701725,
+  "ledger": "output/benchmark/api-budget.jsonl",
+  "policy": "Append-only grant, same ledger and approval ID. No carry-over of previous unused balance. No budget reset, unknown-usage override or purchase. Stop when this MVP sample is sufficient or the reservation ceiling is reached.",
+  "pricing_verified_on": "2026-09-19",
+  "pricing_source": "https://ai.google.dev/gemini-api/docs/pricing",
+  "pro_standard_per_million_usd": {"input_up_to_200k": 2, "output_up_to_200k": 12, "input_above_200k": 4, "output_above_200k": 18, "cached_up_to_200k": 0.2, "cached_above_200k": 0.4},
+  "billing_limit_note": "Task estimate including thinking/retries, not an account-wide billing cap or actual exchange-rate/tax guarantee. User reports their account was already topped up."
+}

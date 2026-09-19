@@ -1,0 +1,22 @@
+{
+  "version":"0.10.3",
+  "result_schema":"0.10",
+  "code_sha256":"2d8bb41c80e4aea022a529bd92e3667308e25610b2e71113d82bb4619be1fb4d",
+  "corpus_sha256":"02fb0896e879655ea6bbeb93001a2629484111ab432cdcdc7693b4bee86d9b83",
+  "gold_sha256":"c13db9eb2eeaee826100938f8951546ac36b5ccaedbd3cd1e1ac199b3ee8311c",
+  "model":"gemini-3.8-flash",
+  "thinking":{"Reviews":"MEDIUM","QuestionReviews":"MEDIUM","other":"LOW"},
+  "scope":"focused",
+  "page_budget":5,
+  "tests_passed":76,
+  "budget_approval":"benchmark/budget-approval-20260919-7000krw.json",
+  "booked_usd_before_run":10.25935875,
+  "absolute_ceiling_usd":13.34752025,
+  "evaluation":"mvp-20: all 20 original PDFs, design 10 and marketing 10. Full-corpus re-evaluation of previously seen materials, not a fresh holdout. Preserve all automatic questions, failures and independent Codex source audits. Stop on insufficient reservation budget or unknown cost. Do not change code/prompts during the run or replace failed cases.",
+  "changes":[
+    "Before new extraction review, a uniquely located text-layer literal may align numeric range and in-word hyphen glyphs. Words, quantities, signs and units must otherwise match. Math-minus/em-dash conversion, NFKC, ambiguous matches, missing text and out-of-region matches are excluded. Strict quote checks and image review still follow; raw responses remain unchanged.",
+    "Only full-string dependent detail values follow a copied anchor; partial fields remain strict and may be rejected. Past supported/failed evidence is not retroactively repaired.",
+    "Process questions explicitly ask source-specific process/criteria and conditional differences; channel questions also ask customer-group definition if the source presents it.",
+    "Extraction instructions avoid incidental spatial descriptions and paraphrased detail lists. Semantic review explicitly rejects duplicate captures of the same work and baseline-only coverage of a before/after improvement. These instructions are not proof of model compliance."
+  ]
+}

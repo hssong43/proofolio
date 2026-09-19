@@ -1,0 +1,16 @@
+{
+  "approval_id": "user-20260919-additional-7000krw",
+  "user_message": "7000원",
+  "interpretation": "Additional Gemini budget from the current booked spend; no automatic regrant and no carry-over of the prior unused window.",
+  "approved_krw": 7000,
+  "conservative_krw_per_usd": 2000,
+  "approved_additional_usd": 3.5,
+  "baseline_booked_usd": 9.84752025,
+  "previous_ceiling_usd": 9.91949795,
+  "new_absolute_ceiling_usd": 13.34752025,
+  "ledger": "output/benchmark/api-budget.jsonl",
+  "ledger_policy": "Append-only approved_extension event. Preserve the original header and all prior reservations/settlements/unknown-cost accounting. Duplicate approval IDs cannot add budget again. Unknown or pending usage cannot be bypassed by a grant.",
+  "pricing_verified_on": "2026-09-19",
+  "pricing_source": "https://ai.google.dev/gemini-api/docs/pricing",
+  "billing_limit_note": "Estimated execution limit, not account-wide billing/tax or actual exchange-rate control."
+}

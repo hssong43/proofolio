@@ -1,0 +1,23 @@
+{
+  "version":"0.10.4",
+  "result_schema":"0.10",
+  "code_sha256":"9d9874c2791e396b7707739ef70018a7e6e5087b39a6d87eaea4afd1d435290b",
+  "corpus_sha256":"02fb0896e879655ea6bbeb93001a2629484111ab432cdcdc7693b4bee86d9b83",
+  "gold_sha256":"c13db9eb2eeaee826100938f8951546ac36b5ccaedbd3cd1e1ac199b3ee8311c",
+  "model":"gemini-3.8-flash",
+  "thinking":{"Reviews":"MEDIUM","QuestionReviews":"MEDIUM","other":"LOW"},
+  "scope":"focused",
+  "page_budget":5,
+  "tests_passed":78,
+  "budget_approval":"benchmark/budget-approval-20260919-7000krw.json",
+  "booked_usd_before_run":12.05827425,
+  "absolute_ceiling_usd":13.34752025,
+  "remaining_usd_before_run":1.289246,
+  "documents":["d-naeon","d-shuu","m-jaun","m-seoha","m-jisun","m-damyul","m-hyunmin","m-mohammed","m-april","m-joshua"],
+  "evaluation":"mvp-21: previously unattempted documents of mvp-20, with new code hash. Not a new holdout and not a fixed-hash full-20 evaluation when combined with mvp-20. Preserve failures and automatic output unchanged; independently inspect every completed final question. Stop when reservation budget is insufficient or costs are unknown. No code/prompts/model changes during the run.",
+  "changes":[
+    "Question generation retains failed source-and-task signatures across its two rounds, independent of evidence ID aliases and anchor order. An unchanged rejected task cannot receive another paid review. A genuinely different task or source remains eligible. Existing source-region quarantine remains.",
+    "A shared numeric boundary check rejects clipped spaced signs, numeric suffixes, units and percent-point p in typography alignment and quote verification, including exact substrings. Ambiguous trailing words conservatively require a longer quote or image review; missing text layers remain inconclusive.",
+    "Offline replay of d-asad/d-alex consumes three unchanged responses each and skips their former second review: 3 to 2 and 4 to 3 cards, both needs_review. No paid calls, new model outputs or retroactive repair. Text checks of 43 final quote occurrences across nine original results find no new issues. Stored results, responses, PDFs and budget ledger remain unchanged."
+  ]
+}

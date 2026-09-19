@@ -1,0 +1,17 @@
+{
+  "created_at":"2026-09-19T01:23:00Z",
+  "version":"0.8.5",
+  "result_schema":"0.8",
+  "code_sha256":"41ccf3dd00877de97ab521764ad1dbfd4dbd0209759838f96969b678d5c40cb5",
+  "model":"gemini-3.8-flash",
+  "thinking":{"Reviews":"MEDIUM","QuestionReviews":"MEDIUM","other":"LOW"},
+  "scope":"focused",
+  "page_budget":5,
+  "change":"Normalize parenthesis-adjacent layout whitespace in visible project-title consistency checks; do not infer membership from ambiguous duplicate titles or collapse lexical word spacing.",
+  "verification":"65/65 local tests and replay of the original mvp-12 m-damyul map/index: the page-17 project conflict is now rejected. No paid end-to-end run of v0.8.5; latest six full PDF runs remain v0.8.4.",
+  "budget_spent_usd":9.6435192,
+  "baseline_usd":4.91949795,
+  "additional_limit_krw":10000,
+  "budget_krw_per_usd":2000,
+  "absolute_ceiling_usd":9.91949795
+}

@@ -11,9 +11,9 @@ export function CompleteScreen({ roleLabel, answeredCount, questionCount, elapse
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center" }}>
         <h2 className="screen-title">완료되었습니다</h2>
         <p className="screen-subtitle" style={{ lineHeight: 1.6 }}>
-          답변이 기업에게 전달되었어요.
+          답변 작성을 마쳤어요.
           <br />
-          수고하셨습니다.
+          기업 전송과 자동 평가는 아직 지원하지 않아요.
         </p>
       </div>
       {saveError && <div className="error-box" role="alert" style={{ width: "100%" }}>답변 저장에 실패했어요: {saveError}</div>}

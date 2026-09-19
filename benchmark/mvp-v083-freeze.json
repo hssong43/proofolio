@@ -1,0 +1,19 @@
+{
+  "created_at":"2026-09-19T00:31:07Z",
+  "version":"0.8.3",
+  "result_schema":"0.8",
+  "code_sha256":"2538b1e8a175238cf5c6c54432b9505658ba361f91f822506426936425398cf3",
+  "model":"gemini-3.8-flash",
+  "thinking":{"Reviews":"MEDIUM","QuestionReviews":"MEDIUM","other":"LOW"},
+  "scope":"focused",
+  "page_budget":5,
+  "change":"Shared source-backed delimiter omission check in full extraction and question-only replay. Preserve original unclosed captions; never auto-repair. Correct prior mvp-10 audit after full-page visual inspection.",
+  "evaluation":"Fresh full PDF path on known development regressions, not a new holdout. Immutable prior failures and audit correction addendum retained.",
+  "initial_documents":["d-kyungmin","m-damyul","m-hyunmin"],
+  "budget_before_usd":8.43073245,
+  "baseline_usd":4.91949795,
+  "additional_limit_krw":10000,
+  "budget_krw_per_usd":2000,
+  "absolute_ceiling_usd":9.91949795,
+  "pricing_verified":"2026-09-19 https://ai.google.dev/gemini-api/docs/pricing"
+}

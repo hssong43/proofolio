@@ -158,7 +158,7 @@ function questionsFromResult(result: ClientResult): UiQuestion[] {
 export type VerificationFlowProps = {
   /** 질문당 답변 시간(초). 기본 40. */
   totalSeconds?: number;
-  /** 요청할 최대 질문 수. 기본 10. */
+  /** 요청할 최대 질문 수. 기본 5. */
   questionCount?: number;
   /** true면 분석 코어 대신 목데이터로 흐름만 시연한다. */
   demo?: boolean;

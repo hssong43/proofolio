@@ -1,0 +1,27 @@
+{
+  "version": "0.11.0",
+  "result_schema": "0.11",
+  "code_sha256": "e6ec1c4c70be471e9fa971fb01dbac43700ef12be901e99a03ad1734d56acb5c",
+  "corpus_sha256": "02fb0896e879655ea6bbeb93001a2629484111ab432cdcdc7693b4bee86d9b83",
+  "gold_sha256": "c13db9eb2eeaee826100938f8951546ac36b5ccaedbd3cd1e1ac199b3ee8311c",
+  "model": "gemini-3.1-pro-preview",
+  "skim_model": "gemini-3.8-flash",
+  "review_model": "gemini-3.1-pro-preview",
+  "thinking": {"QuestionSet": "MEDIUM", "Reviews": "MEDIUM", "QuestionReviews": "MEDIUM", "other": "LOW"},
+  "pro_max_output_including_thinking": 32768,
+  "pro_generation_timeout_ms": 300000,
+  "scope": "focused",
+  "page_budget": 5,
+  "budget_approval": "benchmark/budget-approval-20260919-15000krw.json",
+  "pilot_run": "mvp-22",
+  "pilot_documents": ["d-naeon", "m-vishv"],
+  "remaining_planned_documents": ["d-shuu", "d-asad", "m-jisun", "m-damyul"],
+  "evaluation": "MVP regression on six previously seen PDFs, not a new holdout or full 20-document validation. Preserve raw outputs and failures. Inspect original images separately for every final question, including task fit, unsupported premises, distinct answers and whether selected core points are actually asked. Do not claim that a combined model/prompt/input change isolates the effect of Pro.",
+  "mvp_sample_target": "Each of six PDFs yields at least three source-grounded, distinct, useful questions, with no unsupported final premises or wrong page/evidence links. Record omissions and automatic readiness false positives separately; do not replace failed PDFs or edit their questions.",
+  "changes": [
+    "Remove fixed question, intent and listen_for templates. Require bounded model-authored Korean text with exact selected source anchors.",
+    "Question writer receives original selected-page images and verified source JSON. Focus intent is labeled as a hypothesis, never a source fact. Angle is a classification tag, not a required wording or a coverage proof.",
+    "Keep source, numeral, context, duplicate, semantic-review and spending gates. Existing immutable source/task rejection prevents the same rejected task from winning a second vote.",
+    "Use Pro for focused analysis and question stages, Flash for structure scan. Account for Pro long-context pricing and thinking tokens; record request-specific model on raw response artifacts."
+  ]
+}

@@ -6,10 +6,23 @@ import {createCanvas} from '@napi-rs/canvas';
 import * as z from 'zod';
 import {readPdf,openRenderer,renderPage,textSpans,savePreviews,MAX_PDF_BYTES} from './pdf.ts';
 import {sha256,analyzePdf} from './pipeline.ts';
-import {Budget,BudgetError,usageCost} from './gemini.ts';
-import {loadEnv,readPdfFile} from './cli.ts';
+import {Budget,BudgetError,usageCost} from './llm.ts';
+import {readPdfFile} from './cli.ts';
+import {loadRuntimeEnv,executionBudget} from './env.ts';
 import {interviewGuide} from './questions.ts';
 import {Track} from './schema.ts';
+// Read-only compatibility for saved Gemini/GCP reports; no legacy API execution.
+const OPUS_MODEL='claude-opus-5';
+function vertexUsage(raw:unknown) {
+  const u=raw as Record<string,number>|null;
+  const count=(n:unknown):n is number=>typeof n==='number'&&Number.isSafeInteger(n)&&n>=0;
+  if(!u||!count(u.input_tokens)||!count(u.output_tokens)||!count(u.cache_read_input_tokens??0)||
+    !count(u.cache_creation_input_tokens??0)||(u.cache_creation_input_tokens??0)!==0)throw new BudgetError('Stored Opus usage unavailable.');
+  const cached=u.cache_read_input_tokens??0,input=u.input_tokens+cached,total=input+u.output_tokens;
+  if(!count(input)||!count(total))throw new BudgetError('Stored Opus token totals invalid.');
+  return {promptTokenCount:input,candidatesTokenCount:u.output_tokens,totalTokenCount:total,cachedContentTokenCount:cached};
+}
+import {OPENROUTER_MODELS,openRouterUsage,validateOpenRouterKey} from './openrouter.ts';
 
 const Source=z.object({id:z.string().regex(/^[a-z][a-z0-9-]+$/),author:z.string().min(1),track:Track,language:z.enum(['ko','en']),
   subtype:z.string(),source_url:z.url(),pdf_url:z.url().optional(),pdf_match:z.string().optional(),source_basis:z.string(),public_conditions:z.string()}).strict();
@@ -69,40 +82,74 @@ export function validateGold(corpus:z.infer<typeof Corpus>){
       ||[...g.projects.flatMap(p=>p.pages),...g.points.flatMap(p=>[...p.pages,...p.required_context_pages])].some(p=>!g.reviewed_pages.includes(p)))throw new Error('Incomplete or mismatched source gold: '+s.id);
     return g;});
 }
-async function run(phase:string,runId:string,ids:string[]){
-  if(!['dev','mvp','final','repeat'].includes(phase)||!/^[a-z0-9-]+$/.test(runId))throw new Error('phase or run id invalid.');
+async function run(phase:string,runId:string,ids:string[],models:{model:string;skimModel:string;reviewModel:string;questionModel:string;limit:number;ledger:string}){
+  if(phase!=='pilot'||!/^[a-z0-9-]+$/.test(runId))throw new Error('Only the current pilot and a unique safe run ID are supported.');
   const corpus=Corpus.parse(json('benchmark/corpus.json')),gold=validateGold(corpus),hash=codeHash();
-  if(!['dev','mvp'].includes(phase)){const frozen=json('benchmark/freeze.json');if(frozen.code_sha256!==hash||frozen.corpus_sha256!==sha256(readFileSync('benchmark/corpus.json'))||frozen.gold_sha256!==sha256(JSON.stringify(gold)))throw new Error('Frozen code/corpus/gold mismatch.');}
-  const selected=corpus.filter(s=>(phase!=='dev'||s.split==='dev')&&(!ids.length||ids.includes(s.id)));
-  if(phase==='final'&&selected.length!==20)throw new Error('Final evaluation must preserve all 20 cases.');
+  if(new Set(ids).size!==ids.length||ids.some(id=>!corpus.some(s=>s.id===id)))throw new Error('Unknown/duplicate document ID.');
+  if(phase!=='pilot'||JSON.stringify([...ids].sort())!==JSON.stringify(['d-shuu','m-damyul']))
+    throw new Error('OpenRouter pilot is limited to d-shuu,m-damyul with a new run manifest, not the old GCP freeze.');
+  const selected=corpus.filter(s=>ids.includes(s.id));
   if(!selected.length)throw new Error('No eligible documents.');
   const directory=join(root,'runs',runId);mkdirSync(join(root,'runs'),{recursive:true,mode:0o700});mkdirSync(directory,{mode:0o700});
-  loadEnv('.env');const budget=new Budget(join(root,'api-budget.jsonl'),10),model='gemini-3.8-flash';
-  if(phase==='mvp')budget.capAdditionalKrw(10000,2000);
-  fresh(join(directory,'run.json'),{phase,runId,code_sha256:hash,model,started_at:new Date().toISOString(),documents:selected.map(s=>s.id),budget_before:budget.snapshot()});
-  let stop=false;
+  const budget=new Budget(models.ledger,models.limit,'openrouter'),{model,skimModel,reviewModel,questionModel}=models;
+  let stop=false,failed=0;
   const controller=new AbortController(),pause=()=>{stop=true;controller.abort(new Error('사용자 중단: 전송된 요청만 정산하고 종료합니다.'));};
   process.on('SIGINT',pause);process.on('SIGTERM',pause);
-  try{for(const s of selected){const dir=join(directory,s.id);mkdirSync(dir,{mode:0o700});
-    if(stop){fresh(join(dir,'error.json'),{status:controller.signal.aborted?'unattempted_user_pause':'unattempted_budget',budget:budget.snapshot()});continue;}
+  try{
+    fresh(join(directory,'run.json'),{phase,mode:'full_pipeline',runId,provider:'openrouter',code_sha256:hash,
+      corpus_sha256:sha256(readFileSync('benchmark/corpus.json')),gold_sha256:sha256(JSON.stringify(gold)),
+      model,skim_model:skimModel,review_model:reviewModel,question_model:questionModel,
+      started_at:new Date().toISOString(),documents:selected.map(s=>s.id),budget_before:budget.snapshot()});
+    for(const s of selected){const dir=join(directory,s.id);mkdirSync(dir,{mode:0o700});
+    if(stop){fresh(join(dir,'error.json'),{status:controller.signal.aborted?'unattempted_user_pause':'unattempted_after_failure',budget:budget.snapshot()});continue;}
     let raw=0;const started=performance.now();
     try{const bytes=await readPdfFile(join(root,'sources',s.id,'source.pdf'));if(sha256(bytes)!==s.sha256)throw new Error('Source hash mismatch.');
-      const result=await analyzePdf(bytes,{track:s.track,model,apiKey:process.env.GEMINI_API_KEY,budget,signal:controller.signal,
+      if(codeHash()!==hash)throw new Error('Code changed during the frozen run.');
+      const result=await analyzePdf(bytes,{track:s.track,model,skimModel,reviewModel,questionModel,provider:'openrouter',
+        apiKey:process.env.OPENROUTER_API_KEY,budget,signal:controller.signal,
         onEvent:event=>{appendFileSync(join(dir,'events.jsonl'),JSON.stringify(event)+'\n',{mode:0o600});console.log(JSON.stringify({id:s.id,event:event.type,elapsed_ms:event.elapsed_ms}));},
-        onResponse:(kind,response)=>fresh(join(dir,`raw-${String(++raw).padStart(3,'0')}-${kind}.json`),response)});
+        onResponse:(kind,response,requestModel)=>fresh(join(dir,`raw-${String(++raw).padStart(3,'0')}-${kind}.json`),{...(response as object),_request_model:requestModel,_request_stage:kind,_request_provider:'openrouter'})});
       fresh(join(dir,'result.json'),result);writeFileSync(join(dir,'questions.txt'),interviewGuide(result),{flag:'wx',mode:0o600});
       await savePreviews(bytes,result.visual_inventory,join(dir,'regions'));
       fresh(join(dir,'completion.json'),{status:'completed',elapsed_ms:Math.round(performance.now()-started),budget:budget.snapshot()});
-    }catch(e){stop=controller.signal.aborted||e instanceof BudgetError||budget.blocked;fresh(join(dir,'error.json'),{status:controller.signal.aborted?'interrupted_user_pause':'failed',error:(e as Error).message,elapsed_ms:Math.round(performance.now()-started),budget:budget.snapshot()});console.log(JSON.stringify({id:s.id,error:(e as Error).message,stop}));}
-  }}finally{process.off('SIGINT',pause);process.off('SIGTERM',pause);try{fresh(join(directory,'budget-after.json'),budget.snapshot());}finally{budget.close();}}
+    }catch(e){failed++;const message=(e as Error).message;stop=controller.signal.aborted||e instanceof BudgetError||budget.blocked||/HTTP (401|403|429)/.test(message);
+      fresh(join(dir,'error.json'),{status:controller.signal.aborted?'interrupted_user_pause':'failed',error:message,elapsed_ms:Math.round(performance.now()-started),budget:budget.snapshot()});console.log(JSON.stringify({id:s.id,error:message,stop}));}
+  }}finally{process.off('SIGINT',pause);process.off('SIGTERM',pause);try{
+    fresh(join(directory,'budget-after.json'),budget.snapshot());
+  }finally{budget.close();}}
+  if(failed||controller.signal.aborted)throw new Error('Benchmark incomplete; preserved failures and unattempted documents in '+directory);
 }
 export const Audit=z.object({reviewer:z.literal('Codex visual inspection; not a human expert'),result_sha256:z.string(),
   questions:z.array(z.object({id:z.string(),grounded:z.boolean(),wrong_page_or_evidence:z.boolean(),unsupported_premise:z.boolean(),duplicate:z.boolean(),note:z.string()})),
-  bad_boxes:z.array(z.string()),covered_gold_points:z.array(z.string()),notes:z.array(z.string())});
+  bad_boxes:z.array(z.string()),covered_gold_points:z.array(z.string()),notes:z.array(z.string()),
+  final_source_errors:z.array(z.string()).optional(),selected_points_complete:z.boolean().optional(),substantive_questions:z.number().int().nonnegative().optional()});
 export function tokenTotals(usage:Array<Record<string,any>>){
-  return usage.reduce((sum,u)=>({input:sum.input+(u.promptTokenCount??0),output:sum.output+(u.candidatesTokenCount??0),
-    thinking:sum.thinking+(u.thoughtsTokenCount??0),cached:sum.cached+(u.cachedContentTokenCount??0),total:sum.total+(u.totalTokenCount??0)}),
-    {input:0,output:0,thinking:0,cached:0,total:0});
+  const sum=(key:string,optional=false)=>usage.reduce<number|null>((n,u)=>{
+    const v=u[key]===undefined&&optional?0:u[key];return n!==null&&Number.isSafeInteger(v)&&v>=0?n+v:null;
+  },0);
+  return {input:sum('promptTokenCount'),output:sum('candidatesTokenCount'),thinking:sum('thoughtsTokenCount'),cached:sum('cachedContentTokenCount',true),total:sum('totalTokenCount')};
+}
+export function responseUsage(raws:Array<Record<string,any>>,fallbackModel:string,unresolvedProviders:string[]=[]){
+  const rows=raws.map(raw=>{
+    const model=raw._request_model??fallbackModel,provider=raw._request_provider==='openrouter'||Object.values(OPENROUTER_MODELS).includes(model)?'openrouter':model===OPUS_MODEL?'vertex':'gemini';
+    try{const routed=provider==='openrouter'?openRouterUsage(raw.usage):null;
+      const usage=routed?{promptTokenCount:routed.promptTokenCount,candidatesTokenCount:routed.candidatesTokenCount,totalTokenCount:routed.totalTokenCount,
+        thoughtsTokenCount:routed.thinking_tokens,cachedContentTokenCount:routed.cached_tokens}:provider==='vertex'?{...vertexUsage(raw.usage),thoughtsTokenCount:null}:raw.usageMetadata;
+      const cost=routed?routed.cost_usd:usageCost(model,provider==='vertex'?vertexUsage(raw.usage):usage);
+      return {model,provider,stage:raw._request_stage??null,usage,cost_usd:cost,output_includes_thinking:provider!=='gemini'};
+    }catch{return {model,provider,stage:raw._request_stage??null,usage:{cachedContentTokenCount:null},cost_usd:null,output_includes_thinking:provider!=='gemini'};}
+  });
+  const summarize=(items:typeof rows,pending:boolean)=>({
+    tokens:pending?{input:null,output:null,thinking:null,cached:null,total:null}:tokenTotals(items.map(r=>r.usage)),
+    recorded_tokens:tokenTotals(items.map(r=>r.usage)),unresolved_call:pending,unknown_usage_responses:items.filter(r=>r.cost_usd===null).length,
+    known_cost_usd:items.reduce((n,r)=>n+(r.cost_usd??0),0),cost_usd:pending||items.some(r=>r.cost_usd===null)?null:items.reduce((n,r)=>n+r.cost_usd!,0)});
+  return {...summarize(rows,unresolvedProviders.length>0),providers:Object.fromEntries([...new Set([...rows.map(r=>r.provider),...unresolvedProviders])]
+    .map(p=>[p,{...summarize(rows.filter(r=>r.provider===p),unresolvedProviders.includes(p)),output_includes_thinking:p!=='gemini'}])),rows};
+}
+export function pilotPass(result:{questions:unknown[];quality?:{status:string}},audit:z.infer<typeof Audit>|null){
+  return !!audit&&result.questions.length>=3&&result.quality?.status==='ready'&&audit.selected_points_complete===true&&
+    audit.final_source_errors?.length===0&&(audit.substantive_questions??0)>=2&&audit.substantive_questions!<=result.questions.length&&
+    audit.questions.length===result.questions.length&&audit.questions.every(q=>q.grounded&&!q.wrong_page_or_evidence&&!q.unsupported_premise&&!q.duplicate);
 }
 export function trackThreshold(rows:Array<{pass:boolean;reviewed:boolean;questions:number;wrong_page_or_evidence?:number|null;unsupported_premise?:number|null}>){
   return rows.length===10&&rows.filter(r=>r.pass).length>=8&&rows.every(r=>r.questions===0||
@@ -113,13 +160,19 @@ export function report(runId:string){
   const corpus=Corpus.parse(json('benchmark/corpus.json')),directory=join(root,'runs',runId),runInfo=json(join(directory,'run.json'));
   const rows=corpus.filter(s=>runInfo.documents.includes(s.id)).map(s=>{
     const dir=join(directory,s.id),path=join(dir,'result.json'),g=Gold.parse(json(`benchmark/gold/${s.id}.json`));
-    const rawFiles=readdirSync(dir).filter(n=>/^raw-.*\.json$/.test(n)),rawUsage:Array<Record<string,any>>=[];
-    let rawCost=0,unknownUsage=0;
-    for(const n of rawFiles){const u=json(join(dir,n)).usageMetadata;try{rawCost+=usageCost(runInfo.model,u);rawUsage.push(u);}catch{unknownUsage++;}}
-    const totals=tokenTotals(rawUsage);
-    if(!existsSync(path)){const failure=existsSync(join(dir,'error.json'))?json(join(dir,'error.json')):null;
+    const rawFiles=readdirSync(dir).filter(n=>/^raw-.*\.json$/.test(n)).sort();
+    const raws=rawFiles.map(n=>{const r=json(join(dir,n));return {...r,_request_stage:r._request_stage??n.replace(/^raw-\d+-|\.json$/g,'')};});
+    const failure=existsSync(join(dir,'error.json'))?json(join(dir,'error.json')):null;
+    const unresolved=failure?.status?.startsWith('unattempted')?[]:
+      [[runInfo.provider==='openrouter'?'openrouter':'gemini',failure?.budget],['vertex',failure?.vertex_budget]].filter(([,b])=>(b?.active_reserved_usd??b?.reserved_usd)>0).map(([p])=>String(p));
+    const accounting=responseUsage(raws,runInfo.model,unresolved),totals=accounting.tokens,unknownUsage=accounting.unknown_usage_responses;
+    const costUnknown=accounting.cost_usd===null;
+    const costs={known_cost_usd:accounting.known_cost_usd,cost_usd:costUnknown?null:accounting.cost_usd,
+      cost_may_be_unknown:costUnknown,providers:accounting.providers,provider_retries:null,application_http_retries:0};
+    if(!existsSync(path)){
       return {id:s.id,track:s.track,status:failure?.status??'unattempted',error:failure?.error??null,total_ms:failure?.elapsed_ms??null,
-        questions:0,reviewed:false,pass:false,tokens:totals,cost_usd:rawCost,unknown_usage_responses:unknownUsage,cost_may_be_unknown:!!unknownUsage||failure?.budget?.blocked===true,
+        questions:0,grounded_unique:null,reviewed:false,pass:false,pilot_pass:false,tokens:totals,...costs,unknown_usage_responses:unknownUsage,
+        cost_per_passed_question_usd:null,
         missed_gold_points:g.points.map(p=>p.id)};}
     const result=json(path),auditPath=join(dir,'source-audit.json'),audit=existsSync(auditPath)?Audit.parse(json(auditPath)):null;
     if(audit&&(audit.result_sha256!==sha256(readFileSync(path))||audit.questions.length!==result.questions.length||new Set(audit.questions.map(q=>q.id)).size!==result.questions.length
@@ -132,33 +185,52 @@ export function report(runId:string){
       missed_gold_points:audit?g.points.filter(p=>!audit.covered_gold_points.includes(p.id)).map(p=>p.id):null,
       rejected_questions:result.question_checks.filter((q:{status:string})=>q.status==='rejected').length,rejected_evidence:result.rejected_candidates.length,
       selected_pages:result.analysis_plan.selected_pages,total_ms:result.metrics.total_ms,first_evidence_ms:result.metrics.first_evidence_ms,
-      stages:result.metrics.stages,usage:result.metrics.usage,tokens:totals,cost_usd:result.metrics.estimated_cost_usd,unknown_usage_responses:unknownUsage,cleanup_failures:result.metrics.cleanup_failures,
+      stages:result.metrics.stages,usage:result.metrics.usage,tokens:totals,...costs,unknown_usage_responses:unknownUsage,cleanup_failures:result.metrics.cleanup_failures,
+      question_stage_cost_usd:costUnknown?null:responseUsage(raws.filter(r=>['QuestionSet','QuestionReviews'].includes(r._request_stage)),runInfo.model).cost_usd,
+      cost_per_passed_question_usd:supported&&costs.cost_usd!==null?costs.cost_usd/supported:null,
+      first_draft_usage:responseUsage(raws.filter(r=>r._request_stage==='QuestionSet').slice(0,1),runInfo.model),
+      question_batches:result.metrics.stages.filter((r:any)=>r.stage==='QuestionSet'&&r.attempt===1).length,
+      schema_retries:result.metrics.stages.filter((r:any)=>r.attempt>1).length,
+      pilot_pass:pilotPass(result,audit),
       pass:!!audit&&supported>=3&&!audit.questions.some(q=>q.wrong_page_or_evidence||q.unsupported_premise)};
   });
   const tracks=['design','marketing'].map(track=>{const selected=rows.filter(r=>r.track===track);return {track,documents:selected.length,
     passes:selected.filter(r=>r.pass).length,reviewed:selected.filter(r=>r.reviewed).length,
     meets_target:trackThreshold(selected),tokens:tokenTotals(selected.map(r=>({promptTokenCount:r.tokens.input,candidatesTokenCount:r.tokens.output,
       thoughtsTokenCount:r.tokens.thinking,cachedContentTokenCount:r.tokens.cached,totalTokenCount:r.tokens.total}))),
-    cost_usd:selected.reduce((sum,r)=>sum+r.cost_usd,0),
+    known_cost_usd:selected.reduce((sum,r)=>sum+r.known_cost_usd,0),
+    cost_usd:selected.some(r=>r.cost_usd===null)?null:selected.reduce((sum,r)=>sum+r.cost_usd!,0),
     mean_document_ms:selected.filter(r=>typeof r.total_ms==='number').reduce((sum,r)=>sum+(r.total_ms??0),0)/Math.max(1,selected.filter(r=>typeof r.total_ms==='number').length)};});
-  const result={run:runInfo,review_method:'Automated Gemini output plus separate Codex visual source inspection, not human expert review',
-    conclusion:tracks.every(t=>t.meets_target)?'meets_this_corpus_thresholds':'not_demonstrated',tracks,documents:rows,budget:json(join(directory,'budget-after.json'))};
+  const result={run:runInfo,review_method:'Automated source checks plus separate Codex visual source inspection, not human expert review',
+    conclusion:tracks.every(t=>t.meets_target)?'meets_this_corpus_thresholds':'not_demonstrated',
+    pilot_status:runInfo.phase==='pilot'?(rows.length===2&&rows.every(r=>r.pilot_pass)?'two_document_pilot_passed':'not_demonstrated'):null,
+    pilot_scope:runInfo.mode??'full_pipeline',tracks,documents:rows,budget:json(join(directory,'budget-after.json')),
+    vertex_budget:existsSync(join(directory,'vertex-budget-after.json'))?json(join(directory,'vertex-budget-after.json')):null};
   fresh(join(directory,'report.json'),result);
   const lines=['# Portfolio question benchmark', '',result.conclusion,'','Separate Codex source review is not a human expert audit or a general Gemini accuracy estimate.','',
     '| Document | Track | Status | Raw questions | Grounded distinct | Source audited | Pass |','|---|---|---|---:|---:|---|---|',
     ...rows.map(r=>`| ${r.id} | ${r.track} | ${r.status} | ${r.questions} | ${r.grounded_unique??'—'} | ${r.reviewed} | ${r.pass} |`),'',
     ...tracks.map(t=>`${t.track}: ${t.passes}/${t.documents} documents; target met: ${t.meets_target}`),'',
-    `Task budget: $${result.budget.spent_usd.toFixed(6)} spent estimate, $${result.budget.reserved_usd.toFixed(6)} reserved; account-wide billing cap: no.`];
+    `Pilot (${result.pilot_scope}): ${result.pilot_status??'not applicable'}`,'',
+    `${runInfo.provider==='openrouter'?'OpenRouter':'Gemini'} ledger: $${result.budget.spent_usd.toFixed(6)} ${runInfo.provider==='openrouter'?'API-reported cost':'spent estimate'}; account-wide billing cap: no.`,
+    ...(result.budget.unknown_cost_hold_usd?[`Prior request cost: unknown; $${result.budget.unknown_cost_hold_usd.toFixed(6)} held unavailable, not counted as actual spend.`]:[]),
+    ...(result.vertex_budget?[`GCP ledger: $${result.vertex_budget.spent_usd.toFixed(6)} spent estimate, $${result.vertex_budget.reserved_usd.toFixed(6)} reserved.`]:[])];
   writeFileSync(join(directory,'report.md'),lines.join('\n')+'\n',{flag:'wx',mode:0o600});return result;
 }
 export async function main(argv=process.argv.slice(2)){
-  const {values:v,positionals:p}=parseArgs({args:argv,allowPositionals:true,options:{ids:{type:'string'},run:{type:'string'},phase:{type:'string'}}});
+  const {values:v,positionals:p}=parseArgs({args:argv,allowPositionals:true,options:{ids:{type:'string'},run:{type:'string'},phase:{type:'string'},
+    provider:{type:'string',default:'openrouter'},'max-cost-usd':{type:'string'},'budget-ledger':{type:'string'},
+    model:{type:'string'},'skim-model':{type:'string'},'review-model':{type:'string'},'question-model':{type:'string'}}});
   if(p[0]==='prepare')return prepare(p[1]??'benchmark/candidates.json',v.ids?.split(',')??[]);
-  if(p[0]==='freeze'){const corpus=Corpus.parse(json('benchmark/corpus.json')),gold=validateGold(corpus);
-    fresh('benchmark/freeze.json',{created_at:new Date().toISOString(),model:'gemini-3.8-flash',scope:'focused',page_budget:5,
-      code_sha256:codeHash(),corpus_sha256:sha256(readFileSync('benchmark/corpus.json')),gold_sha256:sha256(JSON.stringify(gold))});return;}
-  if(p[0]==='run')return run(v.phase??'dev',v.run??'',v.ids?.split(',')??[]);
+  if(p[0]==='run'){
+    if(v.provider!=='openrouter')throw new Error('OpenRouter only; direct Gemini/GCP execution was removed.');
+    loadRuntimeEnv(process.cwd());validateOpenRouterKey(process.env.OPENROUTER_API_KEY);
+    const budget=executionBudget(process.cwd(),process.env,{limit:v['max-cost-usd'],ledger:v['budget-ledger']});
+    return run(v.phase??'pilot',v.run??'',v.ids?.split(',')??[],{...budget,
+      model:v.model??process.env.OPENROUTER_MODEL??OPENROUTER_MODELS.vision,skimModel:v['skim-model']??process.env.OPENROUTER_SKIM_MODEL??OPENROUTER_MODELS.skim,
+      reviewModel:v['review-model']??process.env.OPENROUTER_REVIEW_MODEL??OPENROUTER_MODELS.vision,questionModel:v['question-model']??process.env.OPENROUTER_QUESTION_MODEL??OPENROUTER_MODELS.questions});
+  }
   if(p[0]==='report'){console.log(JSON.stringify(report(v.run??'').tracks));return;}
-  throw new Error('Usage: npm run benchmark -- prepare [candidates.json] [--ids a,b] | freeze | run --phase dev|mvp|final|repeat --run UNIQUE [--ids a,b]');
+  throw new Error('Usage: npm run benchmark -- prepare [candidates.json] [--ids a,b] | run --phase pilot --run UNIQUE --ids d-shuu,m-damyul --max-cost-usd APPROVED_LIMIT | report --run ID');
 }
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url)await main();

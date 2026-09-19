@@ -1,0 +1,15 @@
+{
+  "version": "0.10.1",
+  "result_schema": "0.10",
+  "code_sha256": "e304e864e64c4a6dd16ce1f3816764a9734f6ff1a41ec48e592e0f06753ef087",
+  "model": "gemini-3.8-flash",
+  "scope": "focused",
+  "page_budget": 5,
+  "evaluation": "Offline regression of transcription-hint availability using stored inventories from six known PDFs. The early 24-region cutoff was removed; 160 regions/page and 1200 characters/region remain bounded. The new full core-path contract test failed before the change and passed after it. No new model extraction, accepted evidence, question, or full-analysis success is claimed.",
+  "offline_report": "output/benchmark/offline/v0101-hints/report.json",
+  "tests_passed": 72,
+  "new_paid_calls": 0,
+  "budget_spent_usd": 9.84752025,
+  "baseline_usd": 4.91949795,
+  "absolute_ceiling_usd": 9.91949795
+}

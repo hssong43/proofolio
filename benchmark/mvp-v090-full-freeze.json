@@ -1,0 +1,15 @@
+{
+  "version":"0.9.0",
+  "result_schema":"0.9",
+  "code_sha256":"883642eb83608750380bd19d9b44f6bb46571facae775117e3a21675fbbde0ab",
+  "model":"gemini-3.8-flash",
+  "thinking":{"Reviews":"MEDIUM","QuestionReviews":"MEDIUM","other":"LOW"},
+  "scope":"focused",
+  "page_budget":5,
+  "run":"mvp-15",
+  "evaluation":"Full PDF path on known m-vishv regression after question-stage verification. Not a new holdout or a replacement of failed cases.",
+  "documents":["m-vishv"],
+  "budget_before_usd":9.6687852,
+  "baseline_usd":4.91949795,
+  "absolute_ceiling_usd":9.91949795
+}

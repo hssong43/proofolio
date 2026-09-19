@@ -123,10 +123,41 @@ export function textInBox(box:Box,spans:TextSpan[]) {
     return cy>=box[0]-8 && cy<=box[2]+8 && cx>=box[1]-8 && cx<=box[3]+8;
   }).map(s=>s.text).join(' ');
 }
+function numericBoundaryClipped(quote:string,source:string):boolean {
+  const text=normalize(source),chars=[...text.matchAll(/\S/g)],compact=chars.map(m=>m[0]).join(''),key=normalize(quote).replace(/\s/g,'');
+  if(!key)return false;
+  let clipped=false;
+  for(let at=compact.indexOf(key);at>=0;at=compact.indexOf(key,at+1)){
+    const end=chars[at+key.length-1],before=text.slice(0,chars[at].index),after=text.slice(end.index+end[0].length);
+    // ponytail: conservative numeric-edge check; ambiguous trailing words require a longer quote or image review.
+    clipped=(/^\p{N}/u.test(key)&&/[\p{N}+\-‐‑‒–—−~<>≤≥=$€£₩]\s*$/u.test(before))||
+      (/\p{N}$/u.test(key)&&/^\s*(?:[\p{L}\p{N}%‰×/°]|[.,]\p{N})/u.test(after))||
+      (/%$/u.test(key)&&/^\s*p(?![a-z])/iu.test(after));
+    if(!clipped)return false;
+  }
+  return clipped;
+}
+export function alignRangeTypography(quote:string,box:Box,spans:TextSpan[]):string {
+  // Copy a uniquely located literal, never infer OCR. Only range dashes and in-word hyphen glyphs may differ.
+  // Math minus, missing signs/units, NFKC substitutions and word changes are deliberately excluded.
+  const source=normalize(textInBox(box,spans)),chars=[...source.matchAll(/\S/g)]; // UTF-16 offsets, as used by indexOf/slice.
+  const compact=chars.map(m=>m[0]).join(''),needle=normalize(quote).replace(/\s/g,'');
+  const fold=(s:string)=>s.replace(/(?<=\p{N})[-‐‑‒–](?=\p{N})/gu,'-').replace(/(?<=\p{L})[‐‑](?=\p{L})/gu,'-');
+  if(!/(?<=\p{N})[-‐‑‒–](?=\p{N})/u.test(needle)||compact.includes(needle))return quote;
+  const haystack=fold(compact),key=fold(needle),at=haystack.indexOf(key);
+  if(at<0||haystack.indexOf(key,at+1)>=0)return quote;
+  const start=chars[at]?.index,end=chars[at+key.length-1];
+  if(start===undefined||!end)return quote;
+  const stop=end.index+end[0].length;
+  if(/[\p{L}\p{N}+\-−~<>≤≥=$€£₩]/u.test(source[start-1]??'')||
+    /[\p{L}\p{N}%‰×/]/u.test(source[stop]??'')||numericBoundaryClipped(source.slice(start,stop),source))return quote;
+  return source.slice(start,stop);
+}
 export function numericQuoteIssue(quote:string,box:Box,spans:TextSpan[]):string|null {
   if(!/\p{N}/u.test(quote))return null;
   if(/\p{N}\s+\p{N}{1,2}(?!\p{N})/u.test(quote))return 'ambiguous_numeric_spacing';
   const source=textInBox(box,spans),fold=(s:string)=>s.normalize('NFKC').replace(/[‐‑‒–—−]/g,'-');
+  if(numericBoundaryClipped(quote,source))return 'numeric_text_layer_mismatch';
   if(normalize(source).replace(/\s/g,'').includes(normalize(quote).replace(/\s/g,'')))return null;
   if(fold(source).replace(/\s/g,'').includes(fold(quote).replace(/\s/g,'')))return 'nonverbatim_symbol_transcription';
   const chars=[...fold(source)],kept=chars.flatMap((c,i)=>/[\p{L}\p{N}]/u.test(c)?[{c,i}]:[]);
@@ -140,6 +171,15 @@ export function numericQuoteIssue(quote:string,box:Box,spans:TextSpan[]):string|
   const slice=prefix+chars.slice(start,end+1).join('')+suffix;
   const signature=(s:string)=>(fold(s).replace(/\s/g,'').match(/\p{N}+(?:[.,]\p{N}+)*|[+\-~→<>≤≥=%‰×/$€£₩]/gu)??[]).join('|');
   return signature(slice)!==signature(quote)?'numeric_text_layer_mismatch':null;
+}
+export function quoteTranscriptionIssue(quote:string,box:Box,spans:TextSpan[]):string|null {
+  const text=quote.trim(),pairs:Record<string,string>={'(' : ')','[':']','{':'}','〈':'〉','《':'》','「':'」','『':'』','【':'】'};
+  const close=pairs[text[0]??'']??(/^<\s*\p{L}/u.test(text)?'>':undefined);
+  // ponytail: detect only a demonstrably omitted adjacent delimiter; other clipping needs visual review.
+  // The original may itself have an unclosed caption. Never repair it or reject it just for typography.
+  const compact=(s:string)=>normalize(s).replace(/\s/g,''),source=compact(textInBox(box,spans)),needle=compact(text),at=source.indexOf(needle);
+  if(close&&!text.includes(close)&&at>=0&&source[at+needle.length]===close)return 'omitted_source_delimiter';
+  return numericQuoteIssue(quote,box,spans);
 }
 export function quoteLocationCheck(quote: string, box: Box, spans: TextSpan[]): 'matched'|'outside_region'|'not_found'|'unavailable' {
   if (!spans.length) return 'unavailable';

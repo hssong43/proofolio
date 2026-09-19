@@ -1,0 +1,50 @@
+{
+  "created_at": "2026-09-19T09:11:33.602Z",
+  "scope": "Two previously reviewed Korean portfolios; not a new holdout or a 20-document evaluation",
+  "documents": ["d-shuu", "m-damyul"],
+  "source_run": "mvp-23",
+  "source_result_sha256": {
+    "d-shuu": "c2512fd3612075e756f264af4e77fe97b2a0e9c6e375a19e350eb11f9e5a7fc8",
+    "m-damyul": "ebb459077b6816a3dcf2b712c9cb2bd8697e89e271ba51d475a586d6273fe41b"
+  },
+  "code_sha256": "7220788260475423824be7a94cebd76ba7baf0093fbacc614194d73c15fb6462",
+  "replay_sha256": "a9a944ed29fe442be64e5d67a904ef55ebb6ee224929a67c4daef5b85febdfa5",
+  "comparison_sha256": "e62f2a1ac2c7881ac1086df5b0609efb63442525b0172a950c7c84d5cadd9751",
+  "corpus_sha256": "02fb0896e879655ea6bbeb93001a2629484111ab432cdcdc7693b4bee86d9b83",
+  "gold_sha256": "c13db9eb2eeaee826100938f8951546ac36b5ccaedbd3cd1e1ac199b3ee8311c",
+  "model": "gemini-3.1-pro-preview",
+  "skim_model": "gemini-3.8-flash",
+  "review_model": "gemini-3.1-pro-preview",
+  "question_models": ["claude-opus-5", "gemini-3.1-pro-preview"],
+  "evidence_only": true,
+  "question_thinking": "MEDIUM",
+  "question_max_output_tokens": 16384,
+  "json_format_retries": 1,
+  "question_generation_rounds": 2,
+  "phases": ["free_access_check", "same_evidence_question_comparison", "two_fresh_full_pdf_runs", "optional_two_claude_question_repeats"],
+  "vertex": {
+    "project_id": "supple-voyage-509107-q7",
+    "location": "global",
+    "ledger": "output/gcp-opus-budget.jsonl",
+    "limit_usd": 5,
+    "approval_basis": "User-approved implementation plan; one cumulative GCP test cap including retries and repeats, not a new allowance per run"
+  },
+  "gemini": {
+    "ledger": "output/benchmark/api-budget.jsonl",
+    "ledger_sha256_before": "806a45d36dcb8d74a62c0198c5c8bc36f9ce9b8b0dfaac8581887e9da42cdcab",
+    "spent_usd_before": 16.1549419,
+    "absolute_ceiling_usd": 20.78701725,
+    "remaining_usd_before": 4.63207535,
+    "new_allowance_usd": 0
+  },
+  "criteria": {
+    "distinct_grounded_questions_per_document": 3,
+    "substantive_questions_per_document": 2,
+    "wrong_links_or_unsupported_premises": 0,
+    "selected_points_and_required_context_source_audited": true,
+    "final_used_sources_and_boxes_correct": true,
+    "reviewer": "Codex visual inspection; not a human expert"
+  },
+  "stop_on": ["access_or_quota_failure", "budget_reservation_failure", "unknown_usage", "user_pause"],
+  "automatic_provider_adoption": false
+}

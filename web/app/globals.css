@@ -44,7 +44,7 @@ button {
 @keyframes slideA {
   from {
     opacity: 0;
-    transform: translateX(24px);
+    transform: translateX(16px);
   }
   to {
     opacity: 1;
@@ -55,7 +55,7 @@ button {
 @keyframes slideB {
   from {
     opacity: 0;
-    transform: translateX(24px);
+    transform: translateX(16px);
   }
   to {
     opacity: 1;

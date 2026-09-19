@@ -1,0 +1,27 @@
+{
+  "version": "0.11.1",
+  "result_schema": "0.11",
+  "code_sha256": "005fc9349192bc4a74d794366870da924b08ef2585f19f5cc2e7f90e874b172a",
+  "corpus_sha256": "02fb0896e879655ea6bbeb93001a2629484111ab432cdcdc7693b4bee86d9b83",
+  "gold_sha256": "c13db9eb2eeaee826100938f8951546ac36b5ccaedbd3cd1e1ac199b3ee8311c",
+  "run": "mvp-23",
+  "documents": ["d-naeon", "d-shuu", "d-asad", "m-vishv", "m-jisun", "m-damyul"],
+  "model": "gemini-3.1-pro-preview",
+  "skim_model": "gemini-3.8-flash",
+  "review_model": "gemini-3.1-pro-preview",
+  "thinking": {"DesignExtraction": "MEDIUM", "MarketingExtraction": "MEDIUM", "QuestionSet": "MEDIUM", "Reviews": "MEDIUM", "QuestionReviews": "MEDIUM", "other": "LOW"},
+  "pro_max_output_including_thinking": 32768,
+  "pro_generation_timeout_ms": 300000,
+  "scope": "focused",
+  "page_budget": 5,
+  "budget_approval": "benchmark/budget-approval-20260919-15000krw.json",
+  "prior_failed_pilot": "mvp-22: one final question per PDF; numerical restatements and missing required context rejected",
+  "changes_since_pilot": [
+    "Keep numerical values in immutable source excerpts; explicitly avoid repeating them in authored question, intent or listen_for. Preserve strict numeral guard.",
+    "Remove obsolete angle/aspect coupling: both are descriptive tags, not fixed question templates.",
+    "Clarify atomic focus topics and genuinely required context pages; retain all existing context checks.",
+    "Use MEDIUM reasoning for source extraction and explicitly check mandatory anchor coverage before returning."
+  ],
+  "evaluation": "Six previously seen full PDFs, not a new holdout or full twenty-document validation. Preserve failures and unedited questions. Every final question receives separate Codex visual source inspection, not human expert review.",
+  "mvp_sample_target": "Each PDF produces at least three grounded, distinct, useful questions with zero unsupported final premises or wrong page/evidence links. Report selected-topic and gold omissions separately. Never replace failed PDFs or relabel partial coverage as complete."
+}

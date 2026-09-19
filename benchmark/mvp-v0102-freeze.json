@@ -1,0 +1,14 @@
+{
+  "version": "0.10.2",
+  "result_schema": "0.10",
+  "code_sha256": "289e4db0c0c3e54bb25fcf56c4a4828b378424adf49c561d0269e719132ae481",
+  "model": "gemini-3.8-flash",
+  "thinking": {"Reviews": "MEDIUM", "QuestionReviews": "MEDIUM", "other": "LOW"},
+  "scope": "focused",
+  "page_budget": 5,
+  "tests_passed": 73,
+  "budget_approval": "benchmark/budget-approval-20260919-7000krw.json",
+  "baseline_booked_usd": 9.84752025,
+  "absolute_ceiling_usd": 13.34752025,
+  "evaluation": "Resume known-document development regressions without replacing prior failures. First complete the interrupted final question review using immutable upstream responses, then re-run the full PDF path on the difficult design cases. Keep source review separate from automatic results. Any broader evaluation must use a fixed hash and preserve failures."
+}

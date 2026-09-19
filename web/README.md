@@ -1,43 +1,48 @@
-# Proofolio Web
+# proofolio UI
 
-Claude Design의 `Portfolio Verification Prototype.dc.html`을 Next.js(App Router) + TypeScript로 옮긴 프론트엔드다.
-루트의 분석 코어(`src/cli.ts`)를 자식 프로세스로 실행해 실제 PDF 분석 결과로 질문을 만든다.
+머지된 PR #1의 Next.js 화면을 현재 TypeScript/OpenRouter 코어에 연결한다.
+Gemini 직접 API 및 GCP/ADC 경로는 사용하지 않는다.
 
 ## 실행
 
-```sh
-# 루트에서 코어 의존성 설치
-npm ci
+루트에서 `npm ci`, `npm ci --prefix web` 후 [.env.example](../.env.example)을 참고해 루트 `.env`를 설정한다.
 
-# 웹
-cd web
-npm install
-npm run dev      # http://localhost:3000
-npm run check    # tsc --noEmit
-npm run build
+```sh
+npm run dev                     # 루트에서 실행, http://127.0.0.1:3000
+npm run check:web
+npm run build:web
+npm --prefix web run start
+npm --prefix web exec -- playwright install chromium  # 최초 브라우저 설치
+npm run test:e2e                 # 루트에서 실행, 합성 데이터 UI 검사
 ```
 
-실제 분석에는 루트 `.env`에 `GEMINI_API_KEY`가 필요하다. 키가 없으면 분석 화면에서 안내 문구와 함께 실패로 끝난다.
-비용 원장은 기본 `output/web/api-budget.jsonl`이며 `PROOFOLIO_BUDGET_LEDGER` 환경변수로 바꿀 수 있다. 원장은 한 번에 하나의 분석만 허용한다.
+Playwright는 프로덕션 빌드 후 `127.0.0.1:3101`에 전용 서버를 띄운다. 기존 개발/미리보기 서버는 먼저 중지한다.
+데스크톱/모바일 두 직군 흐름과 실제 API의 PDF/예산/Origin 차단을 검사한다. 서버의 키는 빈 값, 예산은 0이며 기존 서버를 재사용하지 않는다.
+분석/답변의 정상 API 응답은 stub이므로 실제 모델 품질이나 디스크 저장 검증으로 집계하지 않는다.
+스크린샷과 실패 trace는 OS 임시 폴더의 `proofolio-playwright-results/`에 저장한다.
 
-쿼리 파라미터:
+개발 파일 감시 한도 `EMFILE`은 `WATCHPACK_POLLING=1000 npm run dev` 또는 빌드 후 실행으로 피할 수 있다.
 
-- `?questions=10` 요청할 최대 질문 수(1~20, 기본 10). 실제 질문 수는 분석 결과에 따라 이보다 적을 수 있다.
-- `?seconds=60` 질문당 답변 시간(10~120초, 기본 40)
-- `?demo=1` 분석 코어 대신 목데이터로 흐름만 시연
-- `?fast=1` 데모 모드의 분석 대기 단축
+- 키: `OPENROUTER_API_KEY`. 루트 `.env.openrouter`도 호환 지원한다.
+- 비용: `PROOFOLIO_MAX_COST_USD=0`이면 유료 분석은 시작되지 않는다. 승인한 누적 한도를 명시해야 한다.
+- CLI·웹·벤치마크 공유 원장: `output/openrouter-budget.jsonl`. 새 웹 전용 원장으로 예산을 초기화하지 않는다.
+- 모델·검증 방식·최신 유료 검증 결과는 [루트 README](../README.md)를 따른다.
 
-## 구조
+## 화면과 제한
 
-- `app/api/analyze` PDF 업로드 → 코어 CLI 실행 시작, `[runId]` 상태 조회, `[runId]/answers` 답변 저장
-- `lib/server/runner.ts` CLI 실행, `output/web/runs/<runId>/`에 PDF·이벤트·결과·답변 보관, 결과를 화면용 형태로 변환
-- `lib/client.ts` 브라우저 → API 호출
-- `components/VerificationFlow.tsx` 6단계 화면 상태 머신, 상태 폴링, 타이머
-- `components/screens/` 직무 선택 → 업로드 → 분석 → 준비 → 질문 → 완료
-- `lib/data.ts` 직무↔track 매핑, 데모 목데이터, 상수
+직무 선택 → PDF 업로드 → 진행 상태 조회 → 준비 → 질문 답변 → 완료.
 
-## 현재 제한
+- `?questions=1..5`: 최대 질문 수. 기본 5개, 근거가 부족하면 더 적다.
+- `?seconds=10..120`: 질문당 시간, 기본 40초.
+- `?demo=1&fast=1`: 목데이터 화면 시연. 실제 PDF 분석이나 품질 검증이 아니다.
+- 디자인·마케팅 PDF만 실제 분석한다. 개발자·링크 분석은 미지원.
+- 질문의 인용문/줄바꿈/원본 페이지는 코어 결과에서 보존한다.
+- 답변은 `output/web/runs/<runId>/answers.json`에 로컬 저장만 한다. 기업 전송·평가 없음.
+- 로컬 단일 프로세스 MVP다. 인증·영속 작업 큐가 없으므로 인터넷 공개/서버리스 배포용으로 사용하지 않는다.
 
-- 코어가 디자인·마케팅만 지원하므로 개발자 직무는 "준비 중"으로 비활성화된다.
-- 링크 입력은 데모 모드에서만 동작한다. 실제 분석은 PDF 업로드만 지원한다.
-- 답변은 `answers.json`으로 저장만 하며 평가하지 않는다.
+## 구현
+
+- `lib/server/runner.ts`: OpenRouter CLI 실행·진행 상태·화면용 결과 변환.
+- `app/api/analyze/`: 업로드·상태 조회·답변 저장. 잘못된 PDF/직무/문항 수를 거부한다.
+- `components/VerificationFlow.tsx`: 폴링·답변 타이머·화면 이동.
+- `lib/data.ts`: 직무 매핑·명시적 데모 모드 목데이터.

@@ -1,17 +1,28 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { createWriteStream } from "node:fs";
+import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
+import { createWriteStream, existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import type { AnswerRecord, ClientQuestion, ClientResult, RunStatus, Track } from "../types";
+import type { AnswerRecord, ClientQuestion, ClientResult, RunStatus, Track } from "../types.ts";
+import { loadRuntimeEnv, executionBudget } from "../../../src/env.ts";
 
 /** 분석 코어(루트 저장소) 위치. 기본은 web/의 상위 폴더. */
-export const ROOT = path.resolve(process.env.PROOFOLIO_ROOT ?? path.join(process.cwd(), ".."));
+export const ROOT = path.resolve(process.env.PROOFOLIO_ROOT ?? (existsSync(path.join(process.cwd(), "src", "cli.ts")) ? process.cwd() : path.join(process.cwd(), "..")));
 const RUNS_DIR = path.join(ROOT, "output", "web", "runs");
-const LEDGER = process.env.PROOFOLIO_BUDGET_LEDGER ?? path.join(ROOT, "output", "web", "api-budget.jsonl");
-export const DEFAULT_MAX_QUESTIONS = 10;
+export const DEFAULT_MAX_QUESTIONS = 5;
 const RUN_ID = /^[0-9a-f-]{36}$/;
+
+export function sameOrigin(request: Request) {
+  const origin = request.headers.get("origin");
+  if (!origin) return request.headers.get("sec-fetch-site") !== "cross-site";
+  try {
+    const parsed = new URL(origin);
+    // Next's internal request URL can use localhost while the browser uses 127.0.0.1.
+    return ["http:", "https:"].includes(parsed.protocol) && parsed.origin === origin &&
+      parsed.host === (request.headers.get("host") ?? new URL(request.url).host);
+  } catch { return false; }
+}
 
 const runDir = (runId: string) => {
   if (!RUN_ID.test(runId)) throw new Error("잘못된 실행 ID");
@@ -19,7 +30,9 @@ const runDir = (runId: string) => {
 };
 
 async function writeStatus(status: RunStatus) {
-  await writeFile(path.join(runDir(status.runId), "status.json"), JSON.stringify(status, null, 2));
+  const target = path.join(runDir(status.runId), "status.json"), temporary = target + "." + randomUUID() + ".tmp";
+  await writeFile(temporary, JSON.stringify(status, null, 2), { flag: "wx", mode: 0o600 });
+  await rename(temporary, target);
 }
 
 export async function readStatus(runId: string): Promise<RunStatus | null> {
@@ -49,7 +62,7 @@ function stageOf(event: { type: string; data?: unknown }, current: number) {
 
 function friendlyError(raw: string) {
   const text = raw.trim();
-  if (/GEMINI_API_KEY/.test(text)) return "GEMINI_API_KEY가 설정되지 않았어요. 루트 .env에 키를 넣은 뒤 다시 시도해주세요.";
+  if (/OPENROUTER_API_KEY/.test(text)) return "OPENROUTER_API_KEY가 설정되지 않았어요. 루트 .env를 확인해주세요.";
   if (/EEXIST/.test(text) && /\.lock/.test(text)) return "다른 분석이 진행 중이에요. 잠시 후 다시 시도해주세요.";
   return text.replace(/^분석 실패:\s*/, "") || "분석이 완료되지 않았어요.";
 }
@@ -61,7 +74,7 @@ type RawQuestion = {
   listen_for: string[];
   answer_target: string;
   project_key: string;
-  anchors: Array<{ page: number }>;
+  anchors: Array<{ page: number; quote?: string | null }>;
 };
 
 type RawResult = {
@@ -79,14 +92,19 @@ type RawResult = {
 export function toClientResult(raw: RawResult): ClientResult {
   const titles = new Map(raw.document_map.projects.map((p) => [p.key, p.title]));
   const questions: ClientQuestion[] = raw.questions.map((q) => {
-    const lines = q.question.split("\n").filter((l) => l.trim());
-    const prompt = lines.at(-1) ?? q.question;
-    const head = lines.slice(0, -1);
+    // Source quotes may contain line breaks. Use the core's immutable anchor quotes,
+    // not a last-line split that can silently truncate the candidate's question.
+    const sourceQuotes = [...new Set(q.anchors.flatMap((a) => a.quote ? [a.quote] : []))];
+    let prompt = q.question;
+    const notes: string[] = [];
+    const visualNote = "연결된 시각 자료를 기준으로 답해 주세요.";
+    if (prompt.startsWith(visualNote + "\n")) { notes.push(visualNote); prompt = prompt.slice(visualNote.length + 1); }
+    for (const quote of sourceQuotes) if (prompt.startsWith("원문: " + quote + "\n")) prompt = prompt.slice(quote.length + 5);
     return {
       id: q.id,
       prompt,
-      quotes: head.filter((l) => l.startsWith("원문: ")).map((l) => l.slice(4)),
-      notes: head.filter((l) => !l.startsWith("원문: ")),
+      quotes: sourceQuotes,
+      notes,
       pages: [...new Set(q.anchors.map((a) => a.page))].sort((a, b) => a - b),
       projectTitle: titles.get(q.project_key) ?? q.project_key,
       intent: q.intent,
@@ -106,35 +124,41 @@ export function toClientResult(raw: RawResult): ClientResult {
   };
 }
 
+export function analysisArgs(runId: string, track: Track, maxQuestions = DEFAULT_MAX_QUESTIONS, env = process.env) {
+  if (track !== "design" && track !== "marketing") throw new Error("지원하지 않는 직무예요.");
+  if (!Number.isInteger(maxQuestions) || maxQuestions < 1 || maxQuestions > DEFAULT_MAX_QUESTIONS) throw new Error("질문 수는 1~5개예요.");
+  const dir = runDir(runId), budget = executionBudget(ROOT, env);
+  return [path.join(ROOT, "src", "cli.ts"), path.join(dir, "portfolio.pdf"),
+    "--provider", "openrouter", "--track", track,
+    "--output", path.join(dir, "result.json"), "--guide-output", path.join(dir, "questions.txt"),
+    "--budget-ledger", budget.ledger, "--max-cost-usd", String(budget.limit),
+    "--max-questions", String(maxQuestions), "--events"];
+}
+
 export async function startRun(input: { bytes: Uint8Array; fileName: string; track: Track; maxQuestions?: number }) {
+  loadRuntimeEnv(ROOT);
   const runId = randomUUID();
+  const args = analysisArgs(runId, input.track, input.maxQuestions);
   const dir = runDir(runId);
-  await mkdir(dir, { recursive: true });
-  await mkdir(path.dirname(LEDGER), { recursive: true });
+  await mkdir(dir, { recursive: true, mode: 0o700 });
   const pdfPath = path.join(dir, "portfolio.pdf");
-  await writeFile(pdfPath, input.bytes);
+  await writeFile(pdfPath, input.bytes, { flag: "wx", mode: 0o600 });
 
   const status: RunStatus = { runId, track: input.track, fileName: input.fileName, state: "queued", stage: 0, startedAt: new Date().toISOString() };
   await writeStatus(status);
 
-  const args = [
-    path.join(ROOT, "src", "cli.ts"),
-    pdfPath,
-    "--track", input.track,
-    "--output", path.join(dir, "result.json"),
-    "--guide-output", path.join(dir, "questions.txt"),
-    "--budget-ledger", LEDGER,
-    "--max-questions", String(input.maxQuestions ?? DEFAULT_MAX_QUESTIONS),
-    "--events",
-  ];
-  const child = spawn(process.execPath, args, { cwd: ROOT, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
   status.state = "running";
   await writeStatus(status);
-
-  const events = createWriteStream(path.join(dir, "events.jsonl"));
+  // ponytail: one local process per run; use a durable worker before multi-instance deployment.
+  let writes = Promise.resolve();
+  const persist = () => { const snapshot = structuredClone(status); writes = writes.then(() => writeStatus(snapshot)); return writes; };
+  const child = spawn(process.execPath, args, { cwd: ROOT, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+  const events = createWriteStream(path.join(dir, "events.jsonl"), { flags: "wx", mode: 0o600 });
   let stderr = "";
+  child.on("error", () => { stderr += "\n분석 프로세스를 시작하지 못했어요."; });
+  events.on("error", () => { child.kill("SIGTERM"); });
   child.stderr.on("data", (chunk: Buffer) => {
-    stderr += chunk.toString("utf8");
+    stderr = (stderr + chunk.toString("utf8")).slice(-16000);
   });
   const lines = createInterface({ input: child.stdout });
   lines.on("line", (line) => {
@@ -143,14 +167,14 @@ export async function startRun(input: { bytes: Uint8Array; fileName: string; tra
       const event = JSON.parse(line) as { type: string; data?: unknown };
       status.stage = stageOf(event, status.stage);
       status.lastEvent = event.type;
-      void writeStatus(status);
+      void persist().catch(() => { child.kill("SIGTERM"); });
     } catch {
       /* 이벤트가 아닌 출력은 무시 */
     }
   });
-  child.on("close", async (code) => {
+  const finish = async (code: number | null) => {
     events.end();
-    await writeFile(path.join(dir, "stderr.log"), stderr);
+    await writeFile(path.join(dir, "stderr.log"), stderr, { flag: "wx", mode: 0o600 });
     status.finishedAt = new Date().toISOString();
     if (code === 0) {
       try {
@@ -165,7 +189,8 @@ export async function startRun(input: { bytes: Uint8Array; fileName: string; tra
       status.state = "failed";
       status.error = friendlyError(stderr.split("\n").filter(Boolean).at(-1) ?? "");
     }
-    await writeStatus(status);
-  });
+    await persist();
+  };
+  child.on("close", (code) => { void finish(code).catch(() => console.error("분석 상태를 저장하지 못했습니다. 로컬 디스크를 확인하세요.")); });
   return status;
 }

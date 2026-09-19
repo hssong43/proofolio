@@ -13,7 +13,7 @@ export default async function Page({ searchParams }: { searchParams: SearchParam
   return (
     <VerificationFlow
       totalSeconds={intIn(seconds, 10, 120, 40)}
-      questionCount={intIn(questions, 1, 20, DEFAULT_QUESTION_COUNT)}
+      questionCount={intIn(questions, 1, DEFAULT_QUESTION_COUNT, DEFAULT_QUESTION_COUNT)}
       demo={demo === "1"}
       fastAnalysis={fast === "1"}
     />

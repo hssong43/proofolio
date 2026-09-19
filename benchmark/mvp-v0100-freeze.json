@@ -1,0 +1,15 @@
+{
+  "version":"0.10.0",
+  "result_schema":"0.10",
+  "code_sha256":"483facf39bfa6f86bad813d4876792a1aa1614cfe631975db11f2526c14baab1",
+  "model":"gemini-3.8-flash",
+  "thinking":{"Reviews":"MEDIUM","QuestionReviews":"MEDIUM","other":"LOW"},
+  "scope":"focused",
+  "page_budget":5,
+  "evaluation":"Offline materialization of 21 stored question plans across 6 known PDFs, plus a separately labelled coverage counterexample. No new Gemini planning/review, no full-pipeline run, and no model-quality success claims.",
+  "offline_report":"output/benchmark/offline/v010-final-exact/report.json",
+  "new_paid_calls":0,
+  "budget_spent_usd":9.823746,
+  "baseline_usd":4.91949795,
+  "absolute_ceiling_usd":9.91949795
+}

@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
-import { saveAnswers } from "@/lib/server/runner";
+import { saveAnswers, sameOrigin } from "@/lib/server/runner";
 import type { AnswerRecord } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request, context: { params: Promise<{ runId: string }> }) {
+  if (!sameOrigin(request))
+    return NextResponse.json({ error: "같은 사이트에서만 답변을 저장할 수 있어요." }, { status: 403 });
   const { runId } = await context.params;
   const body = (await request.json().catch(() => null)) as { answers?: AnswerRecord[] } | null;
   if (!body || !Array.isArray(body.answers)) return NextResponse.json({ error: "answers 배열이 필요해요." }, { status: 400 });

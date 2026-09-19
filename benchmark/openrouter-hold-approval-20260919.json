@@ -1,0 +1,15 @@
+{
+  "approval_id": "user-20260919-openrouter-pilot-02-hold",
+  "user_response": "ㅇㅇ",
+  "approved_proposal": "이전 미확인 예약 약 $0.82를 그대로 유보하고, 나머지 $9.18 안에서 두 PDF를 재시험",
+  "ledger": "output/openrouter-budget.jsonl",
+  "ledger_sha256_before": "4befc1bd273a626c518f545ad590d04909bed90c44ec470a860fc837146607a5",
+  "reservation_id": "d3a2ee16-3dfb-4c37-9a8f-533a609d57e7",
+  "unknown_cost_hold_usd": 0.817152,
+  "held_request_actual_cost_usd": null,
+  "combined_limit_usd": 10,
+  "available_before_new_calls_usd": 9.182848,
+  "run_id": "openrouter-pilot-02",
+  "documents": ["d-shuu", "m-damyul"],
+  "scope": "Same two PDFs and models; append-only hold, no settlement or budget increase; any new unknown usage blocks again. No account/billing changes, broader benchmark, commit or push."
+}

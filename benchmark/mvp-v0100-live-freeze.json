@@ -1,0 +1,16 @@
+{
+  "version": "0.10.0",
+  "result_schema": "0.10",
+  "code_sha256": "483facf39bfa6f86bad813d4876792a1aa1614cfe631975db11f2526c14baab1",
+  "model": "gemini-3.8-flash",
+  "thinking": {"QuestionReviews": "MEDIUM", "other": "LOW"},
+  "run": "mvp-17",
+  "source_run": "mvp-13",
+  "documents": ["m-vishv"],
+  "mode": "question_stage_only",
+  "evaluation": "One known-document question-stage smoke test using immutable evidence from a prior full PDF analysis. This is not a new full-pipeline run, holdout result, or replacement of any earlier failure. No core or prompt changes during execution. Existing per-call maximum-token reservations and the same ledger apply; insufficient reservation stops the run without increasing the ceiling.",
+  "budget_spent_before_usd": 9.823746,
+  "remaining_before_usd": 0.09575195,
+  "baseline_usd": 4.91949795,
+  "absolute_ceiling_usd": 9.91949795
+}
