@@ -19,6 +19,19 @@ const response=()=>({model:MODELS.questions,provider:'Google',choices:[{finish_r
   usage:{prompt_tokens:100,completion_tokens:30,total_tokens:130,cost:.00125,
     prompt_tokens_details:{cached_tokens:0},completion_tokens_details:{reasoning_tokens:10}}});
 
+test('HTTP and embedded 429 usage is final before checkpoint persistence',async()=>{
+  for(const mode of ['http_once','upstream_once']){
+    const b=makeBudget(),stats=freshMetrics();let persisted:unknown;
+    const s=openRouterSession(key,stats,b,{...transport(mode),deferRateLimitRetry:true,
+      onResponse:()=>{persisted=structuredClone(stats.usage.at(-1));}});
+    try{
+      await assert.rejects(s.generate(request),RateLimitPause);
+      assert.deepEqual(stats.usage.at(-1),persisted,'Saved usage must still match the DB checkpoint after yielding');
+      assert.equal((persisted as any).retry_wait_ms,mode==='http_once'?45000:30000);
+    }finally{await s.close();b.close();}
+  }
+});
+
 test('serverless rate limit checkpoints one attempt, awaits persistence and resumes without a duplicate call',async(context)=>{
   context.mock.method(timers,'setTimeout',async()=>assert.fail('Retry waiting belongs to the next HTTP invocation'));
   const b=makeBudget(),t=transport('http_once'),saved:SavedCall[]=[],order:string[]=[];
@@ -403,15 +416,20 @@ test('OpenRouter serializes concurrent reservations and honors cancellation befo
     await assert.rejects(cancelled.generate(request));assert.equal(t.seen.length,before);
   }finally{b.close();}
 });
-test('OpenRouter spaces paid requests without retry and aborts before reserving the next request',async()=>{
+test('OpenRouter spaces paid requests without retry and aborts before reserving the next request',async(context)=>{
   const b=makeBudget(),t=transport(),starts:number[]=[],controller=new AbortController();
+  let now=0;const waits:number[]=[];
+  context.mock.method(performance,'now',()=>now);
+  context.mock.method(timers,'setTimeout',async(ms:number,_value:unknown,options?:{signal?:AbortSignal})=>{
+    waits.push(ms);now+=ms;if(waits.length===2)controller.abort();options?.signal?.throwIfAborted();
+  });
   const fetcher:typeof fetch=async(url,init)=>{if(String(url).endsWith('/chat/completions'))starts.push(performance.now());return t.fetcher(url,init);};
   const s=openRouterSession(key,freshMetrics(),b,{fetcher,requestIntervalMs:40,signal:controller.signal});
   try{
     await Promise.all([s.generate(request),s.generate(request)]);
     assert.equal(starts.length,2);assert.ok(starts[1]-starts[0]>=35);
-    const pending=s.generate(request);setTimeout(()=>controller.abort(),5);
-    await assert.rejects(pending);assert.equal(starts.length,2);assert.equal(b.reserved,0);assert.equal(b.spent,.0025);
+    await assert.rejects(s.generate(request));assert.deepEqual(waits,[40,40]);
+    assert.equal(starts.length,2);assert.equal(b.reserved,0);assert.equal(b.spent,.0025);
     assert.throws(()=>openRouterSession(key,freshMetrics(),b,{requestIntervalMs:-1}));
   }finally{await s.close();b.close();}
 });

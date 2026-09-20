@@ -140,8 +140,9 @@ export async function advanceRun(runId: string, userId: string) {
         signal, requestIntervalMs: 0, initialAttempt: attempt, deferRateLimitRetry: true,
         onResponse: async (kind, value, model) => {
           const raw = value as Record<string, any>;
+          // A DB checkpoint must not retain references to mutable transport metrics.
           const updated: Checkpoint = { ...checkpoint!, calls: [...checkpoint!.calls, {
-            key, kind, model, raw, usage: stats.usage.at(-1)!, elapsed_ms: Math.round(performance.now() - started),
+            key, kind, model, raw: structuredClone(raw), usage: structuredClone(stats.usage.at(-1)!), elapsed_ms: Math.round(performance.now() - started),
           }] };
           const blocked = await rpc('proofolio_finish_execution', { ...identity, p_id: reservation, p_actual: actual,
             p_checkpoint: updated, p_wait_ms: Math.ceil(Math.max(0, OPENROUTER_REQUEST_INTERVAL_MS - (performance.now() - dispatchedAt), retryDelay(raw) ?? 0)) });
