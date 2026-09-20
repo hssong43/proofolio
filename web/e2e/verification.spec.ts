@@ -1,5 +1,6 @@
 import { test, expect, type BrowserContext } from '@playwright/test';
 import type { AnswerRecord, ClientResult } from '../lib/types';
+import { mockPdfUpload } from './upload-fixture';
 
 const upload={name:'synthetic.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.7\nsynthetic UI fixture')};
 const runId='00000000-0000-4000-8000-000000000001';
@@ -26,9 +27,9 @@ test(`${track} ${count}: generated count, per-question ACK, save retry without a
   const gate=new Promise<void>(resolve=>{release=resolve;});
   const problems:string[]=[];page.on('pageerror',e=>problems.push(e.message));
   page.on('console',m=>{if(['error','warning'].includes(m.type())&&!m.text().includes('503 (Service Unavailable)'))problems.push(m.text());});
+  await mockPdfUpload(context, runId, { track, maxQuestions: 10 });
   await context.route('**/api/analyze',route=>{
-    uploads++;expect(route.request().postData()).toContain('name="maxQuestions"\r\n\r\n10');
-    expect(route.request().postData()).toContain(`name="track"\r\n\r\n${track}`);return route.fulfill({json:{runId}});
+    uploads++;expect(route.request().postDataJSON()).toEqual({runId});return route.fulfill({json:{runId}});
   });
   await context.route(`**/api/analyze/${runId}`,route=>route.fulfill({json:{runId,track,state:++polls===1?'running':'complete',stage:1,result,answers,
     storageError:count===2?'합성 원문 저장 경고':undefined}}));

@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { PDFDocument } from 'pdf-lib';
 import { runId, result } from './recruiting-fixtures';
 import type { AnswerRecord } from '../lib/types';
+import { mockPdfUpload } from './upload-fixture';
 
 test.beforeEach(async({context})=>{
   // Flow regressions use the CSS fallback font, not an external CDN's availability.
@@ -15,7 +16,8 @@ test('contest: no identity form, real anonymous cookie, upload to six saved answ
   page.on('pageerror',e=>errors.push(e.message));
   page.on('console',m=>{if(['error','warning'].includes(m.type())&&!m.text().includes('503 (Service Unavailable)'))errors.push(m.text());});
   await context.route('**/api/auth',r=>{authRequests++;return r.abort();});
-  await context.route('**/api/analyze',r=>{uploads++;expect(r.request().postData()).not.toContain('submissionId');return r.fulfill({json:{runId}});});
+  await mockPdfUpload(context, runId, { track: 'design', maxQuestions: 10 });
+  await context.route('**/api/analyze',r=>{uploads++;expect(r.request().postDataJSON()).toEqual({runId});return r.fulfill({json:{runId}});});
   await context.route('**/api/analyze/'+runId,r=>r.fulfill({json:{runId,track:'design',state:'complete',result,answers}}));
   await context.route('**/api/analyze/'+runId+'/answers',r=>{
     const a=r.request().postDataJSON() as AnswerRecord;attempts.push(a);

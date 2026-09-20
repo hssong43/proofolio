@@ -209,32 +209,50 @@ export function analysisArgs(runId: string, track: Track, maxQuestions = DEFAULT
     "--max-questions", String(maxQuestions), "--events"];
 }
 
-export async function startRun(input: { bytes: Uint8Array; fileName: string; track: Track; maxQuestions?: number; userId?: string; member?: boolean; guestExpiresAt?: string }) {
+export async function admitRun(status: StoredRun, input: { member?: boolean; guestExpiresAt?: string }) {
+  try {
+    if ((input.member || input.guestExpiresAt) && status.storage === 'supabase') {
+      if ((status.requestedQuestions ?? DEFAULT_MAX_QUESTIONS) < MIN_TARGET_QUESTIONS) throw new Error('질문 요청은 6~10개예요.');
+      if (input.guestExpiresAt) await rpc('proofolio_start_guest_run', { p_run: runPayload(status), p_expires_at: input.guestExpiresAt });
+      else await rpc('proofolio_start_member_run', { p_run: runPayload(status) });
+    } else await syncRun(status);
+  } catch (e) {
+    if (input.guestExpiresAt && e instanceof Error) {
+      if (e.message.includes('(429)')) throw new AnswerError('이 브라우저의 체험은 24시간에 한 번 가능해요. 기존 결과나 예제를 확인해주세요.', 429);
+      if (e.message.includes('(409)')) throw new AnswerError('다른 분석이 진행 중이에요. 잠시 후 다시 시도하거나 예제를 확인해주세요.', 409);
+    }
+    throw e;
+  }
+}
+
+export async function startRun(input: { bytes: Uint8Array; fileName: string; track: Track; maxQuestions?: number; userId?: string; member?: boolean; guestExpiresAt?: string; preparedRun?: StoredRun }) {
   loadRuntimeEnv(ROOT);
+  if (process.env.VERCEL) throw new AnswerError('파일 전송 경로는 준비됐지만, 현재 Vercel 배포에는 장시간 분석 실행 환경이 연결되지 않았어요. 예제 체험을 이용해주세요.', 503);
   if (input.guestExpiresAt && storageMode() !== 'supabase') throw new AnswerError('체험 데이터 저장 서버를 준비 중이에요.', 503);
-  const runId = randomUUID();
+  const digest = createHash("sha256").update(input.bytes).digest("hex");
+  const prepared = input.preparedRun;
+  if (prepared && (prepared.state !== 'running' || prepared.storage !== 'supabase' || prepared.userId !== input.userId ||
+    prepared.track !== input.track || prepared.fileName !== input.fileName || prepared.pdfSha256 !== digest ||
+    prepared.requestedQuestions !== input.maxQuestions)) throw new AnswerError('업로드한 파일과 실행 정보가 일치하지 않아요.', 400);
+  const runId = prepared?.runId ?? randomUUID();
   const args = analysisArgs(runId, input.track, input.maxQuestions);
   const dir = runDir(runId);
   const pdfPath = path.join(dir, input.track==='coding' ? 'code.json' : "portfolio.pdf");
 
-  const status: StoredRun = { runId, track: input.track, fileName: input.fileName, state: "queued", stage: 0, startedAt: new Date().toISOString(),
-    userId: input.userId, pdfSha256: createHash("sha256").update(input.bytes).digest("hex"),
+  const status: StoredRun = prepared ?? { runId, track: input.track, fileName: input.fileName, state: "queued", stage: 0, startedAt: new Date().toISOString(),
+    userId: input.userId, pdfSha256: digest,
     requestedQuestions: input.maxQuestions ?? DEFAULT_MAX_QUESTIONS, storage: storageMode() };
   status.state = "running";
   // Fail before starting a paid child when database configuration/migration is missing.
-  let admitted=false;
+  let admitted=!!prepared;
   try {
-    if ((input.member || input.guestExpiresAt) && status.storage === 'supabase') {
-      if ((input.maxQuestions ?? DEFAULT_MAX_QUESTIONS) < MIN_TARGET_QUESTIONS) throw new Error('질문 요청은 6~10개예요.');
-      if (input.guestExpiresAt) await rpc('proofolio_start_guest_run', { p_run: runPayload(status), p_expires_at: input.guestExpiresAt });
-      else await rpc('proofolio_start_member_run', { p_run: runPayload(status) });
-      admitted=true;
-    } else { await syncRun(status); admitted=true; }
+    if (!prepared) await admitRun(status, input);
+    admitted=true;
     activeRuns.add(runId);
     // Admission first: rejected anonymous uploads must not leave untracked private PDFs on disk.
     await mkdir(dir, { recursive: true, mode: 0o700 });
     await writeFile(pdfPath, input.bytes, { flag: 'wx', mode: 0o600 });
-    if ((input.member || input.guestExpiresAt) && status.storage === 'supabase') {
+    if (!prepared && (input.member || input.guestExpiresAt) && status.storage === 'supabase') {
       const { uploadAsset, assetPrefix } = await import('./assets.ts');
       await uploadAsset(assetPrefix(status.userId!, runId) + (input.track==='coding'?'code.json':'portfolio.pdf'), input.bytes, input.track==='coding'?'application/json':'application/pdf');
     }
