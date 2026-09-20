@@ -1,70 +1,40 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+import { createHash } from "node:crypto";
+import { loadRuntimeEnv } from "../../../src/env.ts";
+import { ROOT, AnswerError } from "./runner.ts";
 
-export const ADMIN_COOKIE = "proofolio_admin";
-export const CANDIDATE_COOKIE = "proofolio_candidate";
-export const ADMIN_TTL_MS = 12 * 60 * 60 * 1000;
-export const CANDIDATE_TTL_MS = 4 * 60 * 60 * 1000;
-
-const key = (secret: string) => {
-  if (!secret) throw new Error("세션 비밀이 비어 있어요.");
-  return createHash("sha256").update("proofolio-session:" + secret).digest();
-};
-const sign = (payload: string, secret: string) => createHmac("sha256", key(secret)).update(payload).digest("hex");
-const safeEqual = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
-const ID_RE = /^[0-9a-f-]{36}$/;
-
-export function issueAdminToken(accountId: string, secret: string, now = Date.now()): string {
-  const exp = String(now + ADMIN_TTL_MS);
-  return `admin.${accountId}.${exp}.${sign(`admin.${accountId}.${exp}`, secret)}`;
+// Auth lives entirely in route handlers: cookie refresh is writable here and no server key reaches React.
+export async function authClient() {
+  loadRuntimeEnv(ROOT);
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new AnswerError("로그인 서버 설정이 필요해요.", 503);
+  const jar = await cookies();
+  return createServerClient(url, key, {
+    cookieOptions: { httpOnly: true, sameSite: "lax", secure: process.env.PROOFOLIO_APP_URL?.startsWith("https://") ?? false },
+    cookies: { getAll: () => jar.getAll(), setAll: values => values.forEach(({ name, value, options }) => jar.set(name, value, options)) },
+  });
 }
 
-export function verifyAdminToken(token: string | undefined, secret: string, now = Date.now()): { accountId: string } | null {
-  if (!token) return null;
-  const [kind, accountId, exp, sig] = token.split(".");
-  if (kind !== "admin" || !ID_RE.test(accountId ?? "") || !/^\d+$/.test(exp ?? "") || !sig) return null;
-  try {
-    return safeEqual(sig, sign(`admin.${accountId}.${exp}`, secret)) && Number(exp) > now ? { accountId } : null;
-  } catch {
-    return null;
-  }
+export const memberId = (authId: string) => createHash("sha256").update(`auth:${authId}`).digest("hex");
+export async function currentUser() {
+  const client = await authClient();
+  const { data, error } = await client.auth.getUser();
+  if (error || !data.user) return null;
+  return { id: memberId(data.user.id), authId: data.user.id, email: data.user.email ?? "", name: data.user.user_metadata?.full_name ?? "" };
 }
-
-/** 응시자 토큰에는 testId를 넣어 답변 저장 시 폴더를 바로 찾는다. */
-export function issueCandidateToken(testId: string, submissionId: string, secret: string): string {
-  return `${testId}.${submissionId}.${sign(`cand.${testId}.${submissionId}`, secret)}`;
+export async function requireUser() {
+  const user = await currentUser();
+  if (!user) throw new AnswerError("로그인 후 이용해주세요.", 401);
+  return user;
 }
-
-export function verifyCandidateToken(token: string | undefined, submissionId: string, secret: string): { testId: string } | null {
-  if (!token) return null;
-  const [testId, id, sig] = token.split(".");
-  if (!testId || !id || !sig || id !== submissionId) return null;
-  try {
-    return safeEqual(sig, sign(`cand.${testId}.${id}`, secret)) ? { testId } : null;
-  } catch {
-    return null;
-  }
-}
-
-export function parseCookies(header: string | null | undefined): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const part of (header ?? "").split(";")) {
-    const i = part.indexOf("=");
-    if (i < 0) continue;
-    const name = part.slice(0, i).trim();
-    if (name) out[name] = decodeURIComponent(part.slice(i + 1).trim());
-  }
-  return out;
-}
-
-export function adminOf(request: Request, secret: string, now = Date.now()): { accountId: string } | null {
-  return verifyAdminToken(parseCookies(request.headers.get("cookie"))[ADMIN_COOKIE], secret, now);
-}
-
-export function candidateOf(request: Request, submissionId: string, secret: string): { testId: string } | null {
-  return verifyCandidateToken(parseCookies(request.headers.get("cookie"))[CANDIDATE_COOKIE], submissionId, secret);
-}
-
-export function cookieHeader(name: string, value: string, request: Request, maxAgeSeconds: number): string {
-  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
-  return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`;
+export function appOrigin(request: Request) {
+  if (!process.env.PROOFOLIO_APP_URL && !['localhost','127.0.0.1'].includes(new URL(request.url).hostname))
+    throw new AnswerError('PROOFOLIO_APP_URL에 서비스 주소를 설정해주세요.',503);
+  const url = new URL(process.env.PROOFOLIO_APP_URL || request.url);
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname)))
+    throw new AnswerError("PROOFOLIO_APP_URL에 서비스 주소를 설정해주세요.", 503);
+  if (url.username || url.password) throw new AnswerError("서비스 주소 설정 오류예요.", 503);
+  return url.origin;
 }

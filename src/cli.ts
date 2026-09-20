@@ -1,6 +1,6 @@
-import {existsSync,statSync} from 'node:fs';
+import {existsSync,statSync,mkdirSync,writeFileSync} from 'node:fs';
 import {open,writeFile} from 'node:fs/promises';
-import {dirname,resolve} from 'node:path';
+import {dirname,resolve,join} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {parseArgs} from 'node:util';
 import {analyzePdf} from './pipeline.ts';
@@ -35,9 +35,9 @@ export async function runCli(argv=process.argv.slice(2),deps:{analyze?:typeof an
     const {values:v,positionals}=parseArgs({args:argv,allowPositionals:true,options:{track:{type:'string'},model:{type:'string'},provider:{type:'string',default:'openrouter'},
       'skim-model':{type:'string'},'review-model':{type:'string'},'question-model':{type:'string'},
       scope:{type:'string',default:'focused'},'page-budget':{type:'string',default:'5'},'max-questions':{type:'string',default:String(DEFAULT_MAX_QUESTIONS)},
-      events:{type:'boolean'},output:{type:'string'},'guide-output':{type:'string'},'inspect-only':{type:'boolean'},'preview-dir':{type:'string'},
+      events:{type:'boolean'},output:{type:'string'},'guide-output':{type:'string'},'inspect-only':{type:'boolean'},'preview-dir':{type:'string'},'raw-response-dir':{type:'string'},
       'budget-ledger':{type:'string'},'max-cost-usd':{type:'string'},help:{type:'boolean'}}});
-    if(v.help){stdout('npm run analyze -- FILE.pdf --track design|marketing --max-cost-usd APPROVED_LIMIT [--output result.json] [--guide-output questions.txt] [--events] [--preview-dir NEW_DIR] [--max-questions 1..5]\nOpenRouter 전용: Gemini 비전 → Opus 질문 → Gemini 원본 대조. 기본 focused 5페이지·최대 5문항.\n승인한 누적 한도(0 초과 10달러 이하)는 --max-cost-usd 또는 PROOFOLIO_MAX_COST_USD로 지정하세요. CLI·웹·벤치마크는 같은 원장을 재사용합니다.\n키/모델 무료 확인: npm run check:openrouter');return 0;}
+    if(v.help){stdout(`npm run analyze -- FILE.pdf --track design|marketing --max-cost-usd APPROVED_LIMIT [--output result.json] [--guide-output questions.txt] [--events] [--preview-dir NEW_DIR] [--raw-response-dir NEW_DIR] [--max-questions 1..${DEFAULT_MAX_QUESTIONS}]\nOpenRouter 전용: Gemini 비전 → Opus 질문 → Gemini 원본 대조. 기본 focused 5페이지·최대 ${DEFAULT_MAX_QUESTIONS}문항.\n승인한 누적 한도(0 초과 10달러 이하)는 --max-cost-usd 또는 PROOFOLIO_MAX_COST_USD로 지정하세요. CLI·웹·벤치마크는 같은 원장을 재사용합니다.\n키/모델 무료 확인: npm run check:openrouter`);return 0;}
     if(positionals.length!==1)throw new Error('PDF 경로 한 개가 필요합니다.');
     if(v.provider!=='openrouter')throw new Error('OpenRouter만 지원합니다. Gemini 직접 API/GCP 호출 경로는 제거되었습니다.');
     const env=deps.env??process.env,root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
@@ -46,18 +46,24 @@ export async function runCli(argv=process.argv.slice(2),deps:{analyze?:typeof an
     const config=executionBudget(root,env,{limit:v['max-cost-usd'],ledger:v['budget-ledger']});
     const track=Track.parse(v.track),maxQuestions=Number(v['max-questions']);
     if(v.scope!=='focused'&&v.scope!=='full')throw new Error('scope은 focused/full입니다.');
-    if(!Number.isInteger(maxQuestions)||maxQuestions<1||maxQuestions>DEFAULT_MAX_QUESTIONS)throw new Error('최대 질문 수는 1~10입니다.');
-    checkDestinations([v.output,v['guide-output'],v['preview-dir']]);
+    if(!Number.isInteger(maxQuestions)||maxQuestions<1||maxQuestions>DEFAULT_MAX_QUESTIONS)throw new Error(`최대 질문 수는 1~${DEFAULT_MAX_QUESTIONS}입니다.`);
+    checkDestinations([v.output,v['guide-output'],v['preview-dir'],v['raw-response-dir']]);
     if(v['inspect-only']&&v['guide-output'])throw new Error('이미지 구분 모드에서는 질문 가이드를 만들지 않습니다.');
     const bytes=await readPdfFile(positionals[0]);
     budget=new Budget(config.ledger,config.limit,'openrouter');
+    const rawDir=v['raw-response-dir'];let responseSequence=0;
+    if(rawDir)mkdirSync(rawDir,{mode:0o700});
     const options:AnalyzeOptions={track,provider:'openrouter',apiKey:env.OPENROUTER_API_KEY,
       model:v.model??env.OPENROUTER_MODEL??OPENROUTER_MODELS.vision,
       skimModel:v['skim-model']??env.OPENROUTER_SKIM_MODEL??OPENROUTER_MODELS.skim,
       reviewModel:v['review-model']??env.OPENROUTER_REVIEW_MODEL??OPENROUTER_MODELS.vision,
       questionModel:v['question-model']??env.OPENROUTER_QUESTION_MODEL??OPENROUTER_MODELS.questions,
       scope:v.scope,pageBudget:Number(v['page-budget']),maxQuestions,inspectOnly:v['inspect-only'],budget,signal:deps.signal,
-      onEvent:v.events?event=>stdout(JSON.stringify(event)):undefined};
+      onEvent:v.events?event=>stdout(JSON.stringify(event)):undefined,
+      onResponse:rawDir?(kind,raw,model)=>{
+        const data=JSON.stringify({sequence:++responseSequence,kind,model,received_at:new Date().toISOString(),raw},null,2);
+        writeFileSync(join(rawDir,`${String(responseSequence).padStart(3,'0')}.json`),data.replaceAll(env.OPENROUTER_API_KEY!,'[REDACTED]')+'\n',{flag:'wx',mode:0o600});
+      }:undefined};
     const result:AnalysisResult=await(deps.analyze??analyzePdf)(bytes,options);
     if(v['preview-dir'])await savePreviews(bytes,result.visual_inventory,v['preview-dir']);
     if(v.output)await writeNew(v.output,JSON.stringify(result,null,2)+'\n');

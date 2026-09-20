@@ -1,18 +1,16 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import { ROLES, type RoleId } from "@/lib/data";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 /** datetime-local 입력값 형식(로컬 시간). */
 const toLocalInput = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
-export function CreateTestForm() {
-  const router = useRouter();
+export function CreateTestForm({onCreated}:{onCreated:()=>void}) {
   const [title, setTitle] = useState("");
   const [role, setRole] = useState<RoleId>("designer");
-  const [passScore, setPassScore] = useState("70");
+  const [questionCount, setQuestionCount] = useState("10");
   const [startsAt, setStartsAt] = useState(() => toLocalInput(new Date()));
   const [endsAt, setEndsAt] = useState(() => toLocalInput(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)));
   const [error, setError] = useState<string | null>(null);
@@ -27,13 +25,13 @@ export function CreateTestForm() {
       const res = await fetch("/api/admin/tests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, role, passScore: Number(passScore), startsAt: new Date(startsAt).toISOString(), endsAt: new Date(endsAt).toISOString() }),
+        body: JSON.stringify({ title, role, questionCount: Number(questionCount), startsAt: new Date(startsAt).toISOString(), endsAt: new Date(endsAt).toISOString() }),
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string; test?: { title: string; code: string; role: RoleId } };
       if (!res.ok || !body.test) throw new Error(body.error ?? `요청 실패 (${res.status})`);
       setCreated({ title: body.test.title, code: body.test.code, roleLabel: ROLES.find((r) => r.id === body.test!.role)?.label ?? "" });
       setTitle("");
-      router.refresh();
+      onCreated();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -57,9 +55,9 @@ export function CreateTestForm() {
           <span className="field-hint">응시자는 이 직무가 맞는지 확인만 해요</span>
         </div>
         <div className="field">
-          <label className="field-label" htmlFor="test-pass">통과 점수</label>
-          <input id="test-pass" type="number" min={0} max={100} step={1} className="text-input focus-ring" value={passScore} onChange={(e) => setPassScore(e.target.value)} required />
-          <span className="field-hint">AI 평가 종합 점수(100점 만점)가 이 값 이상이면 통과</span>
+          <label className="field-label" htmlFor="test-count">목표 질문 수</label>
+          <input id="test-count" type="number" min={6} max={10} step={1} className="text-input focus-ring" value={questionCount} onChange={(e) => setQuestionCount(e.target.value)} required />
+          <span className="field-hint">근거가 부족하면 적게 생성돼요. 자동 채점·합불 판정은 하지 않아요.</span>
         </div>
       </div>
       <div className="form-grid">

@@ -9,7 +9,7 @@ export function testStatus(test: { startsAt: string; endsAt: string }, now = Dat
   const start = parse(test.startsAt) ?? Number.POSITIVE_INFINITY;
   const end = parse(test.endsAt) ?? Number.NEGATIVE_INFINITY;
   if (now < start) return "upcoming";
-  if (now > end) return "closed";
+  if (now >= end) return "closed";
   return "open";
 }
 

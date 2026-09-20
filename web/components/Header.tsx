@@ -1,15 +1,16 @@
-import type { ReactNode } from "react";
 import { STEP_LABELS } from "@/lib/data";
 import { CheckIcon, Logo } from "./icons";
+import type { ReactNode } from 'react';
+import Link from 'next/link';
 
 type Props = { stepIndex: number; steps?: readonly string[]; right?: ReactNode };
 
-export function Header({ stepIndex, steps = STEP_LABELS, right = null }: Props) {
+export function Header({ stepIndex, steps=STEP_LABELS, right }: Props) {
   return (
     <header className="app-header">
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <Logo />
-        <span style={{ fontSize: 17, fontWeight: 700, letterSpacing: "-.03em" }}>Proofolio</span>
+        <Link href="/" style={{ fontSize: 17, fontWeight: 700, letterSpacing: "-.03em", textDecoration:'none' }}>Proofolio</Link>
       </div>
       <nav style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 14 }} aria-label="진행 단계">
         {steps.map((label, i) => {
@@ -38,12 +39,31 @@ export function Header({ stepIndex, steps = STEP_LABELS, right = null }: Props) 
                 </div>
                 <span style={{ color: active ? "#18181B" : "#71717A", fontWeight: active ? 500 : 400 }}>{label}</span>
               </div>
-              {i < steps.length - 1 && <div style={{ width: 32, height: 1, background: done ? "#18181B" : "#E4E4E7" }} />}
+              {i < steps.length - 1 && (
+                <div style={{ width: 32, height: 1, background: done ? "#18181B" : "#E4E4E7" }} />
+              )}
             </div>
           );
         })}
       </nav>
-      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12 }}>{right}</div>
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        {right ?? <div
+          aria-label="사용자"
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: "50%",
+            background: "#E4E4E7",
+            display: "grid",
+            placeItems: "center",
+            fontSize: 13,
+            fontWeight: 600,
+            color: "#3F3F46",
+          }}
+        >
+          P
+        </div>}
+      </div>
     </header>
   );
 }

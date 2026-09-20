@@ -37,6 +37,9 @@ test('production/replay request path has one schema retry, MEDIUM and fixed writ
   assert.ok(seen.every(r=>r.model===OPUS_MODEL&&r.maxOutputTokens===16384&&r.thinkingLevel==='MEDIUM'));
   await request('QuestionReviews',schema,{prompt:'review'});assert.equal(seen[2].model,'gemini-3.1-pro-preview');
   assert.equal(seen[2].maxOutputTokens,32768);
+  const bounded=modelRequest(async r=>{assert.equal(r.maxOutputTokens,4096);assert.equal(r.model,OPUS_MODEL);return {value:'ok'};},freshMetrics(),
+    {model:'gemini-3.1-pro-preview',questionModel:OPUS_MODEL,questionMaxOutputTokens:4096});
+  assert.deepEqual(await bounded('QuestionSet',schema,{prompt:'source'}),{value:'ok'});
   let calls=0;
   await assert.rejects(modelRequest(async()=>{calls++;throw new SchemaValidationError('bad');},freshMetrics(),{model:OPUS_MODEL})('QuestionSet',schema,{prompt:'source'}));
   assert.equal(calls,2);
@@ -84,6 +87,13 @@ test('OpenRouter reports API cost and reasoning once, never Gemini price estimat
   assert.equal(r.providers.openrouter.output_includes_thinking,true);
   assert.equal(responseUsage([{...raw,usage:{...raw.usage,cost:null}}],raw._request_model).cost_usd,null);
   assert.equal(responseUsage([raw],raw._request_model,['openrouter']).cost_usd,null);
+  const partial={...raw,usage:{prompt_tokens:0,completion_tokens:0,total_tokens:0,cost:0},
+    choices:[{finish_reason:'error',error:{code:429},message:{content:'{"partial":'}}]};
+  const failed=responseUsage([raw,partial],raw._request_model);
+  assert.equal(failed.cost_usd,.01);
+  assert.deepEqual(failed.tokens,{input:null,output:null,total:null,thinking:null,cached:null});
+  assert.ok('token_usage_status' in failed.rows[1]);
+  assert.equal(failed.rows[1].token_usage_status,'unconfirmed_partial_error');
 });
 test('comparison retains preflight failures and unattempted documents without inventing equal inputs',()=>{
   const dir=mkdtempSync(join(tmpdir(),'proofolio-hybrid-report-'));

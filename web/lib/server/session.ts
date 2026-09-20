@@ -1,19 +1,17 @@
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
-import type { Account } from "../types.ts";
-import { ADMIN_COOKIE, verifyAdminToken } from "./auth.ts";
-import { getAccount } from "./accounts.ts";
-import { sessionSecret } from "./secret.ts";
+import { createHash, randomBytes } from "node:crypto";
 
-export async function currentAccount(): Promise<Account | null> {
-  const jar = await cookies();
-  const session = verifyAdminToken(jar.get(ADMIN_COOKIE)?.value, await sessionSecret());
-  return session ? getAccount(session.accountId) : null;
+export const SESSION_COOKIE = "proofolio_session";
+const TOKEN = /^[A-Za-z0-9_-]{43}$/;
+
+/** Cookie is a bearer secret; only its one-way hash is saved as the guest user ID. */
+export function sessionUser(request: Request, create = false) {
+  const existing = request.headers.get("cookie")?.split(/;\s*/)
+    .find(value => value.startsWith(SESSION_COOKIE + "="))?.slice(SESSION_COOKIE.length + 1);
+  const token = existing && TOKEN.test(existing) ? existing : create ? randomBytes(32).toString("base64url") : null;
+  return token ? { token, id: createHash("sha256").update(token).digest("hex") } : null;
 }
 
-/** 서버 컴포넌트에서 담당자 세션이 없으면 로그인으로 보낸다. */
-export async function requireAdmin(): Promise<Account> {
-  const account = await currentAccount();
-  if (!account) redirect("/login");
-  return account;
+export function sessionCookie(request: Request, token: string) {
+  return { name: SESSION_COOKIE, value: token, httpOnly: true, sameSite: "lax" as const, path: "/",
+    secure: new URL(request.url).protocol === "https:", maxAge: 60 * 60 * 24 * 30 };
 }

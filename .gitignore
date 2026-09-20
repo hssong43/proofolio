@@ -9,3 +9,4 @@ output/
 node_modules/
 tmp/
 *.tsbuildinfo
+supabase/.temp/
