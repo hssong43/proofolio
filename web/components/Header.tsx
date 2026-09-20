@@ -59,7 +59,7 @@ export function Header({ stepIndex }: Props) {
             color: "#3F3F46",
           }}
         >
-          지
+          P
         </div>
       </div>
     </header>

@@ -4,7 +4,7 @@ import type {Question, QuestionCard, QuestionDraft, QuestionPlan, ResolvedEviden
 import {DEFAULT_MAX_QUESTIONS} from './constants.ts';
 export {DEFAULT_MAX_QUESTIONS} from './constants.ts';
 import {QUESTION_PROMPT, QUESTION_REVIEW_PROMPT} from './prompts.ts';
-import {SchemaValidationError} from './llm.ts';
+import {SchemaValidationError,schemaErrorSummary} from './llm.ts';
 import type {Generate,Metrics,ModelRequest} from './llm.ts';
 export type Request = <T>(kind:string,schema:z.ZodType<T>,args:Omit<ModelRequest,'kind'|'schema'|'model'>,
   check?:(data:T)=>void)=>Promise<T>;
@@ -14,17 +14,17 @@ export function modelRequest(generate:Generate,stats:Metrics,options:{model:stri
   onRequest?:(request:ModelRequest,attempt:number)=>void}):Request {
   return async(kind,schema,initial,check)=>{
     const model=['DocumentMap','PageIndex'].includes(kind)?(options.skimModel??options.model):
-      kind==='QuestionSet'?(options.questionModel??options.model):['Reviews','QuestionReviews'].includes(kind)?(options.reviewModel??options.model):options.model;
+      kind==='QuestionSet'?(options.questionModel??options.model):['CropReadings','Reviews','QuestionReviews'].includes(kind)?(options.reviewModel??options.model):options.model;
     let args=initial;
     for(let attempt=1;attempt<=2;attempt++){
       options.signal?.throwIfAborted();
-      const request:ModelRequest={kind,schema,model,thinkingLevel:['DesignExtraction','MarketingExtraction','Reviews','QuestionReviews','QuestionSet'].includes(kind)?'MEDIUM':'LOW',
+      const request:ModelRequest={kind,schema,model,thinkingLevel:['VisualInventory','CropReadings','DesignExtraction','MarketingExtraction','Reviews','QuestionReviews','QuestionSet'].includes(kind)?'MEDIUM':'LOW',
         ...(['gemini-3.1-pro-preview','google/gemini-3.1-pro-preview'].includes(model)?{maxOutputTokens:32768}:{}),...args,
         ...(kind==='QuestionSet'&&options.questionMaxOutputTokens!==undefined?{maxOutputTokens:options.questionMaxOutputTokens}:{})};
       options.onRequest?.(request,attempt);
       stats.model_calls++;const start=performance.now();
       try{const raw=await generate(request);let parsed;
-        try{parsed=schema.parse(raw);check?.(parsed);}catch(e){throw new SchemaValidationError(e instanceof z.ZodError?'출력 필드/스키마 오류.':(e as Error).message);}
+        try{parsed=schema.parse(raw);check?.(parsed);}catch(e){throw new SchemaValidationError(e instanceof z.ZodError?schemaErrorSummary(e,schema):(e as Error).message);}
         return parsed;
       }catch(e){if(!(e instanceof SchemaValidationError)||attempt===2)throw e;
         args={...args,prompt:args.prompt+'\n이전 응답의 형식 검사 오류: '+e.message+'\n같은 원본을 보고 다시 작성한다. 출처를 만들거나 조건을 무시하지 않는다.'};
@@ -33,17 +33,27 @@ export function modelRequest(generate:Generate,stats:Metrics,options:{model:stri
   };
 }
 export type QuestionCheck = {candidate_index:number; evidence_id:string; status:'accepted'|'rejected'; reasons:string[];round?:number;field_checks?:QuestionFieldCheck[]};
+export function questionGuideErrors(question:Question) {
+  const body=normalize(question.question);
+  return question.listen_for.flatMap((guide,i)=>body.includes(normalize(guide))?[]:[`guide_not_in_question:${i+1}`]);
+}
 export function questionFieldErrors(question:Question,checks:QuestionFieldCheck[]=[],anchors:ResolvedEvidence['anchors']=[]) {
   const expected=['question:null','intent:null',...question.listen_for.map((_,i)=>`listen_for:${i+1}`)];
   const keys=checks.map(c=>`${c.field}:${c.index}`);
   const strict=anchors.some(a=>a.crop_reading);
+  const bodyExperience=checks.find(c=>c.field==='question'&&c.index===null)?.experience_check;
+  const condition=bodyExperience?.basis==='conditional'?bodyExperience.condition:null;
+  // A copied clause after a condition cannot silently drop that condition in the separate answer guide.
+  const conditionErrors=condition&&question.question.includes(condition)?question.listen_for.flatMap((guide,i)=>
+    question.question.indexOf(guide)>=question.question.indexOf(condition)+condition.length&&!guide.includes(condition)?
+      [`guide_condition_not_preserved:${i+1}`]:[]):[];
   const experienceErrors=checks.flatMap(c=>{
     if(!strict&&c.experience_check===undefined&&c.field_text===undefined)return [];
     const field=c.field==='listen_for'?question.listen_for[(c.index??0)-1]:question[c.field],e=c.experience_check;
     if(!field||c.field_text!==field||!e)return [`missing_or_mismatched_experience_check:${c.field}:${c.index??''}`];
     const quote=e.anchor_index===null?undefined:anchors[e.anchor_index-1]?.quote;
     // ponytail: a small regression guard, not a Korean semantic parser; the model must still review every field.
-    const history=/(?:덜어내|축소했|생략했|제거했|수정했|변경했|감수한|도달\s*손실|배분하지\s*않|함께\s*고려한|정해\s*둔|미리\s*정한|역할을.{0,12}(?:나누|분담)|무엇을.{0,16}(?:담|채울).{0,16}전제|고른\s*이유|추가한\s*역할|다르게\s*가져간|특히\s*살린|한정해도\s*충분|색\s*(?:개수|수)를\s*(?:제한|한정)한|기울기를\s*준|이렇게\s*가져가셨|해석하셨|상정한\s*이용자)/;
+    const history=/(?:덜어내|축소했|생략했|제거했|수정했|변경했|감수한|도달\s*손실|배분하지\s*않|함께\s*고려한|정해\s*둔|미리\s*정한|역할을.{0,12}(?:나누|분담)|무엇을.{0,16}(?:담|채울).{0,16}전제|고른\s*이유|추가한\s*역할|다르게\s*가져간|특히\s*살린|한정해도\s*충분|색\s*(?:개수|수)를\s*(?:제한|한정)한|기울기를\s*준|이렇게\s*가져가셨|해석하셨|상정한\s*이용자|이어진다고\s*본|기대(?:했|한))/;
     const quotedSelection=c.premise_checks.some(p=>{
       const text=p.anchor_index===null?null:anchors[p.anchor_index-1]?.quote;
       return text&&p.source_excerpt&&normalize(text).includes(normalize(p.source_excerpt))&&
@@ -54,6 +64,8 @@ export function questionFieldErrors(question:Question,checks:QuestionFieldCheck[
     const applicationCondition=!!e.condition&&/적용/.test(e.condition)&&/(?:다면|경우)/.test(e.condition);
     const population=c.field==='listen_for'?field.match(/(팔로워|구독자|방문자|구매자|회원)\s*기준\s*데이터(?:와|의|로|를)/)?.[1]:undefined;
     if(population&&!anchors.some(a=>a.quote?.includes(population)))return [`unverified_population:${c.field}:${c.index??''}`];
+    if(/유기적|오가닉|\borganic\b/i.test(field)&&!anchors.some(a=>/유기적|오가닉|\borganic\b/i.test(a.quote??'')))
+      return [`unverified_organic_attribution:${c.field}:${c.index??''}`];
     const valid=e.basis==='observed'?!historical&&e.condition===null&&e.anchor_index===null&&e.source_excerpt===null:
       e.basis==='conditional'?!!e.condition&&field.includes(e.condition)&&(/(?:다면|경우|여부|했는지|있는지|있었나요|아니라면)/.test(e.condition)||
         c.field==='intent'&&/조건부/.test(e.condition)&&!historical)&&
@@ -61,7 +73,7 @@ export function questionFieldErrors(question:Question,checks:QuestionFieldCheck[
       e.basis==='documented'?e.condition===null&&!!quote&&!!e.source_excerpt&&normalize(quote).includes(normalize(e.source_excerpt)):false;
     return valid&&(!applicationAssumed||e.basis==='documented'||applicationCondition)?[]:[`unverified_experience:${c.field}:${c.index??''}`];
   });
-  return [...experienceErrors,...(keys.length!==expected.length||new Set(keys).size!==keys.length||keys.some(k=>!expected.includes(k))?['missing_or_invalid_field_checks']:[]),
+  return [...conditionErrors,...experienceErrors,...(keys.length!==expected.length||new Set(keys).size!==keys.length||keys.some(k=>!expected.includes(k))?['missing_or_invalid_field_checks']:[]),
     ...checks.filter(c=>c.status!=='supported').map(c=>`field_premise:${c.field}:${c.index??''}:${c.status}`),
     ...checks.filter(c=>!Array.isArray(c.premise_checks)||c.premise_checks.some(p=>{
       const anchor=p.anchor_index===null?undefined:anchors[p.anchor_index-1],source=anchor?.quote??anchor?.visual_description;
@@ -94,7 +106,7 @@ export function materializeQuestion(plan:Question & QuestionPlan,source:Resolved
   const quotes=[...new Set(source.anchors.flatMap(a=>a.quote?[a.quote]:[]))].map(q=>'원문: '+q);
   // Visual prose is fallible navigation metadata, not a fact we need to repeat in the question.
   const prefix=[...(!anchor.quote?['연결된 시각 자료를 기준으로 답해 주세요.']:[]),...quotes].join('\n');
-  return {...plan,question:prefix+'\n'+plan.question,
+  return {...plan,question:plan.question.startsWith(prefix+'\n')?plan.question:prefix+'\n'+plan.question,
     answer_target:`${anchor.region_id}: ${plan.intent}`};
 }
 export function questionErrors(q:Question,evidence:ResolvedEvidence|undefined,seenText:Set<string>) {
@@ -153,7 +165,7 @@ export async function generateQuestions(evidence:ResolvedEvidence[],request:Requ
   // Do not pass skim hypotheses, translated statements or reviewer narrative as facts.
   const sources=eligible.map(e=>({id:e.id,project_key:e.project_key,category:e.category,focus_target_id:e.focus_target_id,
     anchors:e.anchors.map(({crop_reading,source_role,...a})=>a),unknown_fields:e.unknown_fields,context_bundle:questionContext(e),
-    focus_intent:pointById.get(e.focus_target_id??'')?.topic??null,
+    focus_intent:pointById.get(e.focus_target_id??'')?.focus??null,
     required_pages:options.selectedPoints.filter(p=>p.id===e.focus_target_id).flatMap(p=>[p.anchor_page,...p.required_context_pages])}));
   const byId=new Map(eligible.map(e=>[e.id,e])),quarantined=new Set<string>(),rejectedTasks=new Set<string>();let offset=0;
   for(let round=1;round<=2;round++){
@@ -166,7 +178,8 @@ export async function generateQuestions(evidence:ResolvedEvidence[],request:Requ
     '\n미충족 조건: '+JSON.stringify({missing_focus_target_ids:quality.missing_focus_target_ids,question_count:cards.length,
       missing_verified_sources:quality.coverage.flatMap(p=>p.checks.filter(c=>!c.complete).map(c=>({focus_target_id:p.focus_target_id,
         source_requirements:c.missing_source_requirements})))})+
-    '\n이전 제외 이유: '+JSON.stringify(checks.filter(c=>c.status==='rejected'))+
+    '\n이전 제외 이유: '+JSON.stringify(checks.filter(c=>c.status==='rejected').map(({field_checks,reasons,...c})=>
+      ({...c,reasons:reasons.filter(reason=>/^[a-z_]+(?::[a-z_0-9]+)*$/.test(reason))})))+
     '\n근거 데이터:\n'+JSON.stringify(sources.filter(s=>!quarantined.has(s.id)))});
   const seenText=new Set(cards.map(q=>sourceQuestionKey(q.question,q.anchors)));
   const pending:Array<{question_id:string;question:QuestionDraft;source:ResolvedEvidence;index:number}>=[];
@@ -177,6 +190,7 @@ export async function generateQuestions(evidence:ResolvedEvidence[],request:Requ
     const q=materializeQuestion(plan,source);
     // Immutable source text is displayed separately from authored prose; never reinterpret its numerals as new claims.
     const errors=questionErrors(plan,source,new Set());
+    if(source.anchors.some(a=>a.crop_reading))errors.push(...questionGuideErrors(plan));
     if(original&&questionContext(original).required_anchor_indices.some(i=>!plan.anchor_indices.includes(i)))errors.push('question_missing_bundle_context');
     if(rejectedTasks.has(questionTaskKey(plan,source)))errors.push('previous_question_task_failure');
     if(q.question.length>1200)errors.push('question_source_length_limit');

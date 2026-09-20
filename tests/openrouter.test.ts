@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import timers from 'node:timers/promises';
 import * as z from 'zod';
 import {Budget,BudgetError,HttpResponseError,SchemaValidationError,freshMetrics} from '../src/llm.ts';
-import {OPENROUTER_MODELS as MODELS,OPENROUTER_UPSTREAM,OPENROUTER_URL,buildOpenRouterPayload,openRouterModel,openRouterSession,openRouterUsage,parseOpenRouterResponse,validateOpenRouterKey} from '../src/openrouter.ts';
+import {OPENROUTER_MODELS as MODELS,TRIAL_MODELS,trialInputAllowance,OPENROUTER_UPSTREAM,OPENROUTER_URL,buildOpenRouterPayload,openRouterModel,openRouterSession,openRouterUsage,parseOpenRouterResponse,validateOpenRouterKey} from '../src/openrouter.ts';
 import {loadEnv,runCli} from '../src/cli.ts';
 import {modelRequest} from '../src/questions.ts';
 
@@ -16,17 +16,20 @@ const makeBudget=(limit=10)=>new Budget(join(mkdtempSync(join(tmpdir(),'proofoli
 const response=()=>({model:MODELS.questions,provider:'Google',choices:[{finish_reason:'stop',message:{content:'{"value":"question"}'}}],
   usage:{prompt_tokens:100,completion_tokens:30,total_tokens:130,cost:.00125,
     prompt_tokens_details:{cached_tokens:0},completion_tokens_details:{reasoning_tokens:10}}});
-function transport(mode='ok'){
+function transport(mode='ok',models:string[]=Object.values(MODELS)){
   const seen:Array<{url:string;body:any}>=[];let generations=0;
   const endpoint=(id:string)=>{const {context,rates}=openRouterModel(id);return {
     model_id:id,tag:mode==='wrong_upstream'?'google-ai-studio':OPENROUTER_UPSTREAM,status:mode==='endpoint_unavailable'?-1:0,context_length:context,
     max_completion_tokens:mode==='endpoint_too_small'?100:65536,
-    supported_parameters:['max_tokens','reasoning',...(mode==='endpoint_no_json'?[]:['response_format']),
+    supported_parameters:['max_tokens','max_completion_tokens','reasoning',...(mode==='endpoint_no_json'?[]:['response_format']),
       ...(id!==MODELS.questions&&mode!=='endpoint_no_schema'?['structured_outputs']:[])],
     pricing:{prompt:mode==='endpoint_invalid_price'?'':String(rates.input/1e6),completion:String(rates.output/1e6),
       ...(mode==='endpoint_expensive'?{overrides:[{prompt:'1',completion:'1'}]}:{}),...(mode==='endpoint_request_fee'?{request:'0.01'}:{})}};};
   const endpoints=(id:string)=>{
     const e=endpoint(id);
+    if(mode==='flash_priority'&&id===MODELS.skim)return [{...e,status:-2},
+      {...e,tag:OPENROUTER_UPSTREAM+'/priority',pricing:{prompt:'0.00000135',completion:'0.00000675',internal_reasoning:'0.00000675'}},
+      {...e,tag:'alternative/no-zdr'}, {...e,tag:'alternative/expensive',pricing:{prompt:'0.00000136',completion:'0.00000675'}}];
     return mode==='fallbacks'?[e,{...e,tag:'alternative/valid'},
       {...e,tag:'alternative/expensive',pricing:{prompt:'1',completion:'1'}},
       {...e,tag:'alternative/no-json',supported_parameters:[]},{...e,tag:'alternative/no-zdr'},
@@ -37,13 +40,13 @@ function transport(mode='ok'){
     const u=String(url),body=init?.body?JSON.parse(String(init.body)):null;seen.push({url:u,body});
     if(u===OPENROUTER_URL+'/key')return Response.json({data:{usage:0,limit:mode==='unlimited'?null:mode==='large_limit'?20:10,
       limit_remaining:mode==='empty_key'?0:10,limit_reset:mode==='reset'?'monthly':null,is_management_key:mode==='management',is_provisioning_key:false}});
-    if(u===OPENROUTER_URL+'/models')return Response.json({data:Object.values(MODELS).map(id=>{
+    if(u===OPENROUTER_URL+'/models')return Response.json({data:models.map(id=>{
       const {context,rates}=openRouterModel(id);
       return {id,context_length:mode==='changed_context'?context+1:context,
         pricing:{prompt:mode==='missing_price'?null:String(rates.input/1e6),completion:String(rates.output/1e6),
           ...(mode==='raised_price'?{overrides:[{prompt:'1',completion:'1'}]}:{})},
         architecture:{input_modalities:['text','image','file']},supported_parameters:mode==='no_schema'?[]:['structured_outputs','response_format','reasoning']};})});
-    if(u===OPENROUTER_URL+'/endpoints/zdr')return Response.json({data:Object.values(MODELS)
+    if(u===OPENROUTER_URL+'/endpoints/zdr')return Response.json({data:models
       .filter(id=>mode!=='missing_zdr'||id!==MODELS.questions).flatMap(endpoints).filter(e=>e.tag!=='alternative/no-zdr')});
     if(u.startsWith(OPENROUTER_URL+'/models/')&&u.endsWith('/endpoints'))
       return Response.json({data:{endpoints:endpoints(u.slice((OPENROUTER_URL+'/models/').length,-'/endpoints'.length))}});
@@ -97,6 +100,34 @@ test('OpenRouter measured usage counts reasoning once and keeps missing thinking
     {completion_tokens_details:{reasoning_tokens:31}},{is_byok:true}])assert.throws(()=>openRouterUsage({...raw,...change}),BudgetError);
   assert.throws(()=>openRouterUsage(undefined),BudgetError);
 });
+test('explicit Astra/Sonnet/Opus trial enforces roles, request-sized allowance and actual cost without changing defaults',async()=>{
+  const b=makeBudget(23),stats=freshMetrics(),t=transport('ok',Object.values(TRIAL_MODELS));
+  const session=openRouterSession(key,stats,b,{...t,profile:'astra-sonnet-opus'});
+  const png=Buffer.alloc(24);Buffer.from([137,80,78,71,13,10,26,10]).copy(png);png.write('IHDR',12);png.writeUInt32BE(1024,16);png.writeUInt32BE(1024,20);
+  const vision={...request,model:TRIAL_MODELS.vision,kind:'VisualInventory',images:[['page=1',png]] as Array<[string,Uint8Array]>};
+  const payload=buildOpenRouterPayload(vision,[], 'astra-sonnet-opus');
+  assert.equal(payload.max_completion_tokens,16384);assert.equal(payload.max_tokens,undefined);
+  assert.equal((payload.messages[1].content as any[])[1].image_url.detail,'original');
+  assert.equal('temperature'in payload,false);assert.equal(payload.response_format.type,'json_object');
+  assert.ok(trialInputAllowance(vision)<50_000);assert.ok(trialInputAllowance({...vision,images:[...vision.images,...vision.images]})>trialInputAllowance(vision));
+  for(const r of [{...vision,model:TRIAL_MODELS.review},{...vision,pdf:Buffer.from('%PDF-')},
+    {...request,model:TRIAL_MODELS.questions,images:vision.images}])assert.throws(()=>buildOpenRouterPayload(r,[], 'astra-sonnet-opus'));
+  assert.throws(()=>buildOpenRouterPayload(vision));
+  const routed=modelRequest(session.generate,stats,{model:TRIAL_MODELS.vision,skimModel:TRIAL_MODELS.vision,
+    questionModel:TRIAL_MODELS.questions,reviewModel:TRIAL_MODELS.review});
+  try{
+    await routed('VisualInventory',schema,{prompt:'image',images:vision.images});
+    await routed('QuestionSet',schema,{prompt:'verified JSON'});
+    await routed('CropReadings',schema,{prompt:'blind source reading',images:vision.images});
+    await routed('QuestionReviews',schema,{prompt:'review all fields',images:vision.images});
+    const calls=t.seen.filter(s=>s.body);
+    assert.deepEqual(calls.map(c=>c.body.model),[TRIAL_MODELS.vision,TRIAL_MODELS.questions,TRIAL_MODELS.review,TRIAL_MODELS.review]);
+    assert.ok(stats.usage.every(u=>u.reservation_basis==='request_bytes_and_image_dimensions_allowance'&&u.counted_input_tokens===null));
+    assert.equal(b.spent,.005);assert.equal(b.remaining,22.995);assert.equal(stats.input_tokens,400);
+    assert.equal(MODELS.vision,'google/gemini-3.1-pro-preview');
+  }finally{await session.close();b.close();}
+  assert.throws(()=>makeBudget(24),BudgetError);
+});
 test('OpenRouter response parsing does not expose invalid content and refuses incomplete outputs',()=>{
   assert.deepEqual(parseOpenRouterResponse(response(),schema),{value:'question'});
   const raw:any=response();raw.choices[0].message.content=key;
@@ -137,7 +168,12 @@ test('OpenRouter recovers from HTTP and embedded 429 with Retry-After, fresh res
       assert.deepEqual(waits,[mode==='http_once'?45000:30000]);assert.equal(stats.model_calls,2);
       assert.deepEqual(raws.map(r=>r._application_http_attempt),[1,2]);
       assert.equal(stats.stages.length,1);assert.equal(stats.stages[0].attempt,1);
-      assert.equal(stats.total_tokens,mode==='http_once'?260:130);assert.equal(b.spent,mode==='http_once'?.0025:.00125);
+      assert.equal(stats.total_tokens,mode==='http_once'?260:null);assert.equal(b.spent,mode==='http_once'?.0025:.00125);
+      if(mode!=='http_once'){
+        for(const field of ['input_tokens','output_tokens','thinking_tokens','cached_tokens'] as const)assert.equal(stats[field],null);
+        assert.equal(stats.usage[0].token_usage_status,'unconfirmed_partial_error');
+        assert.equal(stats.usage[0].promptTokenCount,null);assert.equal(stats.usage[1].promptTokenCount,100);
+      }
       assert.equal(b.reserved,0);assert.equal(b.blocked,false);
       const rows=readFileSync(b.path,'utf8').trim().split('\n').map(line=>JSON.parse(line));
       assert.deepEqual(rows.map(r=>r.type),['header','reserve','settle','reserve','settle']);
@@ -151,7 +187,7 @@ test('OpenRouter retry stops on cancellation, insufficient remaining budget, lon
   context.mock.method(timers,'setTimeout',async(ms:number)=>{waits.push(ms);cancel?.abort();});
   for(const mode of ['cancel','budget','long_wait','http_502']){
     waits.length=0;cancel=mode==='cancel'?new AbortController():undefined;
-    const b=makeBudget(mode==='budget'?1:10),t=transport(mode==='http_502'?mode:'http_once');
+    const b=makeBudget(mode==='budget'?1.7:10),t=transport(mode==='http_502'?mode:'http_once');
     const fetcher:typeof fetch=async(url,init)=>{
       const res=await t.fetcher(url,init);
       if(!String(url).endsWith('/chat/completions'))return res;
@@ -216,6 +252,18 @@ test('OpenRouter allows checked same-model alternatives, even without the prefer
       assert.deepEqual(access.allowed_providers[request.model],p.provider.only);assert.deepEqual(stats.usage[0].allowed_providers,p.provider.only);
     }finally{await s.close();b.close();}
   }
+});
+test('Flash priority stays within its verified price cap and reserves that cost without admitting non-ZDR routes',async()=>{
+  const b=makeBudget(),t=transport('flash_priority'),stats=freshMetrics(),s=openRouterSession(key,stats,b,t);
+  try{
+    const access=await s.checkAccess();assert.deepEqual(access.allowed_providers[MODELS.skim],[OPENROUTER_UPSTREAM+'/priority']);
+    await s.generate({...request,model:MODELS.skim,kind:'PageIndex'});
+    const p=t.seen.find(c=>c.body)!.body;
+    assert.deepEqual(p.provider.only,[OPENROUTER_UPSTREAM+'/priority']);assert.equal(p.provider.zdr,true);
+    assert.deepEqual(p.provider.max_price,{prompt:1.35,completion:6.75,request:0});
+    assert.equal(stats.usage[0].reserved_cost_usd,(1_048_576*1.35+16384*6.75)/1e6);
+    assert.equal(b.spent,.00125);assert.equal(b.reserved,0);assert.equal(b.limit,10);
+  }finally{await s.close();b.close();}
 });
 test('OpenRouter Vertex Opus JSON mode retains the schema in its prompt and rejects extra fields locally',async()=>{
   const payload=buildOpenRouterPayload(request);

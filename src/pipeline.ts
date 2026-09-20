@@ -1,12 +1,12 @@
 import {createHash} from 'node:crypto';
 import {performance} from 'node:perf_hooks';
 import * as z from 'zod';
-import {DocumentMap,PageIndex,DesignExtraction,MarketingExtraction,VisualInventory,CropReadings,Reviews,Track,normalize,DESIGN_FIELDS,MARKETING_FIELDS} from './schema.ts';
+import {DocumentMap,PageIndex,DesignExtraction,MarketingExtraction,ExtractionPointCheck,VisualInventory,CropReadings,Reviews,Track,normalize,DESIGN_FIELDS,MARKETING_FIELDS} from './schema.ts';
 import type {Box,FocusTarget,FocusCoverage,Project,Evidence,Review,ResolvedEvidence,CropReading} from './schema.ts';
-import {readPdf,slicePdf,openRenderer,renderPage,textSpans,textInBox,alignRangeTypography,numericQuoteIssue,quoteTranscriptionIssue,quoteLocationCheck,pageTiles,mergeInventories} from './pdf.ts';
+import {readPdf,slicePdf,openRenderer,renderPage,textSpans,textInBox,alignRangeTypography,numericQuoteIssue,quoteTranscriptionIssue,quoteLocationCheck,textCropTouchesEdge,pageTiles,mergeInventories} from './pdf.ts';
 import type {TextSpan} from './pdf.ts';
 import {Budget,freshMetrics} from './llm.ts';
-import {OPENROUTER_MODELS,openRouterModel,openRouterSession} from './openrouter.ts';
+import {OPENROUTER_MODELS,TRIAL_MODELS,openRouterModel,openRouterSession} from './openrouter.ts';
 import type {Generate,ModelRequest} from './llm.ts';
 import {generateQuestions,questionQuality,modelRequest,DEFAULT_MAX_QUESTIONS} from './questions.ts';
 import type {QuestionCheck} from './questions.ts';
@@ -15,6 +15,32 @@ import type {QuestionCard} from './schema.ts';
 import {MAP_PROMPT,INDEX_PROMPT,SCAN_TRACK_PROMPT,VISUAL_PROMPT,DESIGN_PROMPT,MARKETING_PROMPT,EXTRACTION_RULES,CROP_READING_PROMPT,REVIEW_PROMPT,QUESTION_FOCUS} from './prompts.ts';
 export const sha256=(bytes:Uint8Array|string)=>createHash('sha256').update(bytes).digest('hex');
 export type Point=FocusTarget&{id:string};
+export function validateExtraction(extraction:{evidence:Evidence[];point_checks?:z.infer<typeof ExtractionPointCheck>[]},points:Point[]) {
+  const checks=extraction.point_checks,ids=points.map(p=>p.id);
+  if(!checks||checks.length!==ids.length||new Set(checks.map(c=>c.focus_target_id)).size!==ids.length||checks.some(c=>!ids.includes(c.focus_target_id)))
+    throw new Error('추출 포인트 검사 ID 누락/중복/추가.');
+  for(const c of checks){
+    const expected=extraction.evidence.flatMap((e,i)=>e.focus_target_id===c.focus_target_id?[i+1]:[]);
+    if(new Set(c.evidence_indices).size!==c.evidence_indices.length||JSON.stringify([...c.evidence_indices].sort((a,b)=>a-b))!==JSON.stringify(expected)||
+      (c.status==='extracted')!==(expected.length>0))throw new Error('추출 포인트의 근거 순번/상태 불일치.');
+    const point=points.find(p=>p.id===c.focus_target_id)!;
+    if(expected.length&&point.required_context_pages.some(page=>!expected.some(i=>extraction.evidence[i-1].anchors.some(a=>a.page===page))))
+      throw new Error(`추출 포인트 ${point.id}: required_context_pages=${point.required_context_pages.join(',')}의 관련 앵커 누락. 보이는 필수 맥락을 연결하거나 해당 포인트를 보류하세요.`);
+  }
+}
+export function extractionDetailRegions(points:Point[],inventories:Map<number,VisualInventory>) {
+  const selected:Array<{page:number;region:VisualInventory['regions'][number]}>=[],seen=new Set<string>();
+  for(const point of points){
+    const candidates=(inventories.get(point.anchor_page)?.regions??[]).filter(r=>r.identification==='clear'&&!['text_block','other'].includes(r.kind));
+    const score=(r:typeof candidates[number])=>(point.focus==='measurement'&&['chart','table','analytics_capture'].includes(r.kind)?1e6:0)+
+      (r.box[2]-r.box[0])*(r.box[3]-r.box[1]);
+    // ponytail: bounded area/kind ranking, not semantic retrieval; preserves boxes and never adds pages.
+    for(const region of candidates.sort((a,b)=>score(b)-score(a)||a.key.localeCompare(b.key)).slice(0,2)){
+      const key=`p${point.anchor_page}:${region.key}`;if(seen.has(key))continue;seen.add(key);selected.push({page:point.anchor_page,region});
+    }
+  }
+  return selected;
+}
 export function normalizeMap(map:DocumentMap) {
   // Only remove redundant references. Never invent missing pages or repair cross-project membership.
   for(const project of map.projects)project.pages=[...new Set(project.pages)];
@@ -113,17 +139,40 @@ export async function verifyEvidenceCrops(records:Evidence[],ids:string[],images
     });
     for(const row of result.regions)readings.set(row.region_id,row);
   }
+  // Match only literal words/symbols with layout whitespace variation. Keep the original reading's line/cell boundaries.
+  // Align the review input, not stored evidence or raw extraction; content/units/order are never repaired.
+  const escapeLiteral=(RegExp as typeof RegExp & {escape(value:string):string}).escape; // Node 24 native; web TS 5.9 lacks its declaration.
+  const reviewRecords=records.map(record=>{
+    const r=structuredClone(record);
+    r.anchors.forEach((a,i)=>{
+      if(!a.quote)return;
+      const before=a.quote,text=readings.get(`p${a.page}:${a.region_key}`)?.text?.normalize('NFC');
+      const literal=text?.match(new RegExp(normalize(before).split(' ').map(escapeLiteral).join('\\s+'),'u'))?.[0];
+      if(!literal)return;
+      a.quote=literal;if(r.statement===before)r.statement=literal;
+      for(const d of r.details)if(d.value===before&&d.anchor_indices.includes(i+1))d.value=literal;
+    });return r;
+  });
   const checked=await request('Reviews',Reviews,{prompt:REVIEW_PROMPT+
     '\n독립 판독 데이터: '+JSON.stringify(expected.map(id=>readings.get(id)))+
-    '\n근거 후보 데이터:\n'+JSON.stringify(records.map((r,i)=>({evidence_id:ids[i],...r,
+    '\n근거 후보 데이터:\n'+JSON.stringify(reviewRecords.map((r,i)=>({evidence_id:ids[i],...r,
       anchors:r.anchors.map((a,j)=>({...a,anchor_index:j+1,text_literal_match:a.quote===null?null:
-        normalize(readings.get(`p${a.page}:${a.region_key}`)?.text??'').includes(normalize(a.quote))}))})))},data=>validateReviews(records,data.reviews,ids));
+        normalize(readings.get(`p${a.page}:${a.region_key}`)?.text??'').includes(normalize(a.quote))}))})))},data=>{
+      for(const review of data.reviews){
+        const record=records[ids.indexOf(review.evidence_id)],support=review.document_support;
+        // Presence is not corroboration. Downgrade only this overclaim; malformed references still fail validation.
+        if(record&&review.status==='supported'&&support.status==='documented'&&support.anchor_indices.length&&
+          new Set(support.anchor_indices).size===support.anchor_indices.length&&support.anchor_indices.every(i=>record.anchors[i-1]?.purpose==='claim'))
+          review.document_support={status:'needs_explanation',reason:'claim_only_support_downgraded: 주장 원문만 확인했으며 별도 뒷받침 자료는 연결되지 않았습니다.',anchor_indices:support.anchor_indices};
+      }
+      validateReviews(records,data.reviews,ids);
+    });
   for(const [i,record] of records.entries()){
     const review=checked.reviews.find(r=>r.evidence_id===ids[i])!;
     for(const [j,a] of record.anchors.entries()){
       const check=review.anchor_checks.find(c=>c.anchor_index===j+1),reading=readings.get(`p${a.page}:${a.region_key}`)!;
       if(check?.status!=='supported')continue;
-      const match=a.quote?check.reading_excerpt===a.quote&&reading.text!==null&&reading.readability!=='unreadable'&&
+      const match=a.quote?normalize(check.reading_excerpt??'')===normalize(a.quote)&&reading.text!==null&&reading.readability!=='unreadable'&&
         normalize(reading.text).includes(normalize(a.quote)):
         !!check.reading_excerpt&&reading.observations.includes(check.reading_excerpt)&&!/\p{N}/u.test(check.reading_excerpt);
       if(!match){check.status='uncertain';check.reason='blind_crop_reading_not_matched';}
@@ -175,11 +224,29 @@ export function localEvidenceChecks(record:Evidence):string[] {
   return issues;
 }
 export function atomicArtifacts(record:Evidence):Evidence[] {
-  // A visual-only artifact list is not a single claim. Keep each observed object independently rejectable.
-  // Do not split comparisons, explicit context, mixed text/visual claims, or cross-page relationships.
-  if(record.category!=='artifact'||record.basis!=='visual_observation'||record.anchors.length<2||
-    new Set(record.anchors.map(a=>a.page)).size!==1||record.anchors.some(a=>a.kind!=='visual'||a.purpose!=='artifact'))return [record];
-  return record.anchors.map(anchor=>({...record,statement:anchor.visual_description!,anchors:[anchor],
+  // A literal claim's presence and a neighbouring artifact's support are different questions.
+  // Separate them BEFORE any source review; keep every anchor and required text context, never repair a failed candidate.
+  const claims=record.anchors.filter(a=>a.purpose==='claim'),attachments=record.anchors.filter(a=>a.purpose==='artifact');
+  if(record.basis==='portfolio_claim'&&claims.length===1&&claims[0].kind==='text'&&attachments.length&&
+    !['metric','experiment','research','validation','alternative','iteration'].includes(record.category)&&
+    attachments.every(a=>a.page===claims[0].page)&&record.anchors.filter(a=>a.purpose==='context').every(a=>a.kind==='text')){
+    const retained=[record.anchors.indexOf(claims[0]),...record.anchors.flatMap((a,i)=>a.purpose==='context'?[i]:[])],primary=structuredClone(record);
+    primary.anchors=retained.map(i=>({...record.anchors[i]}));
+    primary.details=record.details.map(d=>d.anchor_indices.every(i=>retained.includes(i-1))?
+      {...d,anchor_indices:d.anchor_indices.map(i=>retained.indexOf(i-1)+1)}:{...d,value:null,anchor_indices:[]});
+    const marketing='metric' in record,category=marketing?'creative':'artifact',fields=marketing?MARKETING_FIELDS.creative:DESIGN_FIELDS.artifact;
+    const children=attachments.map(a=>({...record,category,basis:a.kind==='text'?'portfolio_claim':'visual_observation',
+      statement:(a.quote??a.visual_description)!,anchors:[a,...record.anchors.filter(c=>c.purpose==='context')].map(c=>({...c})),
+      details:fields.map(field=>({field,value:null,anchor_indices:[]}))})) as Evidence[];
+    return [primary,...children];
+  }
+  // Split independent same-page artifacts BEFORE review, retaining every text context anchor on every child.
+  // Never split comparisons, claims, visual context, or artifacts spanning multiple pages.
+  const artifacts=record.anchors.filter(a=>a.kind==='visual'&&a.purpose==='artifact');
+  const context=record.anchors.filter(a=>a.kind==='text'&&a.purpose==='context');
+  if(record.category!=='artifact'||record.basis!=='visual_observation'||artifacts.length<2||
+    new Set(artifacts.map(a=>a.page)).size!==1||artifacts.length+context.length!==record.anchors.length)return [record];
+  return artifacts.map(anchor=>({...record,statement:anchor.visual_description!,anchors:[anchor,...context].map(a=>({...a})),
     // Parent-level summaries/counts cannot describe a child automatically. Preserve the raw response, mark unknown.
     details:record.details.map(d=>({...d,value:null,anchor_indices:[]}))}));
 }
@@ -199,7 +266,7 @@ export async function analyzePdf(bytes:Uint8Array,options:AnalyzeOptions) {
   if(!['focused','full'].includes(scope)||!Number.isInteger(pageBudget)||pageBudget<1||pageBudget>60)throw new Error('분석 범위/페이지 예산 오류.');
   if(!Number.isInteger(maxQuestions)||maxQuestions<1||maxQuestions>DEFAULT_MAX_QUESTIONS)throw new Error(`최대 질문 수는 1~${DEFAULT_MAX_QUESTIONS}입니다.`);
   const questionModel=options.questionModel??(options.generate?options.model:OPENROUTER_MODELS.questions);
-  const opus=questionModel===OPENROUTER_MODELS.questions;
+  const opus=questionModel===OPENROUTER_MODELS.questions||questionModel===TRIAL_MODELS.questions;
   if(options.provider!==undefined&&options.provider!=='openrouter')throw new Error('OpenRouter만 지원합니다.');
   if(!options.generate||options.provider==='openrouter'){
     for(const model of [options.model,options.skimModel??options.model,options.reviewModel??options.model,questionModel])openRouterModel(model);
@@ -259,7 +326,8 @@ export async function analyzePdf(bytes:Uint8Array,options:AnalyzeOptions) {
     }
     const map=await request('DocumentMap',DocumentMap,scan,m=>validateMap(normalizeMap(m),pdf.getPageCount(),pageIndex));
     emit('document_map',map);const plan=selectPages(map,scope,pageBudget);emit('analysis_plan',plan);
-    const digest=sha256(bytes),evidence:ResolvedEvidence[]=[],rejected:Array<{project_key:string;candidate_index:number;reason:string}>=[];
+    const digest=sha256(bytes),evidence:ResolvedEvidence[]=[],rejected:Array<{project_key:string;candidate_index:number;reason:string}>=[],
+      extractionChecks:Array<{project_key:string;point_checks:z.infer<typeof ExtractionPointCheck>[];detail_regions:string[]}>=[];
     for(const original of map.projects){
       if(!plan.selected_project_keys.includes(original.key))continue;
       const project={...original,pages:original.pages.filter(p=>plan.selected_pages.includes(p))};if(!project.pages.length)continue;
@@ -267,10 +335,10 @@ export async function analyzePdf(bytes:Uint8Array,options:AnalyzeOptions) {
       const images:Array<{page:number;parts:Array<{box:number[];png:Buffer}>}>=[];
       for(const page of project.pages)if(!inventories.has(page)){
         const view=(await renderer.getPage(page)).getViewport({scale:1}),parts=[];
-        for(const box of pageTiles(view.width,view.height))parts.push({box,png:await pngFor(page,box,2200)});
+        for(const box of pageTiles(view.width,view.height))parts.push({box,png:await pngFor(page,box,3000)});
         images.push({page,parts});spans.set(page,await textSpans(renderer,page));}
       await concurrent(images,async({page,parts})=>{const tiles=await concurrent(parts,async part=>({box:part.box,
-        inventory:await request('VisualInventory',VisualInventory,{maxOutputTokens:8192,images:[[String(page),part.png]],
+        inventory:await request('VisualInventory',VisualInventory,{maxOutputTokens:16384,thinkingLevel:'HIGH',images:[[String(page),part.png]],
           prompt:VISUAL_PROMPT+'\n이미지가 페이지 일부일 수도 있다. box는 첨부 이미지 전체 기준으로 반환한다. 경계에서 잘린 객체는 uncertain/partial로 기록한다.'},
           inv=>{if(inv.regions.length>20||inv.links.length>20)throw new Error('타일별 최대 20개 영역/관계.');})}),2);
         const inv=VisualInventory.parse(mergeInventories(tiles));
@@ -287,22 +355,27 @@ export async function analyzePdf(bytes:Uint8Array,options:AnalyzeOptions) {
       const detailImages:Array<[string,Uint8Array]>=[];
       for(const {page,parts} of images)if(parts.length>1)for(const part of parts)
         detailImages.push([`local page=${project.pages.indexOf(page)+1}; original page=${page}; tile=${part.box.join(',')}`,part.png]);
+      const detailRegions=extractionDetailRegions(plan.selected_points.filter(p=>p.project_key===project.key),inventories);
+      for(const {page,region}of detailRegions)detailImages.push([
+        `local page=${project.pages.indexOf(page)+1}; region_key=${region.key}; original page=${page}; exact existing box`,await pngFor(page,region.box)]);
       emit('stage',{stage:'extract',project_key:project.key});
       const domain=options.track==='design'?DESIGN_PROMPT:MARKETING_PROMPT;
-      const extraction=await request<{evidence:Evidence[]}>(options.track==='design'?'DesignExtraction':'MarketingExtraction',
-        options.track==='design'?DesignExtraction:MarketingExtraction,{pdf:projectPdf,images:detailImages,prompt:domain+EXTRACTION_RULES+
+      const extraction=await request<{evidence:Evidence[];point_checks?:z.infer<typeof ExtractionPointCheck>[]}>(options.track==='design'?'DesignExtraction':'MarketingExtraction',
+        (options.track==='design'?DesignExtraction:MarketingExtraction).extend({point_checks:z.array(ExtractionPointCheck).max(72)}),{pdf:projectPdf,images:detailImages,prompt:domain+EXTRACTION_RULES+
           '\n대상 프로젝트 데이터: '+JSON.stringify(context)+'\n첨부 분리 PDF의 로컬 페이지 번호를 쓴다. 미선택 페이지는 보지 못했다.'+
           (scope==='full'?' full 모드에서는 후보 외 근거의 focus_target_id=null을 허용한다.':'')+
-          '\n시각 영역 데이터: '+JSON.stringify(inventoryContext)+'\n필수 details: '+JSON.stringify(options.track==='design'?DESIGN_FIELDS:MARKETING_FIELDS)});
+          '\n시각 영역 데이터: '+JSON.stringify(inventoryContext)+'\n필수 details: '+JSON.stringify(options.track==='design'?DESIGN_FIELDS:MARKETING_FIELDS)},data=>validateExtraction(data,points));
+      const extractionCheck={project_key:project.key,point_checks:extraction.point_checks!,detail_regions:detailRegions.map(r=>`p${r.page}:${r.region.key}`)};
+      extractionChecks.push(extractionCheck);emit('extraction_checks',extractionCheck);
       const records:Evidence[]=[],checksByRecord:string[][]=[];
       for(const [i,parent] of extraction.evidence.entries()){
       const pieces=atomicArtifacts(parent);
       if(pieces.length>1)emit('evidence_split',{project_key:project.key,candidate_index:i+1,anchor_count:pieces.length,
-        reason:'independent_visual_artifacts; parent_details_not_inherited'});
+        reason:'independent_evidence_atoms; context_preserved; cross_atom_details_not_inherited'});
       for(const [anchorIndex,record] of pieces.entries())try{
         if(records.length>=16)throw new Error('evidence_limit');
         validateAnchors(record,project,inventories,points,scope);
-        const checks:string[]=pieces.length>1?[`atomic_visual_anchor:${i+1}:${anchorIndex+1}`]:[];
+        const checks:string[]=pieces.length>1?[`atomic_evidence:${i+1}:${anchorIndex+1}`]:[];
         for(const [index,a] of record.anchors.entries())if(a.quote){
           const before=a.quote,page=project.pages[a.page-1],box=inventories.get(page)!.regions.find(r=>r.key===a.region_key)!.box;
           a.quote=alignRangeTypography(before,box,spans.get(page)??[]);
@@ -318,6 +391,7 @@ export async function analyzePdf(bytes:Uint8Array,options:AnalyzeOptions) {
         const failures=localEvidenceChecks(record);
         if(failures.length)throw new Error(failures.join('; '));
         for(const a of record.anchors)if(a.quote){const page=project.pages[a.page-1],region=inventories.get(page)!.regions.find(r=>r.key===a.region_key)!;
+          if(region.kind==='text_block'&&await textCropTouchesEdge(await pngFor(page,region.box)))throw new Error('potential_text_crop_clipping');
           const check=quoteLocationCheck(a.quote,region.box,spans.get(page)??[]);checks.push(`text_layer:${check}`);
           if(check==='outside_region')throw new Error('quote_outside_region');}
         for(const a of record.anchors)if(a.quote){const page=project.pages[a.page-1],box=inventories.get(page)!.regions.find(r=>r.key===a.region_key)!.box;
@@ -372,10 +446,10 @@ export async function analyzePdf(bytes:Uint8Array,options:AnalyzeOptions) {
           await pngFor(a.page,a.box)]);return images;
       }});questions=generated.cards;question_checks=generated.checks;focusCoverage=generated.focusCoverage;emit('questions_ready',{questions,question_checks});}
     const quality=questionQuality(questions,plan.selected_points.map(p=>p.id),focusCoverage);
-    const result={schema_version:'0.16',created_at:new Date().toISOString(),track:options.track,model:options.model,max_questions:maxQuestions,
+    const result={schema_version:'0.17',created_at:new Date().toISOString(),track:options.track,model:options.model,max_questions:maxQuestions,
       question_target:{requested:maxQuestions,generated:questions.length,shortfall:Math.max(0,maxQuestions-questions.length)},skim_model:options.skimModel??options.model,review_model:options.reviewModel??options.model,
       vision_provider:'openrouter',question_model:questionModel,question_provider:'openrouter',question_input:opus?'verified_evidence_only':'verified_evidence_and_images',
-      document:{sha256:digest,page_count:pdf.getPageCount()},document_map:map,analysis_plan:plan,
+      document:{sha256:digest,page_count:pdf.getPageCount()},document_map:map,analysis_plan:plan,extraction_checks:extractionChecks,
       status:options.inspectOnly?'visual_inspection_only':!questions.length?'insufficient_evidence':quality.status==='ready'?'evidence_ready':'needs_review',quality,evidence,rejected_candidates:rejected,
       question_evidence_ids:evidence.filter(e=>e.question_eligible).map(e=>e.id),questions,question_checks,
       visual_inventory:[...inventories].sort(([a],[b])=>a-b).map(([page,inv])=>({page,...inv,regions:inv.regions.map(r=>({id:`p${page}:${r.key}`,...r}))})),metrics:stats};

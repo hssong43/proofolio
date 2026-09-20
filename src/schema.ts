@@ -57,7 +57,7 @@ export const Detail = z.strictObject({field: Text, value: Text.nullable(), ancho
   .refine(d => new Set(d.anchor_indices).size === d.anchor_indices.length, 'Duplicate source indices.');
 const BaseEvidence = z.strictObject({focus_target_id: Text.nullable(), statement: Text,
   basis: z.enum(['portfolio_claim','visual_observation']), anchors: z.array(Anchor).min(1).max(6),
-  details: z.array(Detail).min(1).max(8)});
+  details: z.array(Detail).length(4)});
 
 export const DESIGN_FIELDS = {
   problem: ['situation','affected_user','problem_signal','success_criterion'],
@@ -103,14 +103,22 @@ export const DesignEvidence = BaseEvidence.extend({category: z.enum(Object.keys(
 export const MarketingEvidence = BaseEvidence.extend({category: z.enum(Object.keys(MARKETING_FIELDS) as [keyof typeof MARKETING_FIELDS, ...Array<keyof typeof MARKETING_FIELDS>]), metric: Metric.nullable(), metric_sources:MetricSources.nullable()})
   .refine(e => detailsMatch(e, MARKETING_FIELDS[e.category]), 'Detail fields must exactly match category and existing anchors.')
   .refine(e => (e.category === 'metric') === (e.metric !== null), 'Only metric evidence requires a metric object.')
-  .refine(e => (e.metric!==null)===(e.metric_sources!==null) && (!e.metric || Object.entries(e.metric).every(([key,value])=>{
-    const indices=e.metric_sources![key as keyof z.infer<typeof Metric>];
-    return (value!==null)===(indices.length>0) && new Set(indices).size===indices.length && indices.every(i=>i<=e.anchors.length);
-  })), 'Each stated metric field needs its own existing source indices; null fields have none.')
+  .superRefine((e,ctx) => {
+    if((e.metric!==null)!==(e.metric_sources!==null))ctx.addIssue({code:'custom',path:['metric_sources'],
+      message:'Metric and metric_sources must both be null or both be objects.'});
+    if(e.metric&&e.metric_sources)for(const [key,value] of Object.entries(e.metric)){
+      const indices=e.metric_sources[key as keyof z.infer<typeof Metric>];
+      if((value!==null)!==(indices.length>0)||new Set(indices).size!==indices.length||indices.some(i=>i>e.anchors.length))
+        ctx.addIssue({code:'custom',path:['metric_sources',key],message:'Each stated metric field needs its own existing source indices; null fields have none.'});
+    }
+  })
   .refine(e => !['metric','experiment','contribution'].includes(e.category) || e.basis === 'portfolio_claim',
     'Metrics, experiments and contribution remain portfolio claims.');
-export const DesignExtraction = z.strictObject({evidence: z.array(DesignEvidence).max(16)});
-export const MarketingExtraction = z.strictObject({evidence: z.array(MarketingEvidence).max(16)});
+export const ExtractionPointCheck=z.strictObject({focus_target_id:Text,status:z.enum(['extracted','unreadable','no_relevant_source']),
+  evidence_indices:z.array(PageNumber).max(16),reason:Text});
+// Optional only for reading historical extraction responses; new requests require complete point checks.
+export const DesignExtraction = z.strictObject({evidence: z.array(DesignEvidence).max(16),point_checks:z.array(ExtractionPointCheck).max(72).optional()});
+export const MarketingExtraction = z.strictObject({evidence: z.array(MarketingEvidence).max(16),point_checks:z.array(ExtractionPointCheck).max(72).optional()});
 export type Evidence = z.infer<typeof DesignEvidence> | z.infer<typeof MarketingEvidence>;
 export const SupportAssessment = z.strictObject({status: z.enum(['documented','needs_explanation','conflicting','not_assessed']),
   reason: Text, anchor_indices: z.array(PageNumber).max(6)});
@@ -185,6 +193,8 @@ export function responseSchema(schema: z.ZodType,closedObjects=false): Record<st
     const result: Record<string, unknown> = {};
     for (const [key, item] of Object.entries(obj)) {
       if (key === 'properties') result[key] = Object.fromEntries(Object.entries(item as object).map(([k,v]) => [k,shape(v)]));
+      // Keep the working provider shape: adding all native bounds triggered a Vertex 400 in web-04.
+      // Exact lengths/ranges remain in local Zod and prompts; this is not a weaker acceptance rule.
       else if (['type','required','items','enum','anyOf'].includes(key)) result[key] = shape(item);
       else if (key === 'const') result.enum = [item];
     }

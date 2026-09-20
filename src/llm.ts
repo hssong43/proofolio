@@ -5,6 +5,27 @@ import * as z from 'zod';
 
 export const MAX_OUTPUT_TOKENS=16384;
 export class SchemaValidationError extends Error {}
+// Only schema-owned paths/rules, never rejected values, unknown keys or arbitrary custom messages.
+export function schemaErrorSummary(error:z.ZodError,schema:z.ZodType) {
+  const fields=new Set<string>();
+  function collect(value:unknown){
+    if(!value||typeof value!=='object')return;
+    for(const [key,item] of Object.entries(value)){
+      if(key==='properties'&&item&&typeof item==='object')Object.keys(item).forEach(field=>fields.add(field));
+      collect(item);
+    }
+  }
+  collect(z.toJSONSchema(schema,{io:'input'}));
+  const safeRules=new Set(['Detail fields must exactly match category and existing anchors.',
+    'Metric and metric_sources must both be null or both be objects.',
+    'Each stated metric field needs its own existing source indices; null fields have none.']);
+  return '출력 필드/스키마 오류: '+error.issues.slice(0,8).map(issue=>{
+    const path=issue.path.map(p=>typeof p==='number'&&Number.isSafeInteger(p)?p:typeof p==='string'&&fields.has(p)?p:'?').join('.')||'$';
+    const rule=issue.code==='custom'?(safeRules.has(issue.message)?issue.message:'Follow the schema field rules.'):
+      issue.code==='too_big'?`maximum=${issue.maximum}`:issue.code==='too_small'?`minimum=${issue.minimum}`:issue.code;
+    return `${path}: ${issue.code} (${rule})`;
+  }).join('; ');
+}
 export class BudgetError extends Error {}
 export class HttpResponseError extends Error {
   readonly status:number;
@@ -22,7 +43,7 @@ export type Usage = {promptTokenCount: number; candidatesTokenCount: number; tot
 export type Metrics = {model_calls:number; uploads:number; uploaded_bytes:number; file_reuses:number;
   cleanup_failures:number; usage:Array<Record<string,unknown>>; first_evidence_ms:number|null;
   total_ms?:number; stages:Array<{stage:string; elapsed_ms:number; attempt:number}>; estimated_cost_usd:number;
-  total_tokens:number;input_tokens:number;output_tokens:number;thinking_tokens:number|null;cached_tokens:number};
+  total_tokens:number|null;input_tokens:number|null;output_tokens:number|null;thinking_tokens:number|null;cached_tokens:number|null};
 export const freshMetrics = ():Metrics => ({model_calls:0,uploads:0,uploaded_bytes:0,file_reuses:0,cleanup_failures:0,
   usage:[],first_evidence_ms:null,stages:[],estimated_cost_usd:0,total_tokens:0,input_tokens:0,output_tokens:0,thinking_tokens:0,cached_tokens:0});
 export function priceFor(model:string, now=new Date(), inputTokens=0) {
@@ -53,10 +74,12 @@ export function usageCost(model:string, raw:unknown) {
 }
 type ApprovedExtension = {type:'approved_extension';approval_id:string;usd:number;baseline_usd:number;
   limit_krw:number;krw_per_usd:number;previous_ceiling_usd:number};
+type ApprovedUsdExtension = {type:'approved_usd_extension';approval_id:string;usd:number;baseline_usd:number;
+  held_usd:number;additional_usd:number;previous_ceiling_usd:number};
 type ApprovedHold = {type:'approved_unknown_cost_hold';approval_id:string;id:string;usd:number};
 type LedgerEvent = {type:'header';version:1;limit_usd:number;provider?:'openrouter'}|{type:'reserve';id:string;usd:number;model:string;at:string}
   |{type:'settle';id:string;usd:number}|{type:'blocked';reason:string}
-  |{type:'ceiling';usd:number;baseline_usd:number;limit_krw:number;krw_per_usd:number}|ApprovedExtension|ApprovedHold;
+  |{type:'ceiling';usd:number;baseline_usd:number;limit_krw:number;krw_per_usd:number}|ApprovedExtension|ApprovedUsdExtension|ApprovedHold;
 export class Budget {
   private readonly initialLimit:number;
   readonly path:string;
@@ -70,10 +93,10 @@ export class Budget {
   private closed=false;
   private ceiling:number;
   private window:Extract<LedgerEvent,{type:'ceiling'}>|undefined;
-  private extension:ApprovedExtension|undefined;
-  private approvals=new Map<string,ApprovedExtension>();
+  private extension:ApprovedExtension|ApprovedUsdExtension|undefined;
+  private approvals=new Map<string,ApprovedExtension|ApprovedUsdExtension>();
   constructor(path:string,limit=10,provider?:'openrouter') {
-    if(!Number.isFinite(limit)||limit<=0||limit>10) throw new BudgetError('이 작업 예산은 0 초과 10달러 이하입니다.');
+    if(!Number.isFinite(limit)||limit<=0||limit>23) throw new BudgetError('명시적 작업 예산은 0 초과 23달러 이하입니다.');
     this.path=path;this.provider=provider; this.initialLimit=limit; this.ceiling=limit; this.lock=path+'.lock';
     mkdirSync(dirname(path),{recursive:true,mode:0o700});
     const fd=openSync(this.lock,'wx',0o600); closeSync(fd);
@@ -116,10 +139,26 @@ export class Budget {
   approveAdditionalKrw(approvalId:string,limitKrw:number,krwPerUsd:number) {
     if(this.closed)throw new BudgetError('종료된 예산 원장입니다.');
     const old=this.approvals.get(approvalId);
-    if(old){if(old.limit_krw!==limitKrw||old.krw_per_usd!==krwPerUsd)throw new BudgetError('기존 승인 ID와 금액이 다릅니다.');return;}
+    if(old){if(old.type!=='approved_extension'||old.limit_krw!==limitKrw||old.krw_per_usd!==krwPerUsd)throw new BudgetError('기존 승인 ID와 금액이 다릅니다.');return;}
     const row:ApprovedExtension={type:'approved_extension',approval_id:approvalId,usd:this.spent+limitKrw/krwPerUsd,
       baseline_usd:this.spent,limit_krw:limitKrw,krw_per_usd:krwPerUsd,previous_ceiling_usd:this.ceiling};
     this.validateExtension(row);this.append(row);
+  }
+  // Operator-only, explicit new spending approval. The old header and unknown-cost holds remain intact.
+  approveAdditionalUsd(approvalId:string,additionalUsd:number) {
+    if(this.closed)throw new BudgetError('종료된 예산 원장입니다.');
+    const old=this.approvals.get(approvalId);
+    if(old){if(old.type!=='approved_usd_extension'||old.additional_usd!==additionalUsd)throw new BudgetError('기존 승인 ID와 금액이 다릅니다.');return;}
+    const row:ApprovedUsdExtension={type:'approved_usd_extension',approval_id:approvalId,usd:this.spent+this.unknownCostHold+additionalUsd,
+      baseline_usd:this.spent,held_usd:this.unknownCostHold,additional_usd:additionalUsd,previous_ceiling_usd:this.ceiling};
+    this.validateUsdExtension(row);this.append(row);
+  }
+  private validateUsdExtension(row:ApprovedUsdExtension) {
+    if(this.provider!=='openrouter'||this.blocked||this.pending.size||typeof row.approval_id!=='string'||!/^[a-z0-9_-]{1,100}$/.test(row.approval_id)||
+      this.approvals.has(row.approval_id)||!Number.isFinite(row.additional_usd)||row.additional_usd<=0||row.additional_usd>10||
+      row.baseline_usd!==this.spent||row.held_usd!==this.unknownCostHold||row.previous_ceiling_usd!==this.ceiling||
+      !Number.isFinite(row.usd)||row.usd<=this.ceiling||row.usd!==row.baseline_usd+row.held_usd+row.additional_usd)
+      throw new BudgetError('추가 달러 승인 기록 또는 예산 상태가 유효하지 않습니다.');
   }
   private validateExtension(row:ApprovedExtension) {
     if(typeof row.approval_id!=='string'||!/^[a-z0-9_-]{1,100}$/.test(row.approval_id)||this.approvals.has(row.approval_id)||!this.window||this.blocked||this.pending.size||
@@ -129,6 +168,9 @@ export class Budget {
   }
   private apply(row:LedgerEvent) {
     if(row.type==='blocked'){this.blocked=true;this.blockReasons.add(row.reason);return;}
+    if(row.type==='approved_usd_extension'){
+      this.validateUsdExtension(row);this.approvals.set(row.approval_id,row);this.extension=row;this.ceiling=row.usd;return;
+    }
     if(row.type==='approved_unknown_cost_hold'){
       this.validateHold(row);this.pending.delete(row.id);this.holds.set(row.id,row);
       this.blocked=false;this.blockReasons.clear();return;
@@ -182,7 +224,9 @@ export class Budget {
     return {limit_usd:this.limit,spent_usd:this.spent,reserved_usd:this.reserved,remaining_usd:this.remaining,blocked:this.blocked,
       ...(this.holds.size?{active_reserved_usd:this.activeReserved,unknown_cost_hold_usd:this.unknownCostHold,held_request_actual_cost_usd:null}:{}),
       ...(this.extension?{initial_limit_usd:this.initialLimit}:{}),
-      ...(window?{spend_window:window,additional_estimated_krw:(this.spent-window.baseline_usd)*window.krw_per_usd}: {})};}
+      ...(window?{spend_window:window}:{}),
+      ...(window?.type==='approved_usd_extension'?{additional_actual_usd:this.spent-window.baseline_usd}:{}),
+      ...(window&&window.type!=='approved_usd_extension'?{additional_estimated_krw:(this.spent-window.baseline_usd)*window.krw_per_usd}: {})};}
   close(){if(!this.closed){unlinkSync(this.lock);this.closed=true;}}
 }
 

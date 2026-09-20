@@ -4,8 +4,9 @@ import * as z from 'zod';
 import {mkdtemp,readFile,appendFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {Budget,BudgetError,HttpResponseError,requestJson,retryAfterMs,usageCost,priceFor} from '../src/llm.ts';
-import {DocumentMap,responseSchema} from '../src/schema.ts';
+import {Budget,BudgetError,HttpResponseError,requestJson,retryAfterMs,usageCost,priceFor,schemaErrorSummary,freshMetrics} from '../src/llm.ts';
+import {DocumentMap,DesignExtraction,responseSchema} from '../src/schema.ts';
+import {modelRequest} from '../src/questions.ts';
 
 const model='gemini-3.8-flash',schema=z.strictObject({value:z.string().min(1)});
 test('Pro standard pricing includes long-context tier, cached input and thinking in reservations',async()=>{
@@ -63,6 +64,29 @@ test('21 wire schema property names preserved while local constraints remain',()
   assert.deepEqual(wire.properties,{pattern:{type:'string'}});assert.deepEqual(wire.required,['pattern']);assert.equal(shape.safeParse({pattern:'long'}).success,false);
   const map=responseSchema(DocumentMap);assert.ok(!JSON.stringify(map).includes('$ref'));assert.ok(JSON.stringify(map).includes('project'));
   const recursive:z.ZodType=z.lazy(()=>z.object({child:recursive}));assert.throws(()=>responseSchema(recursive),/schemas/);});
+test('provider-compatible wire omits bounds while local detail length and page ranges remain strict',()=>{
+  const wire=responseSchema(DesignExtraction,true) as any,e=wire.properties.evidence.items;
+  assert.equal(e.properties.details.minItems,undefined);assert.equal(e.properties.details.maxItems,undefined);
+  assert.equal(e.properties.anchors.items.properties.page.minimum,undefined);
+  assert.equal(e.additionalProperties,false);assert.equal(wire.properties.evidence.maxItems,undefined);
+  const evidenceSchema=DesignExtraction.shape.evidence.element;
+  assert.equal(evidenceSchema.shape.details.safeParse([]).success,false);
+  assert.equal(evidenceSchema.shape.anchors.element.shape.page.safeParse(0).success,false);
+});
+test('format retry identifies schema-owned paths and rules without leaking values, keys or custom messages',async()=>{
+  const privateText='secret_private_source',shape=z.strictObject({evidence:z.array(z.strictObject({details:z.array(z.string()).length(4)}))});
+  const invalid={evidence:[{details:Array(24).fill(privateText),[privateText]:true}]},result=shape.safeParse(invalid);
+  assert.equal(result.success,false);if(result.success)return;
+  const message=schemaErrorSummary(result.error,shape);
+  assert.match(message,/evidence\.0\.details: too_big \(maximum=4\)/);assert.ok(!message.includes(privateText));
+  const malicious=new z.ZodError([{code:'custom',path:[privateText],message:privateText}]);
+  assert.ok(!schemaErrorSummary(malicious,shape).includes(privateText));
+  const prompts:string[]=[],stats=freshMetrics(),call=modelRequest(async req=>{prompts.push(req.prompt);
+    return prompts.length===1?invalid:{evidence:[{details:['a','b','c','d']}]};},stats,{model:'fixture'});
+  await call('DesignExtraction',shape,{prompt:'original'});
+  assert.equal(prompts.length,2);assert.match(prompts[1],/evidence\.0\.details/);assert.match(prompts[1],/maximum=4/);
+  assert.ok(!prompts[1].includes(privateText));assert.equal(stats.stages[1].attempt,2);
+});
 test('budget counts cached input thinking reservations and persists across processes',async()=>{assert.equal(usageCost(model,{promptTokenCount:100,cachedContentTokenCount:20,candidatesTokenCount:10,thoughtsTokenCount:30,totalTokenCount:140}),
   (80*.75+20*.075+40*3.75)/1e6);assert.throws(()=>usageCost(model,{totalTokenCount:99}),BudgetError);
   const b=await budget(),path=b.path,id=b.reserve(model,100,50);assert.throws(()=>new Budget(path));b.settle(id,model,{promptTokenCount:100,candidatesTokenCount:20,totalTokenCount:120});
@@ -136,5 +160,24 @@ test('reservation overrun blocks subsequent calls',async()=>{
     const id=b.reserve(model,1,1);
     assert.throws(()=>b.settle(id,model,{promptTokenCount:100,candidatesTokenCount:10,totalTokenCount:110}),BudgetError);
     assert.equal(b.blocked,true);assert.throws(()=>b.reserveUsd(model,1),BudgetError);
+  }finally{b.close();}
+});
+test('explicit additional USD approval preserves prior costs and holds, cannot reset on reopen or bypass unknown costs',async()=>{
+  const path=join(await mkdtemp(join(tmpdir(),'router-additional-usd-')),'ledger.jsonl');
+  let b=new Budget(path,10,'openrouter');const paid=b.reserveUsd(model,2);b.settleUsd(paid,1);
+  const hold=b.reserveUsd(model,1);b.block('openrouter_generation_usage_unknown');
+  assert.throws(()=>b.approveAdditionalUsd('blocked',10),BudgetError);
+  b.approveUnknownCostHold('preserve-unknown',hold,1);
+  const before=await readFile(path,'utf8');b.approveAdditionalUsd('explicit-new-ten',10);
+  assert.equal(b.limit,12);assert.equal(b.spent,1);assert.equal(b.unknownCostHold,1);assert.equal(b.remaining,10);
+  assert.equal(b.snapshot().additional_actual_usd,0);const after=await readFile(path,'utf8');assert.ok(after.startsWith(before));
+  b.approveAdditionalUsd('explicit-new-ten',10);assert.equal(await readFile(path,'utf8'),after);
+  assert.throws(()=>b.approveAdditionalUsd('explicit-new-ten',9),BudgetError);
+  for(const amount of [0,-1,Infinity,NaN,11])assert.throws(()=>b.approveAdditionalUsd('invalid',amount),BudgetError);
+  const next=b.reserveUsd(model,1);assert.throws(()=>b.approveAdditionalUsd('while-pending',10),BudgetError);
+  b.settleUsd(next,.5);b.close();b=new Budget(path,10,'openrouter');
+  try{b.approveAdditionalUsd('explicit-new-ten',10);assert.equal(b.remaining,9.5);assert.equal(b.snapshot().additional_actual_usd,.5);
+    assert.equal(b.unknownCostHold,1);assert.equal(b.spent,1.5);assert.throws(()=>b.reserveUsd(model,9.6),BudgetError);
+    b.block('usage_unavailable');assert.throws(()=>b.approveAdditionalUsd('cannot-unblock',10),BudgetError);
   }finally{b.close();}
 });

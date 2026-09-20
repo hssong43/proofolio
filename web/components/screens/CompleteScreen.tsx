@@ -1,9 +1,10 @@
 import { CheckIcon } from "../icons";
 
 type Props = { roleLabel: string; answeredCount: number; questionCount: number; elapsed: string; saveError: string | null;
+  savedStorage: "local" | "supabase";
   saveState: "idle" | "saving" | "saved" | "failed"; onRetry: () => void; onHome: () => void };
 
-export function CompleteScreen({ roleLabel, answeredCount, questionCount, elapsed, saveError, saveState, onRetry, onHome }: Props) {
+export function CompleteScreen({ roleLabel, answeredCount, questionCount, elapsed, saveError, saveState, savedStorage, onRetry, onHome }: Props) {
   return (
     <div className="screen" style={{ alignItems: "center", animation: "fadeIn .3s ease-out" }}>
       <div style={{ width: 80, height: 80, borderRadius: "50%", background: "#18181B", display: "grid", placeItems: "center" }}>
@@ -19,7 +20,7 @@ export function CompleteScreen({ roleLabel, answeredCount, questionCount, elapse
       </div>
       {saveError && <div className="error-box" role="alert" style={{ width: "100%" }}>답변 저장에 실패했어요: {saveError}</div>}
       {saveState === "failed" && <button type="button" className="btn-primary focus-ring" onClick={onRetry}>답변 저장 재시도</button>}
-      <p role="status" style={{ margin: 0, textAlign: "center" }}>{saveState === "saved" ? "답변을 이 서버의 로컬 파일에 저장했어요." :
+      <p role="status" style={{ margin: 0, textAlign: "center" }}>{saveState === "saved" ? (savedStorage === "supabase" ? "답변을 Supabase에 저장했어요." : "답변을 이 서버의 로컬 파일에 저장했어요.") :
         saveState === "idle" ? "데모 답변은 서버에 저장하지 않아요." : "답변은 화면에 유지 중이에요. 저장이 끝날 때까지 창을 닫지 마세요."}</p>
       <div className="card" style={{ width: "100%", padding: 8, display: "grid", gridTemplateColumns: "repeat(3, 1fr)" }}>
         <Stat label="직무" value={roleLabel} />

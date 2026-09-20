@@ -7,12 +7,77 @@ import {PDFDocument,rgb} from 'pdf-lib';
 import {DocumentMap, QuestionPlan, QuestionDrafts, QuestionFieldCheck, type QuestionCard, type ResolvedEvidence} from '../src/schema.ts';
 import {normalizeMap,validateMap,validateAnchors,selectPages,analyzePdf,localEvidenceChecks,atomicArtifacts} from '../src/pipeline.ts';
 import {pageTiles,pageBox,openRenderer,renderPage,alignRangeTypography,numericQuoteIssue,quoteTranscriptionIssue} from '../src/pdf.ts';
-import {questionQuality,questionFocusErrors,questionContext,generateQuestions,materializeQuestion,interviewGuide,questionErrors,questionFieldErrors,type Request} from '../src/questions.ts';
+import {questionQuality,questionFocusErrors,questionContext,generateQuestions,materializeQuestion,interviewGuide,questionErrors,questionFieldErrors,questionGuideErrors,type Request} from '../src/questions.ts';
 import {Budget} from '../src/llm.ts';
 import {buildOpenRouterPayload} from '../src/openrouter.ts';
 
 const authored={question:'이 작업의 판단 기준을 설명해 주세요.',intent:'구체적인 판단 기준 확인',listen_for:['원문과 연결된 판단 기준']};
 const fieldChecks=[{field:'question',index:null},{field:'intent',index:null},{field:'listen_for',index:1}].map(c=>({...c,status:'supported',reason:'synthetic fixture',premise_checks:[]}));
+
+test('v0.17 guides quote answer tasks, never add population or a new unasked outcome',()=>{
+  const q={evidence_id:'e',question:'색 대비와 제목의 크기가 어떤 정보를 강조하는지 설명해 주세요.',intent:'시각 해석',listen_for:['색 대비','제목의 크기','어떤 정보를 강조하는지']};
+  assert.deepEqual(questionGuideErrors(q),[]);
+  assert.deepEqual(questionGuideErrors({...q,listen_for:['팔로워 기준 데이터와 광고 타깃의 차이']}),['guide_not_in_question:1']);
+  assert.deepEqual(questionGuideErrors({...q,listen_for:['전환율에 기여한 효과']}),['guide_not_in_question:1']);
+});
+test('a guide copied after a condition must retain the same condition even if its review says observed',()=>{
+  const q={evidence_id:'e',question:'쓰임이 정해져 있었다면 표현에 어떤 영향을 주었나요?',intent:'쓰임과 표현의 관계를 조건부로 확인',listen_for:['표현에 어떤 영향을 주었나요?']};
+  const checks=QuestionFieldCheck.array().parse([
+    {field:'question',index:null,field_text:q.question,status:'supported',reason:'fixture',premise_checks:[],
+      experience_check:{basis:'conditional',condition:'쓰임이 정해져 있었다면',anchor_index:null,source_excerpt:null}},
+    ...[{field:'intent',index:null,field_text:q.intent},{field:'listen_for',index:1,field_text:q.listen_for[0]}].map(c=>({...c,status:'supported',reason:'fixture',premise_checks:[],
+      experience_check:{basis:'observed',condition:null,anchor_index:null,source_excerpt:null}}))]);
+  assert.ok(questionFieldErrors(q,checks).includes('guide_condition_not_preserved:1'));
+  q.listen_for=[q.question];checks[2]={...checks[0],field:'listen_for',index:1};
+  assert.deepEqual(questionFieldErrors(q,checks),[]);
+});
+
+for(const fixture of [
+  {track:'design' as const,title:'봄 축제 포스터',task:'목적과 전체 표현 방향을 설명해 주세요.',topic:'제목과 본문의 크기 대비'},
+  {track:'marketing' as const,title:'봄 축제 SNS 캠페인 제안',task:'목적과 전체 접근을 설명해 주세요.',topic:'채널 선택 기준'},
+])test(`${fixture.track}: broad explanations need grounded subjects, not prewritten answers or detailed focus coverage`,async()=>{
+  const point={id:'t',project_key:'a',anchor_page:1,focus:'decision' as const,specificity:'concrete_action' as const,
+    context_status:'located' as const,topic:fixture.topic,reason:'synthetic focus',required_context_pages:[],optional_context_pages:[]};
+  const source={id:'e',project_key:'a',category:fixture.track==='design'?'artifact':'strategy',focus_target_id:'t',
+    question_eligible:true,details:[],unknown_fields:['purpose','rationale','own_scope'],
+    anchors:[{page:1,region_id:'p1:r1',purpose:'context',quote:fixture.title,visual_description:null,
+      crop_reading:{text:fixture.title,observations:[],uncertainties:[]}}]} as unknown as ResolvedEvidence;
+  for(const mode of ['broad','unrelated','invented_process']){
+    const task=mode==='unrelated'?'일반적인 디자인과 마케팅의 차이는 무엇인가요?':
+      mode==='invented_process'?'무엇을 덜어내고 남겼는지 설명해 주세요.':fixture.task;
+    const draft={evidence_id:'e',anchor_indices:[1],angle:'problem',question:mode==='unrelated'?task:fixture.title+'의 '+task,
+      intent:'작업의 목적과 접근 설명',listen_for:[task]};
+    let rounds=0,reviews=0;
+    const request:Request=async(kind,schema,args,check)=>{
+      let raw:unknown;
+      if(kind==='QuestionSet'){
+        assert.match(args.prompt,/답변 미기재를 근거 부족으로 취급하지 않는다/);
+        assert.match(args.prompt,/세부 요소를 반드시 언급할 필요는 없다/);
+        raw={questions:rounds++?[]:[draft]};
+      }else{
+        reviews++;
+        assert.match(args.prompt,/답변 미기재를 근거 부족으로 취급하지 않는다/);
+        assert.match(args.prompt,/세부 coverage 미충족만으로.*넓은 질문을 unsupported로 바꾸지 않는다/);
+        const rows=JSON.parse(args.prompt.split('\n').at(-1)!);
+        raw={reviews:rows.map((row:any)=>({question_id:row.question_id,status:'supported',reason:'synthetic review, not model accuracy proof',
+          region_support:true,no_added_premise:true,distinct_answer:true,addresses_focus:mode!=='unrelated',substantive:true,
+          field_checks:fieldChecks.map(c=>({...c,field_text:c.field==='listen_for'?row.listen_for[c.index!-1]:row[c.field],
+            experience_check:{basis:'observed',condition:null,anchor_index:null,source_excerpt:null}}))})),
+          focus_coverage:[{focus_target_id:'t',checks:[{aspect:fixture.topic,
+            source_requirements:[{region_id:'p1:r1',quote:fixture.title}],question_ids:[]}]}]};
+      }
+      const parsed=schema.parse(raw);check?.(parsed);return parsed;
+    };
+    const result=await generateQuestions([source],request,{track:fixture.track,selectedPoints:[point],evidenceOnly:true,
+      maxQuestions:1,imagesFor:async()=>[]});
+    assert.equal(reviews,1);assert.equal(result.cards.length,mode==='broad'?1:0,mode);
+    assert.equal(rounds,mode==='broad'?1:2);
+    if(mode==='broad'){
+      assert.ok(result.cards[0].question.endsWith(draft.question));
+      assert.deepEqual(questionQuality(result.cards,['t'],result.focusCoverage).missing_focus_target_ids,['t']);
+    }else assert.ok(result.checks[0].reasons.includes(mode==='unrelated'?'addresses_focus':'unverified_experience:question:'));
+  }
+});
 
 test('v0.16 context bundles keep exact scoped claims, not inferred authorship or unrelated project roles',()=>{
   const source={unknown_fields:['iteration'],details:[{field:'own_scope',value:'표지 구성 담당',anchor_indices:[2]},
@@ -69,6 +134,11 @@ test('v0.16 selection claims permit reasons, not invented populations or past au
   assert.deepEqual(questionFieldErrors({...population,evidence_id:'e'},make(population),[{...anchors[0],quote:'팔로워 기준 데이터를 사용했습니다.'}]),[]);
   const clarify={...authored,listen_for:['팔로워 기준 데이터인지 다른 모수인지 먼저 확인']};
   assert.deepEqual(questionFieldErrors({...clarify,evidence_id:'e'},make(clarify),anchors),[]);
+  const causal={...authored,listen_for:['광고 성과로 이어진다고 본 근거']};
+  assert.ok(questionFieldErrors({...causal,evidence_id:'e'},make(causal),anchors).includes('unverified_experience:listen_for:1'));
+  const organic={...authored,intent:'유기적 도달을 선택 기준으로 삼은 근거'};
+  assert.ok(questionFieldErrors({...organic,evidence_id:'e'},make(organic),anchors).includes('unverified_organic_attribution:intent:'));
+  assert.deepEqual(questionFieldErrors({...organic,evidence_id:'e'},make(organic),[{...anchors[0],quote:'유기적 도달을 선택 기준으로 삼았습니다.'}]),[]);
   const intent={...authored,intent:'본인 관여 범위를 조건부로 확인'},intentChecks=make(intent);
   intentChecks[1].experience_check={basis:'conditional',condition:intent.intent,anchor_index:null,source_excerpt:null};
   assert.deepEqual(questionFieldErrors({...intent,evidence_id:'e'},intentChecks,anchors),[]);
@@ -278,7 +348,7 @@ test('v0.10.1 late numeric regions in a tall PDF remain in extraction transcript
     assert.equal(hints.at(-1).region_key,inventory.regions.at(-1).key);
     assert.match(hints.at(-1).text,/Final time 2–3 min/);
     assert.ok(hints.every((h:{text:string})=>h.text.length<=1200));
-    return {evidence:[]}; // Contract check only: no model quality or recovered evidence is claimed.
+    return {evidence:[],point_checks:[{focus_target_id:'t1',status:'no_relevant_source',evidence_indices:[],reason:'synthetic empty extraction'}]}; // No recovered evidence is claimed.
   }});
   assert.equal(extractionSeen,true);assert.equal(result.questions.length,0);
 });
@@ -329,7 +399,7 @@ test('v0.10.3 full extraction records literal alignment but still requires visua
         specificity:'concrete_action',context_status:'located',reason:'fixture',required_context_pages:[],optional_context_pages:[]}]};
     if(request.kind==='VisualInventory')return {coverage:'complete',limitations:[],links:[],regions:[{key:'r1',kind:'text_block',box:[0,0,1000,1000],
       description:'fixture',salient_text:null,identification:'clear',readability:'readable',source_role:'unknown',role_basis:null}]};
-    if(request.kind==='DesignExtraction')return {evidence:[raw]};
+    if(request.kind==='DesignExtraction')return {evidence:[raw],point_checks:[{focus_target_id:'t1',status:'extracted',evidence_indices:[1],reason:'fixture'}]};
     if(request.kind==='CropReadings')return {regions:[{region_id:'p1:r1',text:exact,observations:[],readability:'readable',limitations:[]}]};
     assert.equal(request.kind,'Reviews');reviewed=true;
     const [candidate]=JSON.parse(request.prompt.split('근거 후보 데이터:\n')[1]);
@@ -561,6 +631,38 @@ test('v0.8.1 visual artifact lists split without copying counts, inventing obser
   for(const changed of [{...parent,category:'alternative'},{...parent,basis:'portfolio_claim'},
     {...parent,anchors:[parent.anchors[0],{...parent.anchors[1],page:2}]},
     {...parent,anchors:[parent.anchors[0],{...parent.anchors[1],purpose:'context'}]}])assert.deepEqual(atomicArtifacts(changed),[changed]);
+  const context={page:2,region_key:'r3',kind:'text',purpose:'context',quote:'행사 안내물 프로젝트 설명',visual_description:null,location:'fixture'};
+  const withContext={...parent,anchors:[...parent.anchors,context]},children=atomicArtifacts(withContext);
+  assert.equal(children.length,2);
+  for(const child of children){assert.equal(child.anchors.length,2);assert.deepEqual(child.anchors[1],context);
+    assert.deepEqual(child.anchors.map(a=>a.page),[1,2]);assert.deepEqual(localEvidenceChecks(child),[]);}
+  children[0].anchors[1].quote='changed child';assert.equal(children[1].anchors[1].quote,context.quote);
+  assert.equal(withContext.anchors[2].quote,context.quote);
+});
+test('v0.17 a literal claim and its independent artifact are separate before review, with context and every anchor retained',()=>{
+  const claim={page:1,region_key:'r1',kind:'text',purpose:'claim',quote:'행사 주제에 맞게 제작함',visual_description:null,location:'본문'};
+  const art={page:1,region_key:'r2',kind:'visual',purpose:'artifact',quote:null,visual_description:'노란색 포스터',location:'작업물'};
+  const context={...claim,page:2,region_key:'r3',purpose:'context',quote:'행사 안내 프로젝트'};
+  const parent={category:'decision',basis:'portfolio_claim',focus_target_id:'t',statement:claim.quote,anchors:[claim,art,context],
+    details:[{field:'chosen_option',value:claim.quote,anchor_indices:[1]},
+      {field:'stated_rationale',value:null,anchor_indices:[]},{field:'alternative',value:null,anchor_indices:[]},
+      {field:'tradeoff',value:'mixed candidate description',anchor_indices:[1,2]}]} as any;
+  const before=JSON.stringify(parent),parts=atomicArtifacts(parent);
+  assert.equal(parts.length,2);assert.deepEqual(parts[0].anchors,[claim,context]);assert.deepEqual(parts[1].anchors,[art,context]);
+  assert.equal(parts[0].details[0].value,claim.quote);assert.equal(parts[0].details[3].value,null);
+  assert.equal(parts[1].category,'artifact');assert.equal(parts[1].basis,'visual_observation');
+  assert.ok(parts[1].details.every((d:any)=>d.value===null));
+  assert.equal(JSON.stringify(parent),before);
+  parts[0].anchors[1].quote='modified child';assert.equal(parts[1].anchors[1].quote,context.quote);
+  const reordered=atomicArtifacts({...parent,anchors:[context,claim,art],details:parent.details.map((d:any)=>({...d,value:null,anchor_indices:[]}))});
+  assert.deepEqual(reordered[0].anchors,[claim,context]);
+  const marketing=atomicArtifacts({...parent,category:'strategy',metric:null,metric_sources:null,
+    details:['hypothesis','chosen_approach','alternative','tradeoff'].map(field=>({field,value:null,anchor_indices:[]}))});
+  assert.equal(marketing[1].category,'creative');assert.equal((marketing[1] as any).metric,null);
+  assert.deepEqual(marketing[1].details.map(d=>d.field),['message','format','target_and_cta','creative_rationale']);
+  for(const category of ['alternative','iteration','research','validation','metric','experiment'])
+    assert.deepEqual(atomicArtifacts({...parent,category}),[{...parent,category}]);
+  assert.deepEqual(atomicArtifacts({...parent,anchors:[claim,{...art,page:3},context]}),[{...parent,anchors:[claim,{...art,page:3},context]}]);
 });
 test('v0.11 authored questions and intent are preserved, never replaced with a category template',()=>{
   const source={anchors:[{region_id:'p1:r1',quote:'표를 카드 형태로 변경',visual_description:null}]} as ResolvedEvidence;
@@ -578,6 +680,13 @@ test('v0.11 no inferred visual caption is silently inserted into authored questi
   const q=materializeQuestion(plan,source);
   assert.ok(q.question.endsWith(plan.question));assert.doesNotMatch(q.question,/휴대폰이 중앙/);
   assert.equal(QuestionPlan.safeParse({...plan,question:undefined,intent:undefined,listen_for:undefined}).success,false);
+});
+test('v0.17 question assembly does not repeat its own visual navigation prefix',()=>{
+  const source={anchors:[{region_id:'p1:r1',quote:null,visual_description:'제목이 있는 포스터'}]} as ResolvedEvidence;
+  const plan={...authored,evidence_id:'e',anchor_indices:[1],angle:'decision' as const,
+    question:'연결된 시각 자료를 기준으로 답해 주세요.\n제목과 본문의 대비를 설명해 주세요.'};
+  const q=materializeQuestion(plan,source);
+  assert.equal(q.question,plan.question);assert.deepEqual(q.listen_for,plan.listen_for);
 });
 test('v0.11 all selected source quotes stay verbatim outside the authored prose',()=>{
   const source={anchors:[{region_id:'p7:r6',quote:'도달\n3,085',visual_description:null},

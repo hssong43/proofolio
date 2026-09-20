@@ -12,6 +12,9 @@ import {DEFAULT_MAX_QUESTIONS} from '../src/questions.ts';
 import {analysisArgs,toClientResult,ROOT,sameOrigin,saveAnswers,AnswerError} from '../web/lib/server/runner.ts';
 import {randomUUID} from 'node:crypto';
 
+// These filesystem fixtures must not inherit a developer's live Supabase mode.
+process.env.PROOFOLIO_STORAGE='local';
+
 test('same-origin upload uses the browser Host, not Next internal localhost, and rejects cross-site requests',()=>{
   const check=(origin?:string,site?:string)=>sameOrigin(new Request('http://localhost:3100/api/analyze',{
     headers:{host:'127.0.0.1:3100',...(origin?{origin}:{}),...(site?{'sec-fetch-site':site}:{})}}));

@@ -9,6 +9,7 @@ export type UploadedFile = { name: string; size: string; file: File | null };
 type Props = {
   roleLabel: string;
   demo: boolean;
+  coding?: boolean;
   tab: UploadTab;
   file: UploadedFile | null;
   link: string;
@@ -22,7 +23,7 @@ type Props = {
   onAnalyze: () => void;
 };
 
-export function UploadScreen({ roleLabel, demo, tab, file, link, canAnalyze, submitting, error, onTabChange, onFile, onRemoveFile, onLinkChange, onAnalyze }: Props) {
+export function UploadScreen({ roleLabel, demo, coding=false, tab, file, link, canAnalyze, submitting, error, onTabChange, onFile, onRemoveFile, onLinkChange, onAnalyze }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -46,11 +47,11 @@ export function UploadScreen({ roleLabel, demo, tab, file, link, canAnalyze, sub
   return (
     <div className="screen">
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <h2 className="screen-title">포트폴리오를 올려주세요</h2>
+        <h2 className="screen-title">{coding ? '공개 GitHub 저장소를 연결해주세요' : '포트폴리오를 올려주세요'}</h2>
         <p className="screen-subtitle">{roleLabel} 직무에 맞춰 핵심 내용을 찾아드릴게요</p>
       </div>
       <div className="card" style={{ padding: 32, display: "flex", flexDirection: "column", gap: 24 }}>
-        <div
+        {!coding && <div
           role="tablist"
           style={{ display: "inline-grid", gridTemplateColumns: "1fr 1fr", width: 280, height: 40, padding: 4, background: "#F4F4F5", borderRadius: 8 }}
         >
@@ -60,9 +61,9 @@ export function UploadScreen({ roleLabel, demo, tab, file, link, canAnalyze, sub
           <button type="button" role="tab" aria-selected={tab === "link"} className="tab-btn focus-ring" data-active={tab === "link"} onClick={() => onTabChange("link")}>
             링크 입력
           </button>
-        </div>
+        </div>}
 
-        {tab === "pdf" && !file && (
+        {!coding && tab === "pdf" && !file && (
           <>
             <div
               role="button"
@@ -86,7 +87,7 @@ export function UploadScreen({ roleLabel, demo, tab, file, link, canAnalyze, sub
           </>
         )}
 
-        {tab === "pdf" && file && (
+        {!coding && tab === "pdf" && file && (
           <div
             style={{ height: 64, border: "1px solid #E4E4E7", borderRadius: 8, padding: "0 16px", display: "flex", alignItems: "center", gap: 12, animation: "fadeIn .2s ease-out" }}
           >
@@ -101,23 +102,24 @@ export function UploadScreen({ roleLabel, demo, tab, file, link, canAnalyze, sub
           </div>
         )}
 
-        {tab === "link" && (
+        {(coding || tab === "link") && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <input
               className="text-input focus-ring"
               value={link}
               onChange={(e) => onLinkChange(e.target.value)}
-              placeholder="https://"
+              placeholder={coding ? 'https://github.com/소유자/저장소' : 'https://'}
               inputMode="url"
               aria-label="포트폴리오 링크"
             />
             <div style={{ fontSize: 13, color: "#71717A" }}>
-              {demo ? "Behance, GitHub, Notion, 개인 사이트 모두 가능해요" : "링크 분석은 준비 중이에요. 지금은 PDF 업로드만 분석할 수 있어요."}
+              {coding ? 'README와 소스 최대 8개를 읽어요. 비공개 저장소·코드 실행·독립적인 질문 검수는 지원하지 않아요.' : '링크 분석은 준비 중이에요. 지금은 PDF 업로드만 분석할 수 있어요.'}
             </div>
           </div>
         )}
 
         {error && <div className="error-box" role="alert">{error}</div>}
+        <p className="screen-subtitle">질문 6~10개 목표 · 근거가 부족하면 더 적을 수 있어요 · 예상 약 8분</p>
 
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <button type="button" className="btn-primary focus-ring" disabled={!canAnalyze || submitting} onClick={onAnalyze}>

@@ -22,7 +22,7 @@ function vertexUsage(raw:unknown) {
   if(!count(input)||!count(total))throw new BudgetError('Stored Opus token totals invalid.');
   return {promptTokenCount:input,candidatesTokenCount:u.output_tokens,totalTokenCount:total,cachedContentTokenCount:cached};
 }
-import {OPENROUTER_MODELS,openRouterUsage,validateOpenRouterKey} from './openrouter.ts';
+import {OPENROUTER_MODELS,openRouterUsage,unconfirmedPartialTokens,validateOpenRouterKey} from './openrouter.ts';
 
 const Source=z.object({id:z.string().regex(/^[a-z][a-z0-9-]+$/),author:z.string().min(1),track:Track,language:z.enum(['ko','en']),
   subtype:z.string(),source_url:z.url(),pdf_url:z.url().optional(),pdf_match:z.string().optional(),source_basis:z.string(),public_conditions:z.string()}).strict();
@@ -82,7 +82,7 @@ export function validateGold(corpus:z.infer<typeof Corpus>){
       ||[...g.projects.flatMap(p=>p.pages),...g.points.flatMap(p=>[...p.pages,...p.required_context_pages])].some(p=>!g.reviewed_pages.includes(p)))throw new Error('Incomplete or mismatched source gold: '+s.id);
     return g;});
 }
-async function run(phase:string,runId:string,ids:string[],models:{model:string;skimModel:string;reviewModel:string;questionModel:string;limit:number;ledger:string}){
+export async function run(phase:string,runId:string,ids:string[],models:{model:string;skimModel:string;reviewModel:string;questionModel:string;limit:number;ledger:string}){
   if(phase!=='pilot'||!/^[a-z0-9-]+$/.test(runId))throw new Error('Only the current pilot and a unique safe run ID are supported.');
   const corpus=Corpus.parse(json('benchmark/corpus.json')),gold=validateGold(corpus),hash=codeHash();
   if(new Set(ids).size!==ids.length||ids.some(id=>!corpus.some(s=>s.id===id)))throw new Error('Unknown/duplicate document ID.');
@@ -136,8 +136,7 @@ export function responseUsage(raws:Array<Record<string,any>>,fallbackModel:strin
       let usage=routed?{promptTokenCount:routed.promptTokenCount,candidatesTokenCount:routed.candidatesTokenCount,totalTokenCount:routed.totalTokenCount,
         thoughtsTokenCount:routed.thinking_tokens,cachedContentTokenCount:routed.cached_tokens}:provider==='vertex'?{...vertexUsage(raw.usage),thoughtsTokenCount:null}:raw.usageMetadata;
       const cost=routed?routed.cost_usd:usageCost(model,provider==='vertex'?vertexUsage(raw.usage):usage);
-      const partialError=routed?.totalTokenCount===0&&raw.choices?.some((c:any)=>
-        (c.error||c.finish_reason==='error')&&typeof c.message?.content==='string'&&c.message.content.length>0);
+      const partialError=routed!==null&&unconfirmedPartialTokens(raw);
       // Partial text plus zero native counters does not prove zero tokens. Keep API cost but never estimate missing tokens.
       if(partialError)usage={promptTokenCount:null,candidatesTokenCount:null,totalTokenCount:null,thoughtsTokenCount:null,cachedContentTokenCount:null};
       return {model,provider,stage:raw._request_stage??null,usage,cost_usd:cost,output_includes_thinking:provider!=='gemini',

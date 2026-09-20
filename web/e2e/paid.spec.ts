@@ -9,7 +9,7 @@ import { toClientResult } from "../lib/server/runner.ts";
 import type { AnswerRecord } from "../lib/types.ts";
 
 // Explicit paid opt-in only. No mocks, E2E retries, parallel documents or regenerated benchmark runs.
-test("two PDFs: real upload -> source-linked questions -> immutable local answers", async ({ browser }, testInfo) => {
+test("two PDFs: member login -> real upload -> source-linked questions -> immutable database answers", async ({ browser }, testInfo) => {
   const root = resolve(process.cwd(), ".."), runId = process.env.PROOFOLIO_E2E_RUN!;
   const directory = join(root, "output/benchmark/runs", runId), ledger = join(root, "output/openrouter-budget.jsonl");
   const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
@@ -59,6 +59,9 @@ test("two PDFs: real upload -> source-linked questions -> immutable local answer
       page.on("console", m => { if (["warning", "error"].includes(m.type())) problems.push(m.text()); });
       try {
         expect(fingerprint()).toBe(hash);expect(snapshot().blocked).toBe(false);
+        const login=await context.request.post('http://127.0.0.1:3102/api/auth',{data:{action:'signin',
+          email:process.env.PROOFOLIO_E2E_EMAIL,password:process.env.PROOFOLIO_E2E_PASSWORD}});
+        expect(login.status(),'Confirmed test member login failed; no PDF was submitted.').toBe(200);
         await page.goto("http://127.0.0.1:3102/?seconds=120");
         await expect(page).toHaveTitle("Proofolio");await expect(page).toHaveURL("http://127.0.0.1:3102/?seconds=120");
         await expect(page.getByRole("heading", { name: "어떤 직무로 검증받을까요?" })).toBeVisible();
@@ -77,8 +80,8 @@ test("two PDFs: real upload -> source-linked questions -> immutable local answer
         const raw = json(join(root, "output/web/runs", webRunId!, "result.json")), client = toClientResult(raw);
         expect(client.maxQuestions).toBe(10);expect(client.questions.length).toBeGreaterThan(0);
         await expect(page.getByRole("heading", { name: `질문 ${client.questions.length}개, 각 120초예요` })).toBeVisible();
-        if (client.status === "needs_review" || client.questions.length < 10)
-          await expect(page.getByText(`목표 10개 / 생성 ${client.questions.length}개 · 부분 결과`, { exact: true })).toBeVisible();
+        if (client.status === "needs_review" || client.questions.length < 6)
+          await expect(page.getByText(`목표 6~10개 / 생성 ${client.questions.length}개 · ${client.questions.length<6?'부분 결과':'검토 권장'}`, { exact: true })).toBeVisible();
         await page.screenshot({ path: testInfo.outputPath(doc.id + "-ready.png"), fullPage: true, animations: "disabled" });
         await page.getByRole("button", { name: "준비 완료", exact: true }).click();
         const answers: AnswerRecord[] = [];
@@ -95,12 +98,13 @@ test("two PDFs: real upload -> source-linked questions -> immutable local answer
           await page.getByRole("button", { name: i === client.questions.length - 1 ? "제출하고 완료" : "제출하고 다음", exact: true }).click();
         }
         await expect(page.getByRole("heading", { name: "저장 완료", exact: true })).toBeVisible();
-        const saved = json(join(root, "output/web/runs", webRunId!, "answers.json"));
+        const savedResponse=await context.request.get(`http://127.0.0.1:3102/api/analyze/${webRunId}`);
+        expect(savedResponse.status()).toBe(200);const saved=await savedResponse.json();
         expect(saved.answers.map(({ seconds, ...a }: AnswerRecord) => a)).toEqual(answers.map(({ seconds, ...a }) => a));
         expect(saved.answers.every((a: AnswerRecord) => Number.isSafeInteger(a.seconds) && a.seconds >= 0)).toBe(true);
-        expect((await context.request.post(`http://127.0.0.1:3102/api/analyze/${webRunId}/answers`, { data: { answers: saved.answers } })).status()).toBe(200);
+        expect((await context.request.patch(`http://127.0.0.1:3102/api/analyze/${webRunId}/answers`, { data: saved.answers[0] })).status()).toBe(200);
         expect((await context.request.post(`http://127.0.0.1:3102/api/analyze/${webRunId}/answers`, { data: { answers: [...saved.answers, saved.answers[0]] } })).status()).toBe(400);
-        expect(json(join(root, "output/web/runs", webRunId!, "answers.json"))).toEqual(saved);
+        expect((await (await context.request.get(`http://127.0.0.1:3102/api/analyze/${webRunId}`)).json()).answers).toEqual(saved.answers);
         await page.screenshot({ path: testInfo.outputPath(doc.id + "-saved.png"), fullPage: true, animations: "disabled" });
         expect(problems).toEqual([]);await expect(page.locator("nextjs-portal")).toHaveCount(0);
         fresh(join(dir, "completion.json"), { status: "completed", elapsed_ms: Date.now() - start, webRunId, budget: snapshot(),

@@ -8,6 +8,7 @@ export type AnalyzedSummary = {
 };
 
 type Props = {
+  demo?: boolean;
   stage: number;
   summary: AnalyzedSummary;
   error: string | null;
@@ -21,10 +22,10 @@ const SKELETON_WIDTHS: Array<[string, string, string]> = [
   ["45%", "75%", "65%"],
 ];
 
-export function AnalyzingScreen({ stage, summary, error, onRetry }: Props) {
+export function AnalyzingScreen({ stage, summary, error, onRetry, demo=false }: Props) {
   const analyzed = stage >= STAGE_LABELS.length && !error;
-  const title = error ? "분석을 완료하지 못했어요" : analyzed ? "분석이 끝났어요" : "포트폴리오를 읽고 있어요";
-  const subtitle = error ? "아래 안내를 확인하고 다시 시도해주세요" : analyzed ? "곧 준비 화면으로 넘어가요" : "잠시만 기다려주세요. 보통 2~3분 정도 걸려요";
+  const title = error ? "분석을 완료하지 못했어요" : demo ? '저장된 예제를 불러오고 있어요' : analyzed ? "분석이 끝났어요" : "포트폴리오를 읽고 있어요";
+  const subtitle = error ? "아래 안내를 확인하고 다시 시도해주세요" : demo ? '기존 생성 결과예요. 새 분석이나 모델 호출을 하지 않아요.' : analyzed ? "곧 준비 화면으로 넘어가요" : "예상 소요 시간 약 8분 · 문서에 따라 더 걸릴 수 있어요";
   return (
     <div className="screen">
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -63,7 +64,7 @@ export function AnalyzingScreen({ stage, summary, error, onRetry }: Props) {
             <div className="error-box" role="alert">{error}</div>
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <button type="button" className="btn-secondary focus-ring" onClick={onRetry}>
-                업로드로 돌아가기
+                다시 확인
               </button>
             </div>
           </>

@@ -5,9 +5,9 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {PDFDocument,PDFName,rgb,degrees,StandardFonts} from 'pdf-lib';
 import {loadImage,createCanvas} from '@napi-rs/canvas';
-import {analyzePdf,validateMap,selectPages,validateReviews,localEvidenceChecks} from '../src/pipeline.ts';
+import {analyzePdf,validateMap,selectPages,validateReviews,validateExtraction,extractionDetailRegions,localEvidenceChecks} from '../src/pipeline.ts';
 import * as S from '../src/schema.ts';
-import {readPdf,slicePdf,openRenderer,renderPage,renderPng,savePreviews,textSpans,quoteLocationCheck} from '../src/pdf.ts';
+import {readPdf,slicePdf,openRenderer,renderPage,renderPng,savePreviews,textSpans,quoteLocationCheck,textCropTouchesEdge} from '../src/pdf.ts';
 import {SchemaValidationError} from '../src/llm.ts';
 import type {Generate,ModelRequest} from '../src/llm.ts';
 import {runCli,loadEnv} from '../src/cli.ts';
@@ -49,7 +49,7 @@ export function fake(track:S.Track,options:{map?:S.DocumentMap;statuses?:S.Revie
       const status=(options.statuses??['supported','unsupported'])[reviewIndex++]??'supported';raw={reviews:candidates.map((e:any)=>({
         evidence_id:e.evidence_id,status,reason:'가짜 계약 응답; 시각 품질 평가가 아님',anchor_checks:e.anchors.map((a:any,i:number)=>({anchor_index:i+1,status,reason:'fixture',reading_excerpt:a.quote??a.visual_description})),document_support:{status:status==='supported'?'needs_explanation':'not_assessed',reason:'추가 설명',anchor_indices:[]}}))};
     }else if(request.kind==='QuestionSet'){const source=JSON.parse(request.prompt.split('근거 데이터:\n')[1].split('\n')[0])[0];raw={questions:[{evidence_id:source.id,
-      anchor_indices:[1],angle:'ownership',question:'이 자료에 참여했다면 담당한 범위를 설명해 주세요.',intent:'자료와 참여 관계 확인',listen_for:['참여 여부와 담당 범위']}]};
+      anchor_indices:[1],angle:'ownership',question:'이 자료에 참여했다면 담당한 범위를 설명해 주세요.',intent:'자료와 참여 관계 확인',listen_for:['이 자료에 참여했다면 담당한 범위를 설명해 주세요.']}]};
       if(['claude-opus-5','anthropic/claude-opus-5'].includes(request.model)){assert.equal(request.images,undefined);assert.match(request.prompt,/JSON만 제공/);}
       else assert.ok(request.images?.length,'Gemini question writer receives original context images');
     }else if(request.kind==='QuestionReviews'){const rows=JSON.parse(request.prompt.split('\n').find(s=>s.startsWith('[{'))!);
@@ -63,12 +63,53 @@ export function fake(track:S.Track,options:{map?:S.DocumentMap;statuses?:S.Revie
           question_ids:rows.filter((r:any)=>r.selected_target_hypothesis?.id===p.id).map((r:any)=>r.question_id)}]}))};}
     else throw new Error('Unknown fake request');
     const result:any=options.transform?options.transform(request,raw):raw;
-    if(request.kind.endsWith('Extraction')){extracted.length=0;extracted.push(...result.evidence);}
+    if(request.kind.endsWith('Extraction')){extracted.length=0;extracted.push(...result.evidence);
+      const context=JSON.parse(request.prompt.split('대상 프로젝트 데이터: ')[1].split('\n')[0]);
+      result.point_checks??=context.focus_targets_local_pages.map((p:{id:string})=>{const indices=result.evidence.flatMap((e:S.Evidence,i:number)=>e.focus_target_id===p.id?[i+1]:[]);
+        return {focus_target_id:p.id,status:indices.length?'extracted':'no_relevant_source',evidence_indices:indices,reason:'synthetic fixture; not model quality'};});
+    }
     return result;
   };return {generate,calls};
 }
 const run=async(track:S.Track='design',options:Parameters<typeof fake>[1]={},overrides:Partial<Parameters<typeof analyzePdf>[1]>={})=>{
   const f=fake(track,options);return {result:await analyzePdf(await pdfBytes(options.map?.pages.length??3),{track,model:'gemini-test',generate:f.generate,...overrides}),calls:f.calls};};
+
+test('v0.17 extraction accounts for every point without inventing evidence for empty or unreadable work',()=>{
+  const points=[{...point('a',1,'decision'),id:'t1'},{...point('a',2,'artifact'),id:'t2'}];
+  const row={evidence:[{...item('design'),focus_target_id:'t1'}],point_checks:[
+    {focus_target_id:'t1',status:'extracted' as const,evidence_indices:[1],reason:'fixture'},
+    {focus_target_id:'t2',status:'unreadable' as const,evidence_indices:[],reason:'crop unreadable'}]};
+  assert.doesNotThrow(()=>validateExtraction(row,points));
+  assert.throws(()=>validateExtraction({...row,point_checks:undefined},points),/ID/);
+  for(const change of [{focus_target_id:'wrong'},{evidence_indices:[1]},{status:'extracted' as const}])
+    assert.throws(()=>validateExtraction({...row,point_checks:[row.point_checks[0],{...row.point_checks[1],...change}]},points));
+  assert.throws(()=>validateExtraction({...row,point_checks:[row.point_checks[0],row.point_checks[0]]},points),/ID/);
+  const requires=[{...points[0],required_context_pages:[3]},points[1]];
+  assert.throws(()=>validateExtraction(row,requires),/required_context_pages=3/);
+  const linked=structuredClone(row);linked.evidence[0].anchors.push({...anchor(),page:3,purpose:'context'});
+  assert.doesNotThrow(()=>validateExtraction(linked,requires));
+});
+test('v0.17 extraction detail images are bounded original crops, including partial-text artwork',()=>{
+  const inv=inventory(),base=inv.regions[0];inv.regions=[
+    {...base,key:'r1',kind:'text_block'}, {...base,key:'r2',kind:'ad_creative',readability:'partial',box:[0,0,100,100]},
+    {...base,key:'r3',kind:'chart',box:[100,100,300,300]}, {...base,key:'r4',kind:'photograph',box:[0,0,800,800]},
+    {...base,key:'r5',kind:'ui_screen',identification:'uncertain'}];
+  const original=structuredClone(inv),points=[{...point('a',7,'measurement'),id:'t1'}];
+  const rows=extractionDetailRegions(points,new Map([[7,inv],[8,inventory()]]));
+  assert.deepEqual(rows.map(r=>[r.page,r.region.key]),[[7,'r3'],[7,'r4']]);assert.deepEqual(inv,original);
+  const partial=extractionDetailRegions(points,new Map([[7,{...inv,regions:[inv.regions[1]]}]]));
+  assert.equal(partial[0].region.readability,'partial');assert.deepEqual(partial[0].region.box,[0,0,100,100]);
+});
+test('v0.17.1 flat text crops with boundary ink are deferred without moving their boxes',async()=>{
+  const canvas=createCanvas(120,50),ctx=canvas.getContext('2d');
+  ctx.fillStyle='#dedede';ctx.fillRect(0,0,120,50);ctx.fillStyle='black';ctx.fillRect(10,10,80,15);
+  assert.equal(await textCropTouchesEdge(canvas.toBuffer('image/png')),false);
+  ctx.fillRect(118,10,2,12);assert.equal(await textCropTouchesEdge(canvas.toBuffer('image/png')),true);
+  ctx.fillStyle='#101010';ctx.fillRect(0,0,120,50);ctx.fillStyle='white';ctx.fillRect(0,10,10,15);
+  assert.equal(await textCropTouchesEdge(canvas.toBuffer('image/png')),true);
+  ctx.fillStyle='red';ctx.fillRect(0,0,4,4);
+  assert.equal(await textCropTouchesEdge(canvas.toBuffer('image/png')),false,'nonuniform corners are outside this heuristic, not certified clean');
+});
 
 test('parallel skim preserves the first API error after later queued calls fail and sends no new work',async()=>{
   const first=new Error('HTTP 404: original routing failure');let calls=0,finished=0;
@@ -218,7 +259,22 @@ test('23 only schema failures retry once and failure events never complete',asyn
   for(const error of [new SchemaValidationError('again'),new Error('HTTP 429')]){let calls=0;await assert.rejects(analyzePdf(await pdfBytes(),{track:'design',model:'gemini-test',onEvent:e=>events.push(e),generate:async()=>{calls++;throw error;}}));assert.equal(calls,error instanceof SchemaValidationError?2:1);}
   assert.ok(events.every(e=>e.type!=='complete'));});
 test('24 review rules get the same single bounded retry',async()=>{let n=0;const {result}=await run('design',{statuses:['supported','supported','unsupported'],transform:(q,r)=>{
-  if(q.kind==='Reviews'&&n++===0)r.reviews[0].document_support={status:'documented',reason:'bad',anchor_indices:[1]};return r;}});assert.equal(result.metrics.model_calls,13);});
+  if(q.kind==='Reviews'&&n++===0)r.reviews[0].document_support={status:'conflicting',reason:'bad',anchor_indices:[1]};return r;}});assert.equal(result.metrics.model_calls,13);});
+test('claim-only support is conservatively downgraded without weakening source checks',async()=>{
+  const {result,calls}=await run('design',{statuses:['supported','supported'],transform:(q,r)=>{
+    if(q.kind==='Reviews')for(const review of r.reviews)review.document_support={status:'documented',reason:'overstated claim',anchor_indices:[1]};return r;
+  }});
+  assert.equal(calls.filter(c=>c.kind==='Reviews').length,2,'no paid retry to restate an obvious evidence boundary');
+  for(const e of result.evidence){assert.equal(e.question_eligible,true);assert.equal(e.document_support.status,'needs_explanation');
+    assert.match(e.document_support.reason,/claim_only_support_downgraded/);assert.equal(e.source_check.status,'supported');}
+  assert.ok(calls.filter(c=>c.kind==='VisualInventory').every(c=>c.thinkingLevel==='HIGH'));
+});
+test('claim-only downgrade cannot repair invalid references or unsupported source status',async()=>{
+  for(const invalid of ['reference','source'])await assert.rejects(run('design',{statuses:['supported','supported'],transform:(q,r)=>{
+    if(q.kind==='Reviews'){r.reviews[0].document_support={status:'documented',reason:'invalid',anchor_indices:[invalid==='reference'?99:1]};
+      if(invalid==='source')r.reviews[0].status='unsupported';}return r;
+  }}),SchemaValidationError);
+});
 test('25 artifact usage cannot infer collaboration',()=>{const e={...item('design'),category:'artifact',basis:'visual_observation',details:details('design','artifact'),anchors:[{...anchor(),quote:'Application 활용'}]};
   e.details[3]={field:'stated_usage',value:'Application 활용',anchor_indices:[1]};assert.equal(S.DesignEvidence.safeParse(e).success,true);
   e.details[3].value='Application 활용 (아티스트 협업 프로젝트)';assert.equal(S.DesignEvidence.safeParse(e).success,false);});
@@ -226,8 +282,15 @@ test('regression: numeral subject target actual percentage-point and ROI substit
   for(const change of [{reported_value:'300%p'},{name:'ROI'},{result_type:'reported_actual'}]){const m=item('marketing') as S.Evidence&{metric:zMetric};Object.assign(m.metric,change);assert.ok(localEvidenceChecks(m).length>0);}
   const q={evidence_id:'e',question:'전환율 300%p를 달성한 방법은?',intent:'확인',listen_for:['실적']};assert.ok(questionErrors(q,undefined,new Set()).includes('numeric_premise_requires_source_quote'));});
 type zMetric={name:string;reported_value:string;result_type:string};
-test('regression: source summaries and skim hypotheses are not question inputs',async()=>{const {calls}=await run();const data=JSON.parse(calls.find(c=>c.kind==='QuestionSet')!.prompt.split('근거 데이터:\n')[1]);
-  assert.ok(data.every((e:any)=>!('statement'in e)&&!('source_check'in e)&&!('question_focus'in e)));});
+test('regression: source summaries and skim hypotheses are not question inputs',async()=>{
+  const map=mapped();map.focus_targets[0].topic='UNVERIFIED_SCAN_HYPOTHESIS';
+  const {calls}=await run('design',{map});const writing=calls.filter(c=>c.kind==='QuestionSet');
+  const data=JSON.parse(writing[0].prompt.split('근거 데이터:\n')[1]);
+  assert.ok(data.every((e:any)=>!('statement'in e)&&!('source_check'in e)&&!('question_focus'in e)));
+  assert.ok(writing.every(c=>!c.prompt.includes('UNVERIFIED_SCAN_HYPOTHESIS')));
+  assert.equal(data[0].focus_intent,'contribution');
+  assert.ok(calls.some(c=>c.kind==='QuestionReviews'&&c.prompt.includes('UNVERIFIED_SCAN_HYPOTHESIS')),'original topic still governs coverage, not writer facts');
+});
 test('regression: unsupported semantic question review excludes final question',async()=>{const {result}=await run('design',{transform:(q,r)=>{if(q.kind==='QuestionReviews')r.reviews[0].status='unsupported';return r;}});assert.equal(result.questions.length,0);assert.equal(result.status,'insufficient_evidence');assert.ok(result.quality.coverage.every(c=>!c.complete));});
 
 test('v0.14 linked crops only; missing, uncertain or body-outside-title anchors cannot pass',async()=>{
@@ -242,7 +305,7 @@ test('v0.14 linked crops only; missing, uncertain or body-outside-title anchors 
     assert.equal(calls.some(c=>c.kind==='QuestionSet'),false);
   }
   const {result}=await run();
-  assert.equal(result.schema_version,'0.16');assert.equal(result.max_questions,10);
+  assert.equal(result.schema_version,'0.17');assert.equal(result.max_questions,10);
   assert.ok(result.evidence[0].local_checks.includes('text_layer:unavailable'));
   assert.equal(result.evidence[0].question_eligible,true,'missing text layer is not absent image text');
 });
@@ -280,6 +343,18 @@ test('v0.16 source approval needs its own independent crop excerpt, not another 
     }});
     assert.ok(result.evidence.every(e=>!e.question_eligible),mode);assert.equal(result.questions.length,0,mode);
   }
+});
+test('v0.17.1 source comparison aligns layout whitespace only and never rewrites stored quotes',async()=>{
+  const {result,calls}=await run('design',{statuses:['supported','supported'],transform:(q,r)=>{
+    if(q.kind==='CropReadings')for(const c of r.regions)c.text=c.text?.replace('디자인 담당','디자인\n담당');
+    return r;
+  }});
+  assert.ok(result.evidence.every(e=>e.question_eligible));
+  assert.ok(result.evidence.every(e=>e.anchors[0].quote==='디자인 담당'));
+  const candidates=JSON.parse(calls.find(c=>c.kind==='Reviews')!.prompt.split('근거 후보 데이터:\n')[1]);
+  assert.equal(candidates[0].anchors[0].quote,'디자인\n담당');
+  assert.equal(candidates[0].details[0].value,'디자인\n담당');
+  assert.equal(result.evidence[0].source_check.anchor_checks![0].reading_excerpt,'디자인\n담당');
 });
 test('v0.16 crop IDs fail closed after one format retry',async()=>{
   for(const mode of ['missing','duplicate','unknown'])await assert.rejects(run('design',{transform:(q,r)=>{

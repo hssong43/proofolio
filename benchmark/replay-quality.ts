@@ -7,7 +7,7 @@ import {Budget,freshMetrics} from '../src/llm.ts';
 import {OPENROUTER_MODELS,openRouterSession} from '../src/openrouter.ts';
 import {sha256,verifyEvidenceCrops,localEvidenceChecks,type AnalysisResult} from '../src/pipeline.ts';
 import {modelRequest,generateQuestions,questionQuality,interviewGuide} from '../src/questions.ts';
-import {openRenderer,renderPage} from '../src/pdf.ts';
+import {openRenderer,renderPage,textCropTouchesEdge} from '../src/pdf.ts';
 import {codeHash} from '../src/benchmark.ts';
 import type {CropReading,ResolvedEvidence} from '../src/schema.ts';
 
@@ -21,7 +21,7 @@ if(!Number.isSafeInteger(questionMaxOutputTokens)||questionMaxOutputTokens<1||qu
 const config=executionBudget(process.cwd(),process.env,{limit:v['max-cost-usd']}),baseline=readFileSync(resolve(v.input));
 const prior=JSON.parse(baseline.toString()) as AnalysisResult,bytes=readFileSync(`output/benchmark/sources/${v.id}/source.pdf`);
 if(sha256(bytes)!==prior.document.sha256||prior.track!==(v.id==='d-shuu'?'design':'marketing'))throw new Error('Source/track mismatch.');
-if(v.stage==='questions'&&(prior.schema_version!=='0.16'||prior.evidence.some(e=>e.question_eligible&&
+if(v.stage==='questions'&&(!['0.16','0.17'].includes(prior.schema_version)||prior.evidence.some(e=>e.question_eligible&&
   (e.source_check.method!=='blind_crop_reading_then_source_comparison'||e.anchors.some(a=>!a.crop_reading)))))
   throw new Error('Question replay requires new blind-source checks, not a relabelled legacy result.');
 const directory=resolve('output/benchmark/quality-replays',v.run);mkdirSync(resolve(directory,'..'),{recursive:true,mode:0o700});
@@ -48,12 +48,16 @@ try{
     const png=(await renderPage(renderer!,a.page,a.box)).toBuffer('image/png');return png;
   };
   let evidence=structuredClone(prior.evidence),questions:AnalysisResult['questions']=[],question_checks:AnalysisResult['question_checks']=[],coverage:Parameters<typeof questionQuality>[2]=[];
+  // Replays may narrow old eligibility with current free guards, never retroactively certify old source checks.
+  for(const e of evidence.filter(e=>e.question_eligible)){
+    const issues=localEvidenceChecks(e);
+    for(const a of e.anchors)if(a.quote&&prior.visual_inventory.find(p=>p.page===a.page)?.regions.find(r=>r.key===a.region_key)?.kind==='text_block'&&
+      await textCropTouchesEdge(await crop(a)))issues.push('potential_text_crop_clipping');
+    if(issues.length){e.question_eligible=false;e.local_checks.push(...issues);e.source_check={status:'unsupported',reason:issues.join('; '),method:'current_local_checks'};}
+  }
   if(v.stage==='sources'){
     const candidates=evidence.filter(e=>e.question_eligible),readings=new Map<string,CropReading>();
-    // Preserve every excluded candidate and its reason. Never relabel an old failed source as passed.
-    for(const e of candidates){const issues=localEvidenceChecks(e);if(issues.length){e.question_eligible=false;e.local_checks.push(...issues);
-      e.source_check={status:'unsupported',reason:issues.join('; '),method:'current_local_checks'};}}
-    const valid=candidates.filter(e=>e.question_eligible);
+    const valid=candidates;
     for(let start=0;start<valid.length;start+=4){
       const batch=valid.slice(start,start+4),images:Array<[string,Uint8Array]>=[],seen=new Set<string>();
       for(const e of batch)for(const a of e.anchors)if(!seen.has(a.region_id)){
@@ -81,7 +85,7 @@ try{
   }
   stats.total_ms=Math.round(performance.now()-started);
   const quality=questionQuality(questions,prior.analysis_plan.selected_points.map(p=>p.id),coverage);
-  const result={...prior,schema_version:'0.16',created_at:new Date().toISOString(),evidence,questions,question_checks,quality,
+  const result={...prior,schema_version:'0.17',created_at:new Date().toISOString(),evidence,questions,question_checks,quality,
     status:questions.length?(quality.status==='ready'?'evidence_ready':'needs_review'):'insufficient_evidence',
     question_evidence_ids:evidence.filter(e=>e.question_eligible).map(e=>e.id),question_target:{requested:10,generated:questions.length,shortfall:10-questions.length},
     metrics:stats,replay:{stage:v.stage,source_result_sha256:sha256(baseline),source_extraction_frozen:true,full_pipeline_tested:false}};
