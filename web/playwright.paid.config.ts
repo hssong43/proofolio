@@ -20,7 +20,7 @@ export default defineConfig({
   webServer: {
     command: "npm run build && npm run start -- --port 3102", url: "http://127.0.0.1:3102",
     reuseExistingServer: false, timeout: 120_000,
-    env: { PROOFOLIO_E2E: '1', PROOFOLIO_APP_URL: 'http://127.0.0.1:3102',
+    env: { PROOFOLIO_E2E: '1', PROOFOLIO_CONTEST_MODE:'0', PROOFOLIO_APP_URL: 'http://127.0.0.1:3102',
       PROOFOLIO_MAX_COST_USD: "10", PROOFOLIO_BUDGET_LEDGER: "output/openrouter-budget.jsonl",
       OPENROUTER_MODEL: OPENROUTER_MODELS.vision, OPENROUTER_SKIM_MODEL: OPENROUTER_MODELS.skim,
       OPENROUTER_REVIEW_MODEL: OPENROUTER_MODELS.vision, OPENROUTER_QUESTION_MODEL: OPENROUTER_MODELS.questions },

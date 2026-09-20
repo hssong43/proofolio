@@ -7,6 +7,7 @@ import {sessionUser, sessionCookie, SESSION_COOKIE} from '../web/lib/server/sess
 import {publicStatus, storageMode, syncRun, syncAnswers, type StoredRun} from '../web/lib/server/database.ts';
 import {ROOT, ownedStatus, saveAnswers} from '../web/lib/server/runner.ts';
 import {cleanupExpiredRuns} from '../web/lib/server/retention.ts';
+process.env.PROOFOLIO_CONTEST_MODE='0'; // Keep member/legacy retention regression independent of the contest edition.
 
 test('guest identity: stable secret cookie, hashed user ID, secure flags, no public ownership fields', async()=>{
   const request = new Request('https://proofolio.example/api/analyze');
@@ -58,6 +59,7 @@ test('retention: protect examples; delete only expired owned files before guarde
       }
       if(url.pathname==='/rest/v1/rpc/proofolio_purge_recruiting'){calls.push('purge-recruiting');return Response.json(null);}
       assert.equal(url.pathname,'/rest/v1/rpc/proofolio_purge_run');
+      assert.equal(existsSync(dir),false); // Keep the DB retry marker until local deletion has succeeded.
       assert.equal(JSON.parse(init!.body as string).p_run_id,runId);calls.push('purge');return Response.json(null);
     };
     await assert.rejects(cleanupExpiredRuns(),/만료 파일 삭제 실패/);

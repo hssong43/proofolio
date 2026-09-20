@@ -1,5 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { cookies } from "next/headers.js";
 import { createHash } from "node:crypto";
 import { loadRuntimeEnv } from "../../../src/env.ts";
 import { ROOT, AnswerError } from "./runner.ts";

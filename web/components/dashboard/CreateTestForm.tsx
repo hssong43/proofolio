@@ -57,7 +57,6 @@ export function CreateTestForm({onCreated}:{onCreated:()=>void}) {
         <div className="field">
           <label className="field-label" htmlFor="test-count">목표 질문 수</label>
           <input id="test-count" type="number" min={6} max={10} step={1} className="text-input focus-ring" value={questionCount} onChange={(e) => setQuestionCount(e.target.value)} required />
-          <span className="field-hint">근거가 부족하면 적게 생성돼요. 자동 채점·합불 판정은 하지 않아요.</span>
         </div>
       </div>
       <div className="form-grid">

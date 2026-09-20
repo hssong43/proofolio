@@ -11,6 +11,7 @@
     "check:web": "npm --prefix web run check",
     "build:web": "npm --prefix web run build",
     "test:e2e": "npm --prefix web run test:e2e",
+    "test:e2e:contest": "PROOFOLIO_E2E_CONTEST=1 npm --prefix web run test:e2e",
     "test:e2e:paid": "npm --prefix web run test:e2e:paid",
     "check:openrouter": "node src/check-openrouter.ts",
     "analyze": "node src/cli.ts",

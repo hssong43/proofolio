@@ -3,14 +3,14 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { parseArgs, isDeepStrictEqual } from 'node:util';
-import { dbRequest, syncRun, type StoredRun } from '../web/lib/server/database.ts';
+import { dbRequest, syncRun, EXAMPLE_LIBRARY_OWNER, type StoredRun } from '../web/lib/server/database.ts';
 import { toClientResult } from '../web/lib/server/runner.ts';
 import { storageClient, PRIVATE_BUCKET, storeSources, storeCodeSources } from '../web/lib/server/assets.ts';
 
 const {values}=parseArgs({options:{'coding-result':{type:'string'},'coding-input':{type:'string'}}});
 const sha=(data:string|Uint8Array)=>createHash('sha256').update(data).digest('hex');
 const uuid=(value:string)=>{const hex=sha(value);return `${hex.slice(0,8)}-${hex.slice(8,12)}-4${hex.slice(13,16)}-8${hex.slice(17,20)}-${hex.slice(20,32)}`;};
-const owner=sha('proofolio:private-example-library:v1');
+const owner=EXAMPLE_LIBRARY_OWNER;
 const storage=storageClient().storage;
 await dbRequest('/rest/v1/proofolio_examples?select=slug&limit=0');
 const found=await storage.getBucket(PRIVATE_BUCKET);

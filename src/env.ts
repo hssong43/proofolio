@@ -6,7 +6,7 @@ import {parseEnv} from 'node:util';
 export function loadEnv(path:string,env:NodeJS.ProcessEnv=process.env) {
   if(!existsSync(path))return;
   for(const [i,line] of readFileSync(path,'utf8').replace(/^\uFEFF/,'').split(/\r?\n/).entries()){
-    const match=line.trim().match(/^(?:export\s+)?(OPENROUTER_API_KEY|OPENROUTER_MODEL|OPENROUTER_SKIM_MODEL|OPENROUTER_REVIEW_MODEL|OPENROUTER_QUESTION_MODEL|PROOFOLIO_MAX_COST_USD|PROOFOLIO_BUDGET_LEDGER|PROOFOLIO_STORAGE|PROOFOLIO_APP_URL|SUPABASE_URL|SUPABASE_PUBLISHABLE_KEY|SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY)\s*=\s*(.*)$/);if(!match)continue;
+    const match=line.trim().match(/^(?:export\s+)?(OPENROUTER_API_KEY|OPENROUTER_MODEL|OPENROUTER_SKIM_MODEL|OPENROUTER_REVIEW_MODEL|OPENROUTER_QUESTION_MODEL|PROOFOLIO_MAX_COST_USD|PROOFOLIO_BUDGET_LEDGER|PROOFOLIO_STORAGE|PROOFOLIO_APP_URL|PROOFOLIO_CONTEST_MODE|PROOFOLIO_CONTEST_CLOSED|PROOFOLIO_CONTEST_ENDS_AT|SUPABASE_URL|SUPABASE_PUBLISHABLE_KEY|SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY)\s*=\s*(.*)$/);if(!match)continue;
     const value=match[2];
     if(value.startsWith('"')&&!/^"[^"\r\n]*"\s*(?:#.*)?$/.test(value)
       ||value.startsWith("'")&&!/^'[^'\r\n]*'\s*(?:#.*)?$/.test(value)

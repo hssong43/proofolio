@@ -113,13 +113,13 @@ export function UploadScreen({ roleLabel, demo, coding=false, tab, file, link, c
               aria-label="포트폴리오 링크"
             />
             <div style={{ fontSize: 13, color: "#71717A" }}>
-              {coding ? 'README와 소스 최대 8개를 읽어요. 비공개 저장소·코드 실행·독립적인 질문 검수는 지원하지 않아요.' : '링크 분석은 준비 중이에요. 지금은 PDF 업로드만 분석할 수 있어요.'}
+              {coding ? 'README와 소스 최대 8개를 읽어요.' : '링크 분석은 준비 중이에요. 지금은 PDF 업로드만 분석할 수 있어요.'}
             </div>
           </div>
         )}
 
         {error && <div className="error-box" role="alert">{error}</div>}
-        <p className="screen-subtitle">질문 6~10개 목표 · 근거가 부족하면 더 적을 수 있어요 · 예상 약 8분</p>
+        <p className="screen-subtitle">예상 약 8분</p>
 
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <button type="button" className="btn-primary focus-ring" disabled={!canAnalyze || submitting} onClick={onAnalyze}>

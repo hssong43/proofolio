@@ -24,7 +24,7 @@ const SKELETON_WIDTHS: Array<[string, string, string]> = [
 
 export function AnalyzingScreen({ stage, summary, error, onRetry, demo=false }: Props) {
   const analyzed = stage >= STAGE_LABELS.length && !error;
-  const title = error ? "분석을 완료하지 못했어요" : demo ? '저장된 예제를 불러오고 있어요' : analyzed ? "분석이 끝났어요" : "포트폴리오를 읽고 있어요";
+  const title = error ? (demo ? '예제를 불러오지 못했어요' : "분석을 완료하지 못했어요") : demo ? '저장된 예제를 불러오고 있어요' : analyzed ? "분석이 끝났어요" : "포트폴리오를 읽고 있어요";
   const subtitle = error ? "아래 안내를 확인하고 다시 시도해주세요" : demo ? '기존 생성 결과예요. 새 분석이나 모델 호출을 하지 않아요.' : analyzed ? "곧 준비 화면으로 넘어가요" : "예상 소요 시간 약 8분 · 문서에 따라 더 걸릴 수 있어요";
   return (
     <div className="screen">
@@ -64,7 +64,7 @@ export function AnalyzingScreen({ stage, summary, error, onRetry, demo=false }: 
             <div className="error-box" role="alert">{error}</div>
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <button type="button" className="btn-secondary focus-ring" onClick={onRetry}>
-                다시 확인
+                {demo ? '예제 다시 불러오기' : '다시 확인'}
               </button>
             </div>
           </>

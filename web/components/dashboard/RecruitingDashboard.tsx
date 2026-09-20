@@ -45,8 +45,7 @@ export function RecruitingDashboard({testId,submissionId}:{testId?:string;submis
       <div className="dash-title-row"><div><h1 className="screen-title">{submissionId?'응시 결과':testId?'응시 현황':'채용 테스트'}</h1>
         <p className="screen-subtitle">내가 만든 테스트와 동의한 응시자의 질문·답변만 확인할 수 있어요.</p></div>
         <button className="btn-secondary" onClick={refresh} disabled={loading}>새로고침</button></div>
-      <p className="notice-box">실제 분석·답변 저장을 사용해요. 자동 평가 점수나 합불 판정은 제공하지 않아요.
-        응시 정보는 30일 보관하며, 원본 PDF·코드는 공유하지 않아요.</p>
+      <p className="notice-box">응시 정보는 30일 보관하며, 원본 PDF·코드는 공유하지 않아요.</p>
       {loading?<p role="status">불러오는 중…</p>:error?<div className="error-box" role="alert">{error}{' '}
         <Link href={'/login?next='+encodeURIComponent(path)}>이메일 로그인</Link></div>:submissionId&&detail?<>
         <section className="card" style={{padding:24}}>
@@ -73,8 +72,8 @@ export function RecruitingDashboard({testId,submissionId}:{testId?:string;submis
           <p>{formatDateTime(listing.test.startsAt)} ~ {formatDateTime(listing.test.endsAt)}</p>
           <StatusBadge status={listing.test.status}/>
         </section>
-        <div className="card stat-grid"><Stat label="응시자" value={String(listing.test.submissionCount)}/>
-          <Stat label="제출 완료" value={String(listing.test.completedCount)} bordered/><Stat label="자동 평가" value="미지원"/></div>
+        <div className="card form-grid" style={{padding:8}}><Stat label="응시자" value={String(listing.test.submissionCount)}/>
+          <Stat label="제출 완료" value={String(listing.test.completedCount)}/></div>
         <div className="card table-wrap">{listing.submissions.length?<table className="table">
           <thead><tr><th>이름</th><th>생년월일</th><th>연락처</th><th>상태</th><th>참여 시각</th><th>결과</th></tr></thead>
           <tbody>{listing.submissions.map(s=><tr key={s.id}><td>{s.candidate.name}</td><td>{s.candidate.birthDate}</td>

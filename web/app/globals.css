@@ -635,3 +635,23 @@ button {
 .dash-main { min-width: 0; }
 .dash-main .card { min-width: 0; }
 select.text-input { appearance: auto; }
+
+.applicant-table tbody tr[data-selected="true"] { background: #fafafa; }
+.applicant-table .btn-primary, .applicant-table .btn-secondary { padding: 8px 12px; min-height: 36px; height: auto; font-size: 13px; }
+.applicant-detail { display: flex; flex-direction: column; gap: 24px; scroll-margin-top: 88px; min-width: 0; }
+.applicant-detail h2 { margin: 0 0 8px; font-size: 24px; }
+.portfolio-pages { display: flex; flex-direction: column; gap: 20px; }
+.portfolio-page { margin: 0; overflow: hidden; }
+.portfolio-page figcaption { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 20px; border-bottom: 1px solid #e4e4e7; font-size: 14px; }
+.portfolio-page img { display: block; width: 100%; height: auto; }
+@media (max-width: 720px) {
+  .applicant-table, .applicant-table tbody { display: block; width: 100%; }
+  .applicant-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .applicant-table tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 20px; border-bottom: 1px solid #e4e4e7; }
+  .applicant-table tr:last-child { border-bottom: 0; }
+  .applicant-table td { padding: 0; border: 0; min-width: 0; white-space: normal; }
+  .applicant-table td:first-child { grid-column: 1 / -1; min-width: 0; max-width: none; }
+  .applicant-table td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 4px; color: #71717a; font-size: 12px; }
+  .applicant-table td:nth-child(4) { grid-column: 1 / -1; }
+  .applicant-table button { width: 100%; }
+}

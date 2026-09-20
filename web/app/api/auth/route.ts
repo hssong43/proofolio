@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import { authClient, currentUser, requireUser, appOrigin } from "@/lib/server/auth";
 import { sameOrigin } from "@/lib/server/runner";
 import { ensureMember } from "@/lib/server/database";
+import { contestSettings } from '@/lib/server/contest';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store" } });
 
 export async function GET() {
+  if (contestSettings().enabled) return json({ user: null, configured: true, contest: true });
   try {
     const user = await currentUser();
     if (user) await ensureMember(user.id, user.authId);
@@ -15,6 +17,7 @@ export async function GET() {
   } catch { return json({ user: null, configured: false }); }
 }
 export async function POST(request: Request) {
+  if (contestSettings().enabled) return json({ error: '대회 체험에는 회원가입이나 로그인이 필요 없어요.' }, 404);
   if (!sameOrigin(request)) return json({ error: "같은 사이트에서만 로그인할 수 있어요." }, 403);
   const text = await request.text();
   if (text.length > 4096) return json({ error: "요청이 너무 커요." }, 413);

@@ -14,8 +14,7 @@ export function CompleteScreen({ roleLabel, answeredCount, questionCount, elapse
         <h2 className="screen-title">{saveState === "saved" ? recruiting?"제출 완료":"저장 완료" : saveState === "saving" ? "저장 중" : saveState === "failed" ? "저장 실패" : "데모 완료"}</h2>
         <p className="screen-subtitle" style={{ lineHeight: 1.6 }}>
           답변 작성을 마쳤어요.
-          <br />
-          {recruiting?'동의한 테스트 담당자가 저장된 질문·답변을 확인해요. 자동 평가는 하지 않아요.':'기업 전송과 자동 평가는 아직 지원하지 않아요.'}
+          {recruiting && <><br />동의한 테스트 담당자가 저장된 질문·답변을 확인해요.</>}
         </p>
       </div>
       {saveError && <div className="error-box" role="alert" style={{ width: "100%" }}>{recruiting?'제출 확인에 실패했어요: ':'답변 저장에 실패했어요: '}{saveError}</div>}

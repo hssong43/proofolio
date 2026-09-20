@@ -21,7 +21,8 @@ test(`${track} ${count}: generated count, per-question ACK, save retry without a
     uploads++;expect(route.request().postData()).toContain('name="maxQuestions"\r\n\r\n10');
     expect(route.request().postData()).toContain(`name="track"\r\n\r\n${track}`);return route.fulfill({json:{runId}});
   });
-  await context.route(`**/api/analyze/${runId}`,route=>route.fulfill({json:{runId,track,state:++polls===1?'running':'complete',stage:1,result,answers}}));
+  await context.route(`**/api/analyze/${runId}`,route=>route.fulfill({json:{runId,track,state:++polls===1?'running':'complete',stage:1,result,answers,
+    storageError:count===2?'합성 원문 저장 경고':undefined}}));
   await context.route(`**/api/analyze/${runId}/answers`,async route=>{
     expect(route.request().method()).toBe('PATCH');const a=route.request().postDataJSON() as AnswerRecord;attempts.push(a);
     if(track==='marketing'&&attempts.length===1){await route.fulfill({status:503,json:{error:'합성 저장 실패'}});return;}
@@ -30,12 +31,16 @@ test(`${track} ${count}: generated count, per-question ACK, save retry without a
     await route.fulfill({json:{ok:true,saved:a.questionId,answers,storage:'supabase'}});
   });
   await page.goto('/');await expect(page).toHaveTitle('Proofolio');await expect(page).toHaveURL('http://127.0.0.1:3101/');
+  await expect(page.getByText(/근거에 따라 더 적을/)).toHaveCount(0);
   await page.getByRole('button',{name:role,exact:true}).click();await page.getByRole('button',{name:'다음',exact:true}).click();
   await expect(page.getByText(/예상 약 8분/)).toBeVisible();
+  await expect(page.getByText(/근거가 부족|검토|검수/)).toHaveCount(0);
   await page.locator('input[type=file]').setInputFiles(upload);await page.getByRole('button',{name:'AI 분석 시작',exact:true}).click();
   await expect(page.getByRole('heading',{name:`질문 ${count}개, 각 40초예요`})).toBeVisible();
   await expect(page.getByLabel(`생성된 질문 ${count}개 미리보기`).locator('div')).toHaveCount(count);
-  await expect(page.getByText(`목표 6~10개 / 생성 ${count}개 · ${count<6?'부분 결과':'검토 권장'}`,{exact:true})).toBeVisible();
+  await expect(page.getByText(/목표 6~10개 \/ 생성|검토 권장|부분 결과|포트폴리오 전체나 작성자의 진위|선정한 핵심 포인트/)).toHaveCount(0);
+  if(count===2)await expect(page.locator('.error-box[role=status]')).toHaveText('합성 원문 저장 경고');
+  if(count===7)await page.screenshot({path:testInfo.outputPath('ready.png'),fullPage:true,animations:'disabled'});
   await page.getByRole('button',{name:'준비 완료'}).click();
   for(const [i,q]of result.questions.entries()){
     await expect(page.getByText(`Q${i+1} / ${count}`,{exact:true})).toBeVisible();
@@ -52,6 +57,7 @@ test(`${track} ${count}: generated count, per-question ACK, save retry without a
     }
   }
   await expect(page.getByRole('heading',{name:'저장 완료',exact:true})).toBeVisible();
+  await expect(page.getByText(/자동 평가|합불|검토|검수/)).toHaveCount(0);
   await expect(page.getByText('답변을 Supabase에 저장했어요.',{exact:true})).toBeVisible();
   expect(answers.map(a=>a.answer)).toEqual(result.questions.map((_,i)=>`테스트 답변 ${i+1}`));expect(uploads).toBe(1);expect(polls).toBe(2);expect(problems).toEqual([]);
   await expect(page.locator('nextjs-portal [data-nextjs-dialog-overlay]')).toHaveCount(0);
@@ -60,16 +66,19 @@ test(`${track} ${count}: generated count, per-question ACK, save retry without a
 
 test('guest demo reads stored seven questions without upload, model call or answer write',async({page,context})=>{
   await context.route('**/api/auth',r=>r.fulfill({json:{user:null,configured:true}}));
-  await context.route('**/api/examples/design',r=>r.fulfill({json:{title:'기존 결과',notice:'기존 결과 재사용',result:fixture(7)}}));
+  await context.route('**/api/examples/design',r=>r.fulfill({json:{title:'기존 결과',notice:'검토 권장 항목이 남아 있어요.',result:fixture(7)}}));
   const unexpected:string[]=[];await context.route('**/api/analyze**',r=>{unexpected.push(r.request().url());return r.abort();});
   await page.goto('/?demo=1&questions=6');await page.getByRole('button',{name:'디자이너',exact:true}).click();await page.getByRole('button',{name:'다음',exact:true}).click();
   await expect(page.getByRole('heading',{name:'질문 7개, 각 40초예요'})).toBeVisible();
   await expect.poll(()=>page.evaluate(()=>scrollY)).toBe(0);
   await expect(page.getByText(/기존 생성 결과 7개를 체험해요/)).toBeVisible();
+  await expect(page.getByText(/검토 권장|선정한 핵심 포인트/)).toHaveCount(0);
   await page.getByRole('button',{name:'준비 완료'}).click();
   await expect.poll(()=>page.evaluate(()=>scrollY)).toBe(0);
   for(let i=0;i<7;i++)await page.getByRole('button',{name:i===6?'제출하고 완료':'제출하고 다음',exact:true}).click();
   await expect(page.getByRole('heading',{name:'데모 완료'})).toBeVisible();expect(unexpected).toEqual([]);
+  await expect(page.getByText(/자동 평가|합불|검토|검수/)).toHaveCount(0);
+  await expect(page.getByText('데모 답변은 서버에 저장하지 않아요.',{exact:true})).toBeVisible();
 });
 
 test('email dialog excludes Google, handles confirmation response and login',async({page,context},testInfo)=>{
@@ -104,6 +113,8 @@ test('coding UI accepts only repository input and displays code-linked stored qu
   await context.route('**/api/analyze/code',r=>{expect(r.request().postDataJSON()).toEqual({url:'https://github.com/owner/repo',maxQuestions:10});return r.fulfill({json:{runId}});});
   await context.route(`**/api/analyze/${runId}`,r=>r.fulfill({json:{runId,track:'coding',state:'complete',result,answers:[]}}));
   await page.goto('/');await page.getByRole('button',{name:'개발자',exact:true}).click();await page.getByRole('button',{name:'다음',exact:true}).click();
+  await expect(page.getByText('README와 소스 최대 8개를 읽어요.',{exact:true})).toBeVisible();
+  await expect(page.getByText(/검토|검수|근거가 부족/)).toHaveCount(0);
   await expect(page.locator('input[type=file]')).toHaveCount(0);await page.getByRole('textbox',{name:'포트폴리오 링크'}).fill('https://github.com/owner/repo');
   await page.getByRole('button',{name:'AI 분석 시작'}).click();await expect(page.getByRole('heading',{name:'질문 6개, 각 40초예요'})).toBeVisible();
 });

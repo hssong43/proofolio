@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { DEFAULT_MAX_QUESTIONS, startRun, sameOrigin } from "@/lib/server/runner";
 import type { Track } from "@/lib/types";
-import { requireUser } from "@/lib/server/auth";
-import { ensureMember } from "@/lib/server/database";
+import { runUser } from "@/lib/server/access";
+import { ensureMember } from '@/lib/server/database';
 import { AnswerError } from "@/lib/server/runner";
 import { MIN_TARGET_QUESTIONS } from "../../../../src/constants.ts";
 import { authorizeCandidateAnalysis } from '@/lib/server/recruiting';
@@ -30,10 +30,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `질문 수는 ${MIN_TARGET_QUESTIONS}~${DEFAULT_MAX_QUESTIONS}개예요.` }, { status: 400 });
   const maxQuestions = maxQuestionsRaw;
   try {
-    const user = await requireUser();
-    await ensureMember(user.id, user.authId);
-    if(form.has('submissionId'))await authorizeCandidateAnalysis(form.get('submissionId'),user.id,track,maxQuestions);
-    const status = await startRun({ bytes, fileName: file.name, track: track as Track, maxQuestions, userId: user.id, member: true });
+    const user = await runUser(request);
+    if(user.member)await ensureMember(user.id,user.authId);
+    if(form.has('submissionId')) {
+      if (!user.member) throw new AnswerError('대회 체험에서는 채용 응시 정보를 받지 않아요.', 403);
+      await authorizeCandidateAnalysis(form.get('submissionId'),user.id,track,maxQuestions);
+    }
+    const status = await startRun({ bytes, fileName: file.name, track: track as Track, maxQuestions, userId: user.id, member: user.member, guestExpiresAt: user.guestExpiresAt });
     return NextResponse.json({ runId: status.runId });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: e instanceof AnswerError ? e.status : 500 });

@@ -1,4 +1,5 @@
-import type { AnswerRecord, RunStatus } from "../types.ts";
+import type { AnswerRecord, ClientResult, RunStatus, Track } from "../types.ts";
+import { createHash } from "node:crypto";
 import { loadRuntimeEnv } from "../../../src/env.ts";
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
@@ -78,11 +79,25 @@ export async function databaseAnswers(runId: string): Promise<AnswerRecord[]> {
 export async function listRuns(userId: string) {
   return dbRequest(`/rest/v1/proofolio_runs?user_id=eq.${userId}&deleted_at=is.null&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=id,track,file_name,state,started_at,finished_at,generated_question_count,error&order=started_at.desc&limit=50`);
 }
-export async function example(slug: string) {
+export const EXAMPLE_LIBRARY_OWNER = createHash('sha256').update('proofolio:private-example-library:v1').digest('hex');
+export async function example(slug: string): Promise<{ slug: Track; title: string; source_run_id: string; result: ClientResult; notice: string }> {
   if (!['design','marketing','coding'].includes(slug)) throw new Error('지원하지 않는 예제예요.');
-  const rows = await dbRequest(`/rest/v1/proofolio_examples?slug=eq.${slug}&select=slug,title,result,notice&limit=1`);
+  const rows = await dbRequest(`/rest/v1/proofolio_examples?slug=eq.${slug}&select=slug,title,source_run_id,result,notice&limit=1`);
   if (!rows?.[0]) throw new Error('예제 데이터가 아직 준비되지 않았어요.');
   return rows[0];
+}
+
+// Public image access is limited to linked pages in the curated library, never visitor runs.
+export async function exampleImagePath(slug: string, page: number): Promise<string | null> {
+  if (!['design','marketing'].includes(slug) || !Number.isSafeInteger(page) || page < 1 || page > 60) return null;
+  const item = await example(slug);
+  if (!item.result.questions.some(q => q.pages.includes(page)) || !/^[a-f0-9-]{36}$/.test(item.source_run_id)) return null;
+  const rows = await dbRequest(`/rest/v1/proofolio_runs?id=eq.${item.source_run_id}&deleted_at=is.null&state=eq.complete&select=user_id,result&limit=1`);
+  const run = rows?.[0] as { user_id: string; result: ClientResult } | undefined;
+  if (run?.user_id !== EXAMPLE_LIBRARY_OWNER) return null;
+  const path = `${EXAMPLE_LIBRARY_OWNER}/${item.source_run_id}/page-${page}.png`;
+  const asset = run.result?.sourceAssets?.find(a => a.kind === 'page' && a.page === page && a.id === `page-${page}`);
+  return asset?.path === path ? path : null;
 }
 
 export async function syncAnswers(status: StoredRun, answers: AnswerRecord[]) {

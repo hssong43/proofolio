@@ -57,6 +57,8 @@ test('candidate: main analysis, canonical answers, reload, failed finalization a
   await expect(page.getByRole('button',{name:'홈으로',exact:true})).toBeDisabled();
   await page.getByRole('button',{name:'제출 확인 재시도'}).click();
   await expect(page.getByRole('heading',{name:'제출 완료',exact:true})).toBeVisible();
+  await expect(page.getByText(/자동 평가|합불|검토|검수/)).toHaveCount(0);
+  await expect(page.getByText(/동의한 테스트 담당자가 저장된 질문·답변을 확인해요/)).toBeVisible();
   expect(uploads).toBe(1);expect(finalizations).toBe(2);expect(links).toBe(2);
   expect(answers.map(a=>a.questionId)).toEqual(result.questions.map(q=>q.id));
   expect(problems).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
