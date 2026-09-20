@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { PDFDocument } from 'pdf-lib';
 import { runId, result } from './recruiting-fixtures';
 import type { AnswerRecord } from '../lib/types';
 
@@ -100,11 +101,15 @@ test('contest direct navigation blocks identity forms; failed example retries on
 
 test('contest applicant dashboard shows curated portfolios and authored answers, never real visitors',async({page,context},info)=>{
   const unexpected:string[]=[],errors:string[]=[];
+  const pdf=await PDFDocument.create();
+  for(let i=0;i<result.pageCount;i++)pdf.addPage([400,300]);
+  const pdfBytes=Buffer.from(await pdf.save());
   let failed=true;
   page.on('pageerror',e=>errors.push(e.message));
   page.on('console',m=>{if(['error','warning'].includes(m.type())&&!m.text().includes('503 (Service Unavailable)'))errors.push(m.text());});
   await context.route('**/api/**',r=>{
     const path=new URL(r.request().url()).pathname;
+    if(/^\/api\/examples\/(design|marketing)\/portfolio$/.test(path))return r.fulfill({contentType:'application/pdf',body:pdfBytes});
     if(/^\/api\/examples\/(design|marketing)\/image$/.test(path))return r.fulfill({contentType:'image/png',
       body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4l8AAAAASUVORK5CYII=','base64')});
     if(!/^\/api\/examples\/(design|marketing|coding)$/.test(path)){unexpected.push(path);return r.abort();}
@@ -112,9 +117,10 @@ test('contest applicant dashboard shows curated portfolios and authored answers,
     if(failed)return r.fulfill({status:503,json:{error:'합성 예제 연결 실패'}});
     const label=path.endsWith('design')?'디자인':path.endsWith('marketing')?'마케팅':'코딩';
     const count=label==='마케팅'?9:7;
-    const questions=Array.from({length:count},(_,i)=>({...result.questions[0],id:'q'+i,prompt:`${label} 질문 ${i+1}`}));
+    const questions=Array.from({length:count},(_,i)=>({...result.questions[0],id:'q'+i,prompt:`${label} 질문 ${i+1}`,pages:label==='코딩'?[]:[i%2+1]}));
     return r.fulfill({json:{title:label+' 저장 예제',notice:'검토 권장 항목이 남아 있어요.',result:{...result,
-      questions},images:label==='코딩'?[]:[{page:1,url:path+'/image?page=1'}],
+      questions},images:label==='코딩'?[]:[1,2].map(page=>({page,url:path+'/image?page='+page})),
+      portfolioUrl:label==='코딩'?null:path+'/portfolio',
       sampleAnswers:questions.map(q=>({questionId:q.id,answer:`${label} 합성 예시 답변 ${q.id}`}))}});
   });
   expect((await page.goto('/dashboard'))?.status()).toBe(200);
@@ -131,10 +137,35 @@ test('contest applicant dashboard shows curated portfolios and authored answers,
     await page.getByRole('button',{name:candidate+' 포트폴리오 보기'}).click();
     const detail=page.getByRole('region',{name:candidate+' 상세'});
     if(label==='코딩')await expect(detail.getByRole('link',{name:'GitHub 포트폴리오 열기'})).toHaveAttribute('href','https://github.com/hssong43/proofolio');
-    else {const img=detail.getByRole('img',{name:candidate+' 원본 포트폴리오 1페이지'});await expect(img).toBeVisible();await expect.poll(()=>img.evaluate(el=>(el as HTMLImageElement).naturalWidth)).toBe(1);}
+    else {
+      const portfolioPath='/api/examples/'+(label==='디자인'?'design':'marketing')+'/portfolio';
+      await expect(detail.getByText('전체 포트폴리오 · 6페이지',{exact:true})).toBeVisible();
+      await expect(detail.locator('object[type="application/pdf"]')).toHaveAttribute('data',portfolioPath+'?retry=0#view=FitH');
+      await expect(detail.getByRole('link',{name:'전체 PDF 새 탭으로 열기'})).toHaveAttribute('href',portfolioPath+'?retry=0');
+      await expect(detail.getByRole('img')).toHaveCount(0);
+      await detail.getByRole('button',{name:'PDF 다시 불러오기'}).click();
+      await expect(detail.locator('object')).toHaveAttribute('data',portfolioPath+'?retry=1#view=FitH');
+    }
     await detail.getByRole('button',{name:'질문·답변 보기',exact:true}).click();
     await expect(detail.locator('article')).toHaveCount(count);await expect(detail.getByRole('heading',{name:`1. ${label} 질문 1`,exact:true})).toBeVisible();
     await expect(detail.locator('.qa-answer').first()).toHaveText(label+' 합성 예시 답변 q0');
+    await expect(detail.locator('object')).toHaveCount(0);
+    await expect(detail.locator('blockquote, pre')).toHaveCount(0);
+    if(label==='코딩')await expect(detail.locator('.portfolio-thumbnail')).toHaveCount(0);
+    else {
+      for(let i=0;i<count;i++){
+        const card=detail.locator('article').nth(i),pageNumber=i%2+1;
+        await expect(card.getByRole('img')).toHaveCount(1);
+        await expect(card.getByRole('img')).toHaveAttribute('alt',`${candidate} 원본 포트폴리오 ${pageNumber}페이지`);
+        await expect(card.getByRole('link',{name:`${candidate} 포트폴리오 ${pageNumber}페이지 크게 보기`})).toHaveAttribute('href',new RegExp('/image\\?page='+pageNumber+'&retry=0$'));
+        expect(await card.evaluate(el=>{
+          const source=el.querySelector('.question-thumbnails')!,question=el.querySelector('h3')!,answer=el.querySelector('.qa-answer')!;
+          return !!(source.compareDocumentPosition(question)&Node.DOCUMENT_POSITION_FOLLOWING)&&!!(question.compareDocumentPosition(answer)&Node.DOCUMENT_POSITION_FOLLOWING);
+        })).toBe(true);
+      }
+      const firstImage=detail.locator('article').first().getByRole('img');
+      await expect(firstImage).toBeVisible();await expect.poll(()=>firstImage.evaluate(el=>(el as HTMLImageElement).naturalWidth)).toBe(1);
+    }
     await expect(detail.getByText(/실제 포트폴리오 작성자의 답변이 아니에요/)).toBeVisible();
     await detail.locator('summary').first().click();await expect(detail.locator('details[open]')).toHaveCount(1);
     await expect(page.getByText(/검토 권장|선정한 핵심 포인트/)).toHaveCount(0);

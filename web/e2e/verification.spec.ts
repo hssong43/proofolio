@@ -3,11 +3,20 @@ import type { AnswerRecord, ClientResult } from '../lib/types';
 
 const upload={name:'synthetic.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.7\nsynthetic UI fixture')};
 const runId='00000000-0000-4000-8000-000000000001';
+const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4l8AAAAASUVORK5CYII=','base64');
 const fixture=(count:number):ClientResult=>({status:'needs_review',qualityIssues:['selected_points_uncovered'],pageCount:10,
   projects:[{key:'p',title:'합성 테스트 프로젝트',pages:[1,2]}],evidenceCount:count,estimatedCostUsd:0,maxQuestions:10,
+  sourceAssets:[{id:'pdf',page:0,kind:'pdf'},...Array.from({length:count},(_,i)=>({id:`page-${i+1}`,page:i+1,kind:'page' as const}))],
   questions:Array.from({length:count},(_,i)=>({id:`q${i+1}`,prompt:`테스트 질문 ${i+1}: 이 작업에서 맡은 범위와 판단 근거를 설명해주세요.`,
     quotes:[`합성 원문 ${i+1}\n두 번째 줄`],notes:[],pages:[i+1],projectTitle:'합성 테스트 프로젝트',intent:'연결 검사',listenFor:[],answerTarget:'설명'}))});
 const member=(context:BrowserContext)=>context.route('**/api/auth',route=>route.fulfill({json:{user:{email:'synthetic@example.com',name:'테스트'},configured:true}}));
+test.beforeEach(async({context})=>{
+  await context.route(`**/api/analyze/${runId}/source?**`,r=>{
+    const url=new URL(r.request().url());expect(url.searchParams.get('view')).toBe('1');
+    expect(url.searchParams.get('asset')).toMatch(/^page-\d+$/);
+    return r.fulfill({contentType:'image/png',body:png});
+  });
+});
 
 for(const [role,track,count] of [['디자이너','design',10],['마케터','marketing',2],['디자이너','design',7],['마케터','marketing',9]] as const)
 test(`${track} ${count}: generated count, per-question ACK, save retry without analysis`,async({page,context},testInfo)=>{
@@ -44,7 +53,9 @@ test(`${track} ${count}: generated count, per-question ACK, save retry without a
   await page.getByRole('button',{name:'준비 완료'}).click();
   for(const [i,q]of result.questions.entries()){
     await expect(page.getByText(`Q${i+1} / ${count}`,{exact:true})).toBeVisible();
-    await expect(page.getByRole('heading',{name:q.prompt,exact:true})).toBeVisible();await expect(page.locator('blockquote')).toHaveText(q.quotes);
+    await expect(page.getByRole('heading',{name:q.prompt,exact:true})).toBeVisible();await expect(page.locator('blockquote, pre')).toHaveCount(0);
+    await expect(page.getByRole('img',{name:`질문 연결 원본 포트폴리오 ${i+1}페이지`})).toBeVisible();
+    await expect(page.getByText(q.quotes[0],{exact:true})).toHaveCount(0);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     if(i===0)await page.screenshot({path:testInfo.outputPath('question.png'),fullPage:true,animations:'disabled'});
     await page.getByRole('textbox',{name:'답변',exact:true}).fill(`테스트 답변 ${i+1}`);
@@ -66,7 +77,10 @@ test(`${track} ${count}: generated count, per-question ACK, save retry without a
 
 test('guest demo reads stored seven questions without upload, model call or answer write',async({page,context})=>{
   await context.route('**/api/auth',r=>r.fulfill({json:{user:null,configured:true}}));
-  await context.route('**/api/examples/design',r=>r.fulfill({json:{title:'기존 결과',notice:'검토 권장 항목이 남아 있어요.',result:fixture(7)}}));
+  const result=fixture(7);
+  await context.route('**/api/examples/design',r=>r.fulfill({json:{title:'기존 결과',notice:'검토 권장 항목이 남아 있어요.',result,
+    images:result.questions.map(q=>({page:q.pages[0],url:`/api/examples/design/image?page=${q.pages[0]}`})),portfolioUrl:'/api/examples/design/portfolio'}}));
+  await context.route('**/api/examples/design/image?**',r=>r.fulfill({contentType:'image/png',body:png}));
   const unexpected:string[]=[];await context.route('**/api/analyze**',r=>{unexpected.push(r.request().url());return r.abort();});
   await page.goto('/?demo=1&questions=6');await page.getByRole('button',{name:'디자이너',exact:true}).click();await page.getByRole('button',{name:'다음',exact:true}).click();
   await expect(page.getByRole('heading',{name:'질문 7개, 각 40초예요'})).toBeVisible();
@@ -75,7 +89,19 @@ test('guest demo reads stored seven questions without upload, model call or answ
   await expect(page.getByText(/검토 권장|선정한 핵심 포인트/)).toHaveCount(0);
   await page.getByRole('button',{name:'준비 완료'}).click();
   await expect.poll(()=>page.evaluate(()=>scrollY)).toBe(0);
-  for(let i=0;i<7;i++)await page.getByRole('button',{name:i===6?'제출하고 완료':'제출하고 다음',exact:true}).click();
+  for(let i=0;i<7;i++){
+    const image=page.getByRole('img',{name:`질문 연결 원본 포트폴리오 ${i+1}페이지`});
+    await expect(image).toBeVisible();await expect.poll(()=>image.evaluate(el=>(el as HTMLImageElement).naturalWidth)).toBe(1);
+    await expect(page.locator('.question-layout h3')).toHaveText(result.questions[i].prompt);
+    await expect(page.locator('blockquote, pre')).toHaveCount(0);
+    await expect(page.getByText(/예제 포트폴리오는/)).toHaveCount(0);
+    await expect(page.getByRole('link',{name:'전체 포트폴리오 보기 ↗'})).toHaveAttribute('href','/api/examples/design/portfolio');
+    expect(await page.locator('.question-layout').evaluate(el=>{
+      const source=el.querySelector('.question-originals')!,question=el.querySelector('h3')!,answer=el.querySelector('textarea')!;
+      return !!(source.compareDocumentPosition(question)&Node.DOCUMENT_POSITION_FOLLOWING)&&!!(question.compareDocumentPosition(answer)&Node.DOCUMENT_POSITION_FOLLOWING);
+    })).toBe(true);
+    await page.getByRole('button',{name:i===6?'제출하고 완료':'제출하고 다음',exact:true}).click();
+  }
   await expect(page.getByRole('heading',{name:'데모 완료'})).toBeVisible();expect(unexpected).toEqual([]);
   await expect(page.getByText(/자동 평가|합불|검토|검수/)).toHaveCount(0);
   await expect(page.getByText('데모 답변은 서버에 저장하지 않아요.',{exact:true})).toBeVisible();
@@ -108,8 +134,8 @@ test('server-confirmed answer and unsent draft resume after refresh',async({page
   await expect(page.getByText('Q2 / 6',{exact:true})).toBeVisible();await expect(page.getByRole('textbox',{name:'답변',exact:true})).toHaveValue('아직 제출하지 않은 초안');expect(answers).toHaveLength(1);
 });
 
-test('coding UI accepts only repository input and displays code-linked stored questions',async({page,context})=>{
-  await member(context);const result=fixture(6);for(const q of result.questions)q.pages=[];
+test('coding UI displays one stored question without its source-code evidence',async({page,context})=>{
+  await member(context);const result=fixture(6);for(const q of result.questions){q.pages=[];q.quotes=['export function syntheticEvidence() { return "private-source"; }'];q.notes=['내부 코드 추출 안내'];}
   await context.route('**/api/analyze/code',r=>{expect(r.request().postDataJSON()).toEqual({url:'https://github.com/owner/repo',maxQuestions:10});return r.fulfill({json:{runId}});});
   await context.route(`**/api/analyze/${runId}`,r=>r.fulfill({json:{runId,track:'coding',state:'complete',result,answers:[]}}));
   await page.goto('/');await page.getByRole('button',{name:'개발자',exact:true}).click();await page.getByRole('button',{name:'다음',exact:true}).click();
@@ -117,6 +143,11 @@ test('coding UI accepts only repository input and displays code-linked stored qu
   await expect(page.getByText(/검토|검수|근거가 부족/)).toHaveCount(0);
   await expect(page.locator('input[type=file]')).toHaveCount(0);await page.getByRole('textbox',{name:'포트폴리오 링크'}).fill('https://github.com/owner/repo');
   await page.getByRole('button',{name:'AI 분석 시작'}).click();await expect(page.getByRole('heading',{name:'질문 6개, 각 40초예요'})).toBeVisible();
+  await page.getByRole('button',{name:'준비 완료'}).click();
+  await expect(page.locator('.question-layout h3')).toHaveText(result.questions[0].prompt);
+  await expect(page.locator('blockquote, pre, .question-originals')).toHaveCount(0);
+  await expect(page.getByText(/syntheticEvidence|내부 코드 추출 안내/)).toHaveCount(0);
+  await expect(page.getByRole('textbox',{name:'답변',exact:true})).toBeVisible();
 });
 
 test('real APIs reject invalid input, cross-origin, anonymous and old guest access without models',async({request,context})=>{

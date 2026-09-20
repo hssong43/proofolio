@@ -59,7 +59,6 @@ export function RecruitingDashboard({testId,submissionId}:{testId?:string;submis
             const a=detail.run!.answers?.find(a=>a.questionId===q.id);
             return <article className="qa-item" key={q.id}><h2 className="qa-prompt">{i+1}. {q.prompt}</h2>
               <div className="qa-meta">{q.projectTitle}{q.pages.length?' · '+q.pages.join(', ')+'페이지':''}</div>
-              {q.quotes.map((quote,j)=><blockquote key={j}>{quote}</blockquote>)}
               <div className="qa-answer" data-empty={!a?.answer}>{a?.answer||'(미답변)'}</div>
               <div className="qa-meta">{a?'답변 시간 '+a.seconds+'초':'저장된 답변 없음'}</div>
               <details><summary>질문 의도와 확인 사항</summary><p>{q.intent}</p><ul>{q.listenFor.map((v,j)=><li key={j}>{v}</li>)}</ul></details>

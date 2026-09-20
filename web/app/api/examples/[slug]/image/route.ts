@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { exampleImagePath } from '@/lib/server/database';
+import { exampleAssetPath } from '@/lib/server/database';
 import { storageClient, PRIVATE_BUCKET } from '@/lib/server/assets';
 import { contestSettings } from '@/lib/server/contest';
 
@@ -13,7 +13,7 @@ export async function GET(request: Request, context: { params: Promise<{ slug: s
   if (!['design', 'marketing'].includes(slug) || !/^[1-9]\d?$/.test(value))
     return NextResponse.json({ error: '예제 이미지를 찾을 수 없어요.' }, { status: 404, headers });
   try {
-    const path = await exampleImagePath(slug, Number(value));
+    const path = await exampleAssetPath(slug, Number(value));
     if (!path) return NextResponse.json({ error: '예제 이미지를 찾을 수 없어요.' }, { status: 404, headers });
     const { data, error } = await storageClient().storage.from(PRIVATE_BUCKET).download(path);
     if (error || !data || data.type !== 'image/png') throw new Error('Image unavailable');

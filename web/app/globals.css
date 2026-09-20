@@ -641,9 +641,17 @@ select.text-input { appearance: auto; }
 .applicant-detail { display: flex; flex-direction: column; gap: 24px; scroll-margin-top: 88px; min-width: 0; }
 .applicant-detail h2 { margin: 0 0 8px; font-size: 24px; }
 .portfolio-pages { display: flex; flex-direction: column; gap: 20px; }
-.portfolio-page { margin: 0; overflow: hidden; }
-.portfolio-page figcaption { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 20px; border-bottom: 1px solid #e4e4e7; font-size: 14px; }
-.portfolio-page img { display: block; width: 100%; height: auto; }
+.portfolio-document { display: block; width: 100%; height: 75vh; min-height: 400px; }
+.question-thumbnails { display: flex; flex-wrap: wrap; gap: 12px; }
+.question-originals { display: flex; flex-direction: column; gap: 12px; }
+.portfolio-thumbnail { width: min(180px, 100%); overflow: hidden; }
+.portfolio-original { overflow: hidden; }
+.portfolio-thumbnail a, .portfolio-original a { display: block; color: inherit; text-decoration: none; }
+.portfolio-thumbnail a:focus-visible, .portfolio-original a:focus-visible { outline: 2px solid #18181b; outline-offset: -3px; }
+.portfolio-thumbnail img { display: block; width: 100%; height: 128px; object-fit: contain; background: #f4f4f5; }
+.portfolio-original img { display: block; width: 100%; height: auto; max-height: 420px; object-fit: contain; background: #f4f4f5; }
+.portfolio-image-caption { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-top: 1px solid #e4e4e7; font-size: 12px; }
+.portfolio-thumbnail .empty-state { padding: 12px; }
 @media (max-width: 720px) {
   .applicant-table, .applicant-table tbody { display: block; width: 100%; }
   .applicant-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }

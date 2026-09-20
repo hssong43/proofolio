@@ -87,16 +87,18 @@ export async function example(slug: string): Promise<{ slug: Track; title: strin
   return rows[0];
 }
 
-// Public image access is limited to linked pages in the curated library, never visitor runs.
-export async function exampleImagePath(slug: string, page: number): Promise<string | null> {
-  if (!['design','marketing'].includes(slug) || !Number.isSafeInteger(page) || page < 1 || page > 60) return null;
+// Only curated PDFs and their linked page images are public, never visitor runs.
+export async function exampleAssetPath(slug: string, page: number | 'pdf'): Promise<string | null> {
+  if (!['design','marketing'].includes(slug) || (page !== 'pdf' && (!Number.isSafeInteger(page) || page < 1 || page > 60))) return null;
   const item = await example(slug);
-  if (!item.result.questions.some(q => q.pages.includes(page)) || !/^[a-f0-9-]{36}$/.test(item.source_run_id)) return null;
-  const rows = await dbRequest(`/rest/v1/proofolio_runs?id=eq.${item.source_run_id}&deleted_at=is.null&state=eq.complete&select=user_id,result&limit=1`);
-  const run = rows?.[0] as { user_id: string; result: ClientResult } | undefined;
-  if (run?.user_id !== EXAMPLE_LIBRARY_OWNER) return null;
-  const path = `${EXAMPLE_LIBRARY_OWNER}/${item.source_run_id}/page-${page}.png`;
-  const asset = run.result?.sourceAssets?.find(a => a.kind === 'page' && a.page === page && a.id === `page-${page}`);
+  if ((page !== 'pdf' && !item.result.questions.some(q => q.pages.includes(page))) || !/^[a-f0-9-]{36}$/.test(item.source_run_id)) return null;
+  const rows = await dbRequest(`/rest/v1/proofolio_runs?id=eq.${item.source_run_id}&deleted_at=is.null&state=eq.complete&select=user_id,track,result&limit=1`);
+  const run = rows?.[0] as { user_id: string; track: Track; result: ClientResult } | undefined;
+  if (run?.user_id !== EXAMPLE_LIBRARY_OWNER || run.track !== slug) return null;
+  const path = `${EXAMPLE_LIBRARY_OWNER}/${item.source_run_id}/${page === 'pdf' ? 'portfolio.pdf' : `page-${page}.png`}`;
+  const asset = run.result?.sourceAssets?.find(a => page === 'pdf'
+    ? a.kind === 'pdf' && a.page === 0 && a.id === 'pdf'
+    : a.kind === 'page' && a.page === page && a.id === `page-${page}`);
   return asset?.path === path ? path : null;
 }
 

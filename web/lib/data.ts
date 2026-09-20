@@ -1,7 +1,6 @@
 export type RoleId = "designer" | "dev" | "mkt";
 
 import type { Track } from "./types.ts";
-import type { ClientQuestion } from "./types.ts";
 
 /** 분석 코어가 지원하는 직무만 track이 있다. 없는 직무는 화면에서 선택 불가. */
 export type Role = { id: RoleId; label: string; track: Track | null };
@@ -10,10 +9,8 @@ export type Role = { id: RoleId; label: string; track: Track | null };
 export type UiQuestion = {
   id: string;
   prompt: string;
-  quotes: string[];
-  notes: string[];
+  pages: number[];
   source: string;
-  anchors?: ClientQuestion['anchors'];
 };
 
 export const ROLES: Role[] = [
