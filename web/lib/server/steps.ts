@@ -23,9 +23,14 @@ function settings() {
 }
 
 export async function requireStepBudget() {
-  const config = settings();
-  const [budget] = await dbRequest('/rest/v1/proofolio_execution_budget?id=eq.true&select=limit_usd,spent_usd,reserved_usd,blocked,legacy_sha256');
-  if (!budget || budget.blocked || !budget.legacy_sha256 || Number(budget.limit_usd) !== config.limit ||
+  let config: ReturnType<typeof settings>;
+  try { config = settings(); }
+  catch { throw new AnswerError('새 AI 분석이 일시 중지되어 있어요. 운영 예산 설정을 확인해주세요. 예제 체험은 이용할 수 있어요.', 503); }
+  let budget: { limit_usd: number; spent_usd: number; reserved_usd: number; blocked: boolean; legacy_sha256: string } | undefined;
+  try { [budget] = await dbRequest('/rest/v1/proofolio_execution_budget?id=eq.true&select=limit_usd,spent_usd,reserved_usd,blocked,legacy_sha256'); }
+  catch { throw new AnswerError('분석 예산 DB에 연결하지 못했어요. Supabase 연결과 SQL 005·006 적용을 확인해주세요.', 503); }
+  if (budget?.blocked) throw new AnswerError('새 AI 분석이 일시 중지되어 있어요. 운영자가 예산을 다시 승인해야 해요. 예제 체험은 이용할 수 있어요.', 503);
+  if (!budget || !budget.legacy_sha256 || Number(budget.limit_usd) !== config.limit ||
     Number(budget.spent_usd) + Number(budget.reserved_usd) >= config.limit)
     throw new AnswerError('승인된 운영 예산이 DB에 연결되지 않았거나 남은 예산이 부족해요.', 503);
   return config;

@@ -1,11 +1,23 @@
 "use client";
-import type { ClientQuestion, SubmissionScore } from '@/lib/types';
+import type { ClientQuestion, ExampleScores, SubmissionScore } from '@/lib/types';
 import { StatusBadge } from './StatusBadge';
 import { formatDateTime } from '@/lib/period';
 
 const level=(score:number)=>score>=80?'high':score>=60?'mid':'low';
 export const scoreLabel=(score:SubmissionScore|null|undefined)=>!score?'-':score.state==='complete'&&score.overallScore!==null?score.overallScore+'점':
   score.state==='failed'?'채점 실패':'채점 중';
+
+export function ExampleScoreSummary({ score }: { score: ExampleScores }) {
+  return <section className="result-panel" style={{ width: '100%' }} aria-label="예시 점수 요약">
+    <div className="result-main">
+      <span className="result-score">{score.overallScore}<span className="result-unit">점</span></span>
+      <div className="result-meta"><strong>종합 점수</strong>
+        <span>예시 점수 · {score.items.length}문항</span>
+        <span className="field-hint">샘플 답변 기준의 체험용 점수이며, 입력한 답변을 채점한 결과는 아니에요.</span>
+      </div>
+    </div>
+  </section>;
+}
 
 /** 제출 상단: 종합 점수, 모델, 재채점. 합불 판정은 없다. */
 export function ScoreSummary({score,busy,onRescore}:{score:SubmissionScore|null|undefined;busy:boolean;onRescore:()=>void}) {

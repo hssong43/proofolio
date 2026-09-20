@@ -1,5 +1,13 @@
 # proofolio — 에이전트 인계 문서
 
+## 최신: 배포 업로드 복구·공개 예산 재개 승인·예시 점수 (2026-09-20)
+
+- 사용자 제공 실패 실행은 이전 배포의 `execution=local` 기록이었다. 저장 기록은 수정하지 않고 공개 응답 문구만 구분, `새 분석 준비`는 업로드 화면으로 복귀하며 자동 분석하지 않는다.
+- 배포 step GET500과 로컬405 차이를 확인했다. Next trace에서 PDF.js `package.json`이 빠져 있어 모든 `/api/analyze` 하위 함수에 manifest/리소스/native canvas를 포함시켰다. 업로드 준비 오류도 배포 모듈/예산/DB/Storage 경계를 구분한다. 배포 실검증 결과는 CHECKPOINT를 따른다.
+- 사용자가 기존 잔여 **$9.949588** 내 공개 분석 재개를 승인했다. DB limit10/spent0.050412/reserved0·과거 approval/원장을 유지한다. Vercel 비밀 아닌 한도10을 명시하며 DB blocked 해제는 별도 운영자 SQL이다. 과금 없는 업로드 확인과 실제 AI 전체 실행을 구분한다.
+- 공개 관리자·예제 완료 화면에 고정 **예시 점수**를 추가했다. 기존 질문 fingerprint와 일치할 때만 연결하며 방문자 입력을 채점한 결과가 아니라고 표시한다. 실제 실행/SubmissionScore/비용 기록은 변경하지 않는다. SQL007 불필요, 모델/DB 쓰기0.
+- 관련 단위15/15·타입·Next 빌드·PC/모바일 Playwright8/8 통과. 모바일 관리자 min-width 문제도 수정. 임시 소스 사본 검사이며 실제 배포 확인은 별도다. 사용자 별도 계획/복제 파일은 건드리지 않는다.
+
 ## 최신: 점수 PR #9와 main 통합 (2026-09-20)
 
 - 최신 main의 직접 업로드·Vercel 단계 실행·공개 프리뷰·답변 저장·공유 예산은 유지한다. 환경 로더는 `PROOFOLIO_EXECUTION`과 `OPENROUTER_SCORING_MODEL`을 모두 허용한다.

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { example } from '@/lib/server/database';
 import { contestSettings } from '@/lib/server/contest';
-import { exampleAnswers } from '@/lib/server/example-answers';
+import { exampleAnswers, exampleScores } from '@/lib/server/example-answers';
 export const dynamic = 'force-dynamic';
 export async function GET(_request: Request, context: { params: Promise<{ slug: string }> }) {
   const contest=contestSettings();
@@ -13,7 +13,8 @@ export async function GET(_request: Request, context: { params: Promise<{ slug: 
     const images = [...new Set(result.questions.flatMap(q => q.pages))].sort((a,b) => a-b)
       .map(page => ({ page, url: `/api/examples/${item.slug}/image?page=${page}` }));
     const portfolioUrl = item.slug === 'coding' ? null : `/api/examples/${item.slug}/portfolio`;
-    return NextResponse.json({ title: item.title, notice: item.notice, result, images, portfolioUrl, sampleAnswers: exampleAnswers(item.slug, result.questions) },
+    return NextResponse.json({ title: item.title, notice: item.notice, result, images, portfolioUrl,
+      sampleAnswers: exampleAnswers(item.slug, result.questions), sampleScores: exampleScores(item.slug, result.questions) },
       { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     const configurationError = error instanceof Error && error.message === 'Supabase URL과 서버 전용 키를 설정해주세요.';

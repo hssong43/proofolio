@@ -57,7 +57,8 @@ export type AnswerRecord = { questionId: string; answer: string; seconds: number
 
 export type ExampleAnswer = { questionId: string; answer: string };
 export type ExampleImage = { page: number; url: string };
-export type PortfolioExample = { title: string; notice: string; result: ClientResult; sampleAnswers: ExampleAnswer[]; images: ExampleImage[]; portfolioUrl: string | null };
+export type ExampleScores = { overallScore: number; items: Array<{ questionId: string; score: number }> };
+export type PortfolioExample = { title: string; notice: string; result: ClientResult; sampleAnswers: ExampleAnswer[]; sampleScores?: ExampleScores | null; images: ExampleImage[]; portfolioUrl: string | null };
 
 export type { RoleId, UiQuestion } from './data.ts';
 export type TestStatus = 'upcoming' | 'open' | 'closed';

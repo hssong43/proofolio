@@ -112,6 +112,8 @@ export async function syncAnswers(status: StoredRun, answers: AnswerRecord[]) {
 
 export function publicStatus(status: StoredRun): RunStatus {
   const { userId: _user, pdfSha256: _hash, requestedQuestions: _requested, metrics: _metrics, schemaVersion: _schema, ...visible } = status;
+  if (visible.state === 'failed' && visible.error?.includes('현재 Vercel 배포에는 장시간 분석 실행 환경이 연결되지'))
+    visible.error = '이 기록은 이전 배포에서 분석을 시작하지 못하고 종료됐어요. 최신 버전에서 새 분석을 준비하거나 예제를 체험해주세요.';
   return { ...visible, ...(visible.result ? { result: { ...visible.result,
     sourceAssets: visible.result.sourceAssets?.map(({ path: _path, ...asset }) => asset) } } : {}) };
 }

@@ -45,6 +45,7 @@ test('checkpoint steps: retry and reload resume the same upload, then save seven
     await page.getByRole('button',{name:i===6?'제출하고 완료':'제출하고 다음',exact:true}).click();
   }
   await expect(page.getByRole('heading',{name:'저장 완료',exact:true})).toBeVisible();
+  await expect(page.getByRole('region',{name:'예시 점수 요약'})).toHaveCount(0);
   expect(answers.map(a=>a.questionId)).toEqual(questions.map(q=>q.id));expect(errors).toEqual([]);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await expect(page.locator('nextjs-portal [data-nextjs-dialog-overlay]')).toHaveCount(0);
@@ -142,6 +143,47 @@ test('contest direct navigation blocks identity forms; failed example retries on
   expect(reads).toBe(2);expect(unexpected).toEqual([]);
 });
 
+test('a terminal failed run prepares a new upload without polling the old failure or auto-starting analysis',async({page,context})=>{
+  let reads=0;const writes:string[]=[];
+  await context.route('**/api/analyze/**',r=>{
+    if(r.request().method()!=='GET'){writes.push(r.request().url());return r.abort();}
+    reads++;return r.fulfill({json:{runId,track:'design',state:'failed',stage:0,
+      error:'이 기록은 이전 배포에서 분석을 시작하지 못하고 종료됐어요. 최신 버전에서 새 분석을 준비하거나 예제를 체험해주세요.'}});
+  });
+  await page.goto('/?run='+runId);
+  await expect(page.locator('.error-box[role=alert]')).toContainText('이전 배포');
+  await page.getByRole('button',{name:'새 분석 준비',exact:true}).click();
+  await expect(page).toHaveURL('http://127.0.0.1:3101/');
+  await expect(page.locator('input[type=file]')).toBeAttached();
+  await expect(page.getByRole('button',{name:'AI 분석 시작'})).toBeDisabled();
+  expect(reads).toBe(1);expect(writes).toEqual([]);
+});
+
+test('example completion displays fixture scores without scoring or saving the visitor answers',async({page,context},info)=>{
+  const writes:string[]=[],errors:string[]=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  page.on('console',m=>{if(['error','warning'].includes(m.type()))errors.push(m.text());});
+  await context.route('**/api/analyze**',r=>{writes.push(r.request().url());return r.abort();});
+  const items=result.questions.map(q=>({questionId:q.id,score:86}));
+  await context.route('**/api/examples/design',r=>r.fulfill({json:{title:'점수 예제',notice:'',result,
+    images:[],portfolioUrl:null,sampleAnswers:[],sampleScores:{overallScore:86,items}}}));
+  await page.goto('/?demo=1');await expect(page).toHaveTitle('Proofolio');
+  await page.getByRole('button',{name:'디자이너',exact:true}).click();await page.getByRole('button',{name:'다음',exact:true}).click();
+  await page.getByRole('button',{name:'준비 완료'}).click();
+  for(let i=0;i<result.questions.length;i++){
+    await page.getByRole('textbox',{name:'답변',exact:true}).fill('점수와 무관한 방문자 입력 '+i);
+    await page.getByRole('button',{name:i===result.questions.length-1?'제출하고 완료':'제출하고 다음',exact:true}).click();
+  }
+  await expect(page.getByRole('heading',{name:'데모 완료',exact:true})).toBeVisible();
+  await expect(page.getByRole('region',{name:'예시 점수 요약'})).toContainText('86점');
+  await expect(page.getByText('샘플 답변 기준의 체험용 점수이며, 입력한 답변을 채점한 결과는 아니에요.')).toBeVisible();
+  await expect(page.getByRole('region',{name:'예시 문항별 점수'}).locator('.chip')).toHaveCount(result.questions.length);
+  expect(writes).toEqual([]);expect(errors).toEqual([]);
+  await expect(page.locator('nextjs-portal [data-nextjs-dialog-overlay]')).toHaveCount(0);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.screenshot({path:info.outputPath('example-scores.png'),fullPage:true,animations:'disabled'});
+});
+
 test('contest applicant dashboard shows curated portfolios and authored answers, never real visitors',async({page,context},info)=>{
   const unexpected:string[]=[],errors:string[]=[];
   const pdf=await PDFDocument.create();
@@ -161,9 +203,11 @@ test('contest applicant dashboard shows curated portfolios and authored answers,
     const label=path.endsWith('design')?'디자인':path.endsWith('marketing')?'마케팅':'코딩';
     const count=label==='마케팅'?9:7;
     const questions=Array.from({length:count},(_,i)=>({...result.questions[0],id:'q'+i,prompt:`${label} 질문 ${i+1}`,pages:label==='코딩'?[]:[i%2+1]}));
+    const items=questions.map((q,i)=>({questionId:q.id,score:80+i*2}));
     return r.fulfill({json:{title:label+' 저장 예제',notice:'검토 권장 항목이 남아 있어요.',result:{...result,
       questions},images:label==='코딩'?[]:[1,2].map(page=>({page,url:path+'/image?page='+page})),
       portfolioUrl:label==='코딩'?null:path+'/portfolio',
+      sampleScores:{overallScore:Math.round(items.reduce((sum,item)=>sum+item.score,0)/items.length),items},
       sampleAnswers:questions.map(q=>({questionId:q.id,answer:`${label} 합성 예시 답변 ${q.id}`}))}});
   });
   expect((await page.goto('/dashboard'))?.status()).toBe(200);
@@ -172,6 +216,7 @@ test('contest applicant dashboard shows curated portfolios and authored answers,
   await expect(page.locator('.error-box[role=alert]')).toContainText('합성 예제 연결 실패');
   failed=false;await page.getByRole('button',{name:'새로고침',exact:true}).click();
   await expect(page.getByRole('region',{name:'응시자 목록'}).locator('tbody tr')).toHaveCount(3);
+  await expect(page.getByRole('region',{name:'응시자 목록'}).locator('td[data-label="점수"]')).toHaveText(['86점','88점','86점']);
   await expect(page.getByText('23개',{exact:true})).toHaveCount(2);
   await expect(page.locator('input')).toHaveCount(0);await expect(page.getByRole('link',{name:'코드로 응시'})).toHaveCount(0);
   for(const [candidate,label,count] of [['응시자 1','디자인',7],['응시자 2','마케팅',9],['응시자 3','코딩',7]] as const){
@@ -190,8 +235,10 @@ test('contest applicant dashboard shows curated portfolios and authored answers,
       await expect(detail.locator('object')).toHaveAttribute('data',portfolioPath+'?retry=1#view=FitH');
     }
     await detail.getByRole('button',{name:'질문·답변 보기',exact:true}).click();
+    await expect(detail.getByRole('region',{name:'예시 점수 요약'})).toContainText(`${count}문항`);
     await expect(detail.locator('article')).toHaveCount(count);await expect(detail.getByRole('heading',{name:`1. ${label} 질문 1`,exact:true})).toBeVisible();
     await expect(detail.locator('.qa-answer').first()).toHaveText(label+' 합성 예시 답변 q0');
+    await expect(detail.locator('article .score-pill')).toHaveCount(count);
     await expect(detail.locator('object')).toHaveCount(0);
     await expect(detail.locator('blockquote, pre')).toHaveCount(0);
     if(label==='코딩')await expect(detail.locator('.portfolio-thumbnail')).toHaveCount(0);

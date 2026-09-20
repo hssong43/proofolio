@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Header } from '../Header';
 import { Stat } from '../Stat';
 import { PortfolioImages } from '../PortfolioImages';
+import { ExampleScoreSummary } from './ScorePanel';
 import { fetchExample } from '@/lib/client';
 import type { Track } from '@/lib/types';
 
@@ -41,7 +42,7 @@ export function DemoDashboard() {
         <div><h1 className="screen-title">응시자 관리</h1><p className="screen-subtitle">응시자별 포트폴리오와 질문·답변을 확인하세요.</p></div>
         <button className="btn-secondary" disabled={loading} onClick={() => setRevision(n => n + 1)}>새로고침</button>
       </div>
-      <p className="screen-subtitle">예시 데이터 · 응시자와 답변은 체험용이며, 실제 방문자의 정보는 공개하지 않아요.</p>
+      <p className="screen-subtitle">예시 데이터 · 응시자·답변·점수는 체험용이며, 실제 방문자의 정보는 공개하지 않아요.</p>
       {loading ? <p role="status">응시 목록을 불러오는 중…</p> : error ? <p className="error-box" role="alert">{error} 새로고침으로 다시 시도해주세요.</p> : <>
         <div className="card stat-grid">
           <Stat label="응시자" value={`${entries.length}명`} />
@@ -50,13 +51,14 @@ export function DemoDashboard() {
         </div>
         <section className="card table-wrap" aria-label="응시자 목록">
           <table className="table applicant-table">
-            <thead><tr><th scope="col">응시자</th><th scope="col">직무</th><th scope="col">상태</th><th scope="col">답변 / 질문</th><th scope="col">포트폴리오</th><th scope="col">질문·답변</th></tr></thead>
+            <thead><tr><th scope="col">응시자</th><th scope="col">직무</th><th scope="col">상태</th><th scope="col">답변 / 질문</th><th scope="col">점수</th><th scope="col">포트폴리오</th><th scope="col">질문·답변</th></tr></thead>
             <tbody>{entries.map(entry => <tr key={entry.track} data-selected={selected?.track === entry.track}>
               <td><strong>{entry.candidate}</strong><div className="qa-meta">{entry.title}</div></td>
               <td data-label="직무">{entry.label}</td>
               <td data-label="상태"><span className="badge" data-status={entry.sampleAnswers?.length === entry.result.questions.length ? 'completed' : 'joined'}>
                 {entry.sampleAnswers?.length === entry.result.questions.length ? '답변 완료' : '답변 대기'}</span></td>
               <td data-label="답변 / 질문">{entry.sampleAnswers?.length ?? 0} / {entry.result.questions.length}</td>
+              <td data-label="점수"><span className="score-pill">{entry.sampleScores ? `${entry.sampleScores.overallScore}점` : '-'}</span></td>
               <td><button className="btn-secondary" aria-label={`${entry.candidate} 포트폴리오 보기`} onClick={() => setSelected({ track: entry.track, view: 'portfolio' })}>포트폴리오 보기</button></td>
               <td><button className="btn-primary" aria-label={`${entry.candidate} 질문·답변 보기`} onClick={() => setSelected({ track: entry.track, view: 'answers' })}>질문·답변 보기</button></td>
             </tr>)}</tbody>
@@ -78,14 +80,17 @@ export function DemoDashboard() {
             </> : item.portfolioUrl ? <PortfolioDocument key={`${revision}:${item.track}`} url={item.portfolioUrl} candidate={item.candidate} pageCount={item.result.pageCount} /> :
               <p className="empty-state">등록된 원본 포트폴리오가 없어요.</p>}
           </div> : <>
+            {item.sampleScores ? <ExampleScoreSummary score={item.sampleScores} /> : null}
             <p className="screen-subtitle">예시 답변은 화면 체험용으로 작성했으며 실제 포트폴리오 작성자의 답변이 아니에요.</p>
             <div className="card">{item.result.questions.map((q, i) => {
               const answer = item.sampleAnswers?.find(a => a.questionId === q.id)?.answer;
+              const score = item.sampleScores?.items.find(s => s.questionId === q.id)?.score;
               return <article className="qa-item" key={q.id}>
                 {q.pages.length > 0 && <PortfolioImages key={revision} images={(item.images ?? []).filter(image => q.pages.includes(image.page))} label={item.candidate} thumbnails />}
                 <h3 className="qa-prompt">{i + 1}. {q.prompt}</h3>
                 <p className="qa-meta">{q.projectTitle}{q.pages.length ? ` · ${q.pages.join(', ')}페이지` : ''}</p>
                 <div><p className="qa-meta">예시 답변</p><div className="qa-answer" data-empty={!answer}>{answer ?? '이 질문의 예시 답변은 아직 등록되지 않았어요.'}</div></div>
+                {score !== undefined ? <p className="qa-meta">문항 점수 <span className="score-pill">{score}점</span></p> : null}
                 <details><summary>질문 의도와 확인 사항</summary><p>{q.intent}</p><ul>{q.listenFor.map((text, j) => <li key={j}>{text}</li>)}</ul></details>
               </article>;
             })}</div>
