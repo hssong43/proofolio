@@ -1,17 +1,19 @@
 import { STEP_LABELS } from "@/lib/data";
 import { CheckIcon, Logo } from "./icons";
+import type { ReactNode } from 'react';
+import Link from 'next/link';
 
-type Props = { stepIndex: number };
+type Props = { stepIndex: number; steps?: readonly string[]; right?: ReactNode };
 
-export function Header({ stepIndex }: Props) {
+export function Header({ stepIndex, steps=STEP_LABELS, right }: Props) {
   return (
     <header className="app-header">
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <Logo />
-        <span style={{ fontSize: 17, fontWeight: 700, letterSpacing: "-.03em" }}>Proofolio</span>
+        <Link href="/" style={{ fontSize: 17, fontWeight: 700, letterSpacing: "-.03em", textDecoration:'none' }}>Proofolio</Link>
       </div>
       <nav style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 14 }} aria-label="진행 단계">
-        {STEP_LABELS.map((label, i) => {
+        {steps.map((label, i) => {
           const done = i < stepIndex;
           const current = i === stepIndex;
           const active = done || current;
@@ -37,7 +39,7 @@ export function Header({ stepIndex }: Props) {
                 </div>
                 <span style={{ color: active ? "#18181B" : "#71717A", fontWeight: active ? 500 : 400 }}>{label}</span>
               </div>
-              {i < STEP_LABELS.length - 1 && (
+              {i < steps.length - 1 && (
                 <div style={{ width: 32, height: 1, background: done ? "#18181B" : "#E4E4E7" }} />
               )}
             </div>
@@ -45,7 +47,7 @@ export function Header({ stepIndex }: Props) {
         })}
       </nav>
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <div
+        {right ?? <div
           aria-label="사용자"
           style={{
             width: 32,
@@ -60,7 +62,7 @@ export function Header({ stepIndex }: Props) {
           }}
         >
           P
-        </div>
+        </div>}
       </div>
     </header>
   );

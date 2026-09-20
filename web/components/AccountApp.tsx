@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { VerificationFlow, type VerificationFlowProps } from './VerificationFlow';
 import type { RunStatus } from '@/lib/types';
+import Link from 'next/link';
 
 type Member = { email: string; name: string };
 type HistoryRun = { id: string; file_name: string; state: string; started_at: string; generated_question_count: number };
@@ -14,7 +15,7 @@ async function api(url: string, init?: RequestInit) {
 }
 const auth = (body: unknown) => api('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
-export function AccountApp({ resumeRunId, recovery, authError, ...flowProps }: VerificationFlowProps & { recovery?: boolean; authError?: boolean }) {
+export function AccountApp({ resumeRunId, recovery, authError, loginRequested, returnTo, ...flowProps }: VerificationFlowProps & { recovery?: boolean; authError?: boolean; loginRequested?: boolean; returnTo?: string }) {
   const [member, setMember] = useState<Member | null>(null), [loading, setLoading] = useState(true);
   const [loginOpen, setLoginOpen] = useState(false), [mode, setMode] = useState<'signin' | 'signup' | 'reset' | 'password'>(recovery ? 'password' : 'signin');
   const [message, setMessage] = useState(authError ? '인증 링크를 확인하지 못했어요. 다시 로그인해주세요.' : ''), [busy, setBusy] = useState(false);
@@ -24,6 +25,12 @@ export function AccountApp({ resumeRunId, recovery, authError, ...flowProps }: V
   const refresh = async () => { const data = await api('/api/auth'); setMember(data.user); if(!data.configured)setMessage('로그인 서버 설정이 필요해요. 예제 체험은 이용할 수 있어요.'); return data.user as Member | null; };
   useEffect(() => { void refresh().catch(() => setMessage('로그인 서버 설정을 확인해주세요. 예제 체험은 이용할 수 있어요.')).finally(() => setLoading(false)); }, []);
   useEffect(() => { if (recovery && !loading) setLoginOpen(true); }, [recovery, loading]);
+  useEffect(() => {
+    if (loginRequested && !loading) {
+      if (member && returnTo) location.replace(returnTo);
+      else if (!member) setLoginOpen(true);
+    }
+  }, [loginRequested, loading, member, returnTo]);
   useEffect(() => { if (loginOpen) dialog.current?.showModal(); else dialog.current?.close(); }, [loginOpen]);
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setBusy(true); setMessage('');
@@ -33,7 +40,10 @@ export function AccountApp({ resumeRunId, recovery, authError, ...flowProps }: V
       setMessage(data.message || '완료했어요.');
       if (mode === 'signin' || mode === 'signup' || mode === 'password') {
         const user = await refresh();
-        if (user) { setLoginOpen(false); setDemo(false); setRevision(n => n + 1); }
+        if (user) {
+          if (returnTo) { location.assign(returnTo); return; }
+          setLoginOpen(false); setDemo(false); setRevision(n => n + 1);
+        }
       }
     } catch (e) { setMessage((e as Error).message); } finally { setBusy(false); }
   };
@@ -52,6 +62,8 @@ export function AccountApp({ resumeRunId, recovery, authError, ...flowProps }: V
     <div className="account-bar">
       <span>{loading ? '계정 확인 중' : member ? member.email : '로그인 없이 예제를 체험해보세요'}</span>
       <div>
+        <Link className="text-button" href="/dashboard">채용 대시보드</Link>
+        <Link className="text-button" href="/test">코드로 응시</Link>
         <button className="text-button" onClick={() => { window.history.replaceState(null,'','/?demo=1'); setDemo(true); setRunId(undefined); setHistory(null); setRevision(n => n + 1); }}>예제 체험</button>
         {member ? <>
           <button className="text-button" onClick={() => { window.history.replaceState(null,'','/'); setDemo(false); setRunId(undefined); setHistory(null); setRevision(n => n + 1); }}>새 분석</button>

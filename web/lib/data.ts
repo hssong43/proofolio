@@ -1,7 +1,7 @@
 export type RoleId = "designer" | "dev" | "mkt";
 
-import type { Track } from "./types";
-import type { ClientQuestion } from "./types";
+import type { Track } from "./types.ts";
+import type { ClientQuestion } from "./types.ts";
 
 /** 분석 코어가 지원하는 직무만 track이 있다. 없는 직무는 화면에서 선택 불가. */
 export type Role = { id: RoleId; label: string; track: Track | null };
@@ -23,6 +23,8 @@ export const ROLES: Role[] = [
 ];
 
 export const STEP_LABELS = ["직무 선택", "업로드", "분석", "준비", "질문"] as const;
+
+export const CANDIDATE_STEP_LABELS = ['코드', '응시 정보', '직무 확인', '업로드', '분석', '준비', '질문'];
 
 export const STAGE_LABELS = ["포트폴리오 읽는 중", "직무 핵심 내용 추출 중", "질문 만드는 중"] as const;
 

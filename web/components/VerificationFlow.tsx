@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { DEFAULT_QUESTION_COUNT, ROLES, formatElapsed, formatFileSize, type RoleId, type UiQuestion } from '@/lib/data';
 import { fetchExample, fetchStatus, startAnalysis, startCodeAnalysis, submitAnswer } from '@/lib/client';
 import type { AnswerRecord, ClientResult } from '@/lib/types';
@@ -12,7 +12,11 @@ import { ReadyScreen } from './screens/ReadyScreen';
 import { QuestionScreen } from './screens/QuestionScreen';
 import { CompleteScreen } from './screens/CompleteScreen';
 
-export type VerificationFlowProps = { totalSeconds?: number; questionCount?: number; demo?: boolean; fastAnalysis?: boolean; resumeRunId?: string };
+export type VerificationFlowProps = {
+  totalSeconds?: number; questionCount?: number; demo?: boolean; fastAnalysis?: boolean; resumeRunId?: string;
+  initialRole?: RoleId; headerSteps?: readonly string[]; stepOffset?: number; headerRight?: ReactNode; submissionId?: string;
+  onRunReady?: (runId: string) => Promise<void>; onComplete?: (runId: string) => Promise<void>; onHome?: () => void;
+};
 export type Screen = 'role' | 'upload' | 'analyzing' | 'ready' | 'question' | 'complete';
 const steps: Record<Screen, number> = {role:0, upload:1, analyzing:2, ready:3, question:4, complete:5};
 type State = {
@@ -27,11 +31,17 @@ const initial = (seconds: number): State => ({screen:'role',role:null,tab:'pdf',
 const draftKey = (id: string) => `proofolio:draft:v1:${id}`;
 function runUrl(id?: string) { const url = new URL(location.href); if(id) url.searchParams.set('run',id); else url.searchParams.delete('run'); history.replaceState(null,'',url); }
 
-export function VerificationFlow({totalSeconds=40,questionCount=DEFAULT_QUESTION_COUNT,demo=false,resumeRunId}: VerificationFlowProps) {
-  const [s,set] = useState(() => initial(totalSeconds));
+export function VerificationFlow({totalSeconds=40,questionCount=DEFAULT_QUESTION_COUNT,demo=false,resumeRunId,
+  initialRole,headerSteps,stepOffset=0,headerRight,onRunReady,onComplete,onHome,submissionId}: VerificationFlowProps) {
+  const [s,set] = useState<State>(() => ({...initial(totalSeconds),...(initialRole?{screen:'upload',role:initialRole,tab:initialRole==='dev'?'link':'pdf'}:{})}));
   const ref = useRef(s); ref.current=s;
   const busy = useRef(false), pending = useRef<AnswerRecord | null>(null);
   const lastSubmitted = useRef<string | null>(null);
+  const callbacks=useRef({onRunReady,onComplete});callbacks.current={onRunReady,onComplete};
+  const linkedRun=useRef<string|null>(null);
+  const finalizing=useRef(false),finalizedAttempt=useRef<string|null>(null);
+  const [completionSave,setCompletionSave]=useState<'idle'|'saving'|'saved'|'failed'>('idle');
+  const [completionError,setCompletionError]=useState<string|null>(null);
   const update = useCallback((patch: Partial<State>) => set(s => ({...s,...patch})),[]);
   const role = ROLES.find(r=>r.id===s.role), total=s.result?.questions.length ?? 0;
   const questions: UiQuestion[] = s.result?.questions.map(q=>({id:q.id,prompt:q.prompt,quotes:q.quotes,notes:q.notes,anchors:q.anchors,
@@ -74,6 +84,9 @@ export function VerificationFlow({totalSeconds=40,questionCount=DEFAULT_QUESTION
     let cancelled=false, timer:ReturnType<typeof setTimeout>;
     const poll=async()=>{
       try {
+        // Connecting a recruiting run is idempotent. A failure retries this link, never the paid analysis.
+        if(linkedRun.current!==s.runId){await callbacks.current.onRunReady?.(s.runId!);linkedRun.current=s.runId;}
+        if(cancelled)return;
         const status=await fetchStatus(s.runId!); if(cancelled)return;
         update({role:ROLES.find(r=>r.track===status.track)?.id ?? null});
         if(status.state==='failed'){update({error:status.error||'분석이 완료되지 않았어요.'});return;}
@@ -83,6 +96,20 @@ export function VerificationFlow({totalSeconds=40,questionCount=DEFAULT_QUESTION
     };
     void poll();return()=>{cancelled=true;clearTimeout(timer);};
   },[s.screen,s.runId,s.error,demo,loadResult,update]);
+
+  const finalize=useCallback(async()=>{
+    const runId=ref.current.runId,save=callbacks.current.onComplete;
+    if(!save||!runId||finalizing.current)return;
+    finalizing.current=true;setCompletionSave('saving');setCompletionError(null);
+    try{await save(runId);setCompletionSave('saved');}
+    catch(e){setCompletionSave('failed');setCompletionError((e as Error).message);}
+    finally{finalizing.current=false;}
+  },[]);
+  useEffect(()=>{
+    if(s.screen==='complete'&&onComplete&&s.runId&&finalizedAttempt.current!==s.runId){
+      finalizedAttempt.current=s.runId;void finalize();
+    }
+  },[s.screen,s.runId,onComplete,finalize]);
 
   // Drafts expire after one day. Pending payloads stay identical across retry/reload.
   useEffect(()=>{
@@ -123,14 +150,14 @@ export function VerificationFlow({totalSeconds=40,questionCount=DEFAULT_QUESTION
         const item=await fetchExample(role.track);
         loadResult({...item.result,exampleNotice:item.notice});
       }else{
-        const run=role.track==='coding'?await startCodeAnalysis(s.link.trim(),questionCount):await startAnalysis(s.file!.file!,role.track,questionCount);
+        const run=role.track==='coding'?await startCodeAnalysis(s.link.trim(),questionCount,submissionId):await startAnalysis(s.file!.file!,role.track,questionCount,submissionId);
         runUrl(run.runId);update({screen:'analyzing',runId:run.runId,stage:0,result:null});
       }
     }catch(e){update({error:(e as Error).message});}finally{busy.current=false;update({submitting:false});}
   };
-  const home=()=>{pending.current=null;lastSubmitted.current=null;runUrl();set(initial(totalSeconds));};
+  const home=()=>{if(onHome){onHome();return;}pending.current=null;lastSubmitted.current=null;runUrl();set(initial(totalSeconds));};
   return <div style={{minHeight:'100vh',display:'flex',flexDirection:'column'}}>
-    <Header stepIndex={steps[s.screen]}/>
+    <Header stepIndex={steps[s.screen]+stepOffset} steps={headerSteps} right={headerRight}/>
     <main className="app-main">
       {s.screen==='role'&&<RoleScreen role={s.role} demo={demo} onSelect={role=>update({role,tab:role==='dev'?'link':'pdf'})}
         onNext={()=>demo?void start():update({screen:'upload',error:null})}/>}
@@ -148,8 +175,10 @@ export function VerificationFlow({totalSeconds=40,questionCount=DEFAULT_QUESTION
         runId={s.runId??undefined} assets={s.result?.sourceAssets} demo={demo} saveState={s.saveState} saveError={s.error}
         onAnswerChange={answer=>!pending.current&&update({answer})} onSubmit={()=>void submit()}/>}
       {s.screen==='complete'&&<CompleteScreen roleLabel={role?.label??''} answeredCount={s.answers.filter(a=>a.answer.trim()).length} questionCount={total}
-        elapsed={formatElapsed(s.answers.reduce((n,a)=>n+a.seconds,0))} saveError={s.error} saveState={s.saveState} savedStorage="supabase"
-        onRetry={()=>void submit()} onHome={home}/>}
+        elapsed={formatElapsed(s.answers.reduce((n,a)=>n+a.seconds,0))}
+        saveError={onComplete?completionError:s.error} saveState={onComplete?(completionSave==='idle'?'saving':completionSave):s.saveState}
+        savedStorage="supabase" recruiting={!!onComplete}
+        onRetry={()=>onComplete?void finalize():void submit()} onHome={home}/>}
     </main>
   </div>;
 }

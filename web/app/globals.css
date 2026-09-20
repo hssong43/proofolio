@@ -404,3 +404,234 @@ button {
 .source-preview img { max-width:100%; height:auto; }
 .source-preview pre { overflow:auto; max-height:440px; font-size:12px; white-space:pre-wrap; overflow-wrap:anywhere; }
 @media (max-width:600px) { .account-bar { flex-direction:column; align-items:flex-start; padding:12px 20px; } .account-bar > span { max-width:100%; } }
+
+/* PR dashboard styles; retain all main flow, source preview and account styles above. */
+
+
+.dash-main {
+  flex: 1;
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 48px 40px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.dash-title-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.table th {
+  text-align: left;
+  vertical-align: middle;
+  font-weight: 500;
+  color: #71717a;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e4e4e7;
+  background: #fafafa;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #f4f4f5;
+  vertical-align: middle;
+  line-height: 24px;
+  white-space: nowrap;
+}
+
+.table td:first-child { min-width: 140px; max-width: 300px; white-space: normal; word-break: keep-all; overflow-wrap: anywhere; }
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.table-link {
+  font-weight: 500;
+  text-decoration: none;
+  border-bottom: 1px solid #d4d4d8;
+}
+
+.table-link:hover {
+  border-bottom-color: #18181b;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.badge[data-status="open"],
+.badge[data-status="completed"] {
+  background: #18181b;
+  color: #fff;
+}
+
+.badge[data-status="upcoming"],
+.badge[data-status="joined"] {
+  background: #f4f4f5;
+  color: #3f3f46;
+}
+
+.badge[data-status="closed"] {
+  background: #fff;
+  color: #a1a1aa;
+  border-color: #e4e4e7;
+}
+
+.code-pill {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+}
+
+.code-input {
+  height: 64px;
+  font-size: 28px;
+  letter-spacing: 0.35em;
+  text-align: center;
+  text-transform: uppercase;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #52525b;
+}
+
+.field-hint {
+  font-size: 12px;
+  color: #71717a;
+}
+
+.notice-box {
+  border: 1px solid #e4e4e7;
+  background: #fafafa;
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 8px;
+}
+
+.qa-item {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 24px;
+  border-bottom: 1px solid #f4f4f5;
+}
+
+.qa-item:last-child {
+  border-bottom: none;
+}
+
+.qa-prompt {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.qa-answer {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #fafafa;
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.qa-answer[data-empty="true"] {
+  color: #a1a1aa;
+}
+
+.qa-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+  color: #71717a;
+}
+
+.empty-state {
+  padding: 48px;
+  text-align: center;
+  color: #71717a;
+  font-size: 14px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.breadcrumb {
+  font-size: 14px;
+  color: #71717a;
+}
+
+.breadcrumb a {
+  text-decoration: none;
+}
+
+@media (max-width: 720px) {
+  .dash-main {
+    padding: 32px 16px 64px;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.dash-main { min-width: 0; }
+.dash-main .card { min-width: 0; }
+select.text-input { appearance: auto; }

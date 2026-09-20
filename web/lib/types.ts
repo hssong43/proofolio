@@ -53,3 +53,18 @@ export type RunStatus = {
 };
 
 export type AnswerRecord = { questionId: string; answer: string; seconds: number };
+
+export type { RoleId, UiQuestion } from './data.ts';
+export type TestStatus = 'upcoming' | 'open' | 'closed';
+export type Candidate = { name: string; birthDate: string; phone: string };
+export type TestRecord = {
+  id: string; code: string; title: string; role: import('./data.ts').RoleId;
+  startsAt: string; endsAt: string; createdAt: string; totalSeconds: number; questionCount: number;
+};
+export type TestSummary = TestRecord & { status: TestStatus; submissionCount: number; completedCount: number };
+export type PublicTest = Omit<TestRecord, 'id' | 'code' | 'createdAt'> & { testId: string; roleLabel: string };
+export type Submission = {
+  id: string; testId: string; candidate: Candidate; joinedAt: string; completedAt: string | null;
+  state: 'joined' | 'completed'; runId: string | null;
+};
+export type SubmissionDetail = { submission: Submission; test: TestRecord; run: RunStatus | null };

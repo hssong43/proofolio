@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/server/auth";
 import { ensureMember } from "@/lib/server/database";
 import { AnswerError } from "@/lib/server/runner";
 import { MIN_TARGET_QUESTIONS } from "../../../../src/constants.ts";
+import { authorizeCandidateAnalysis } from '@/lib/server/recruiting';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,6 +32,7 @@ export async function POST(request: Request) {
   try {
     const user = await requireUser();
     await ensureMember(user.id, user.authId);
+    if(form.has('submissionId'))await authorizeCandidateAnalysis(form.get('submissionId'),user.id,track,maxQuestions);
     const status = await startRun({ bytes, fileName: file.name, track: track as Track, maxQuestions, userId: user.id, member: true });
     return NextResponse.json({ runId: status.runId });
   } catch (e) {

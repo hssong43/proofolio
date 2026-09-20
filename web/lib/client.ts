@@ -6,11 +6,12 @@ async function parse<T>(res: Response): Promise<T> {
   return body;
 }
 
-export async function startAnalysis(file: File, track: Track, maxQuestions: number) {
+export async function startAnalysis(file: File, track: Track, maxQuestions: number, submissionId?: string) {
   const form = new FormData();
   form.append("file", file);
   form.append("track", track);
   form.append("maxQuestions", String(maxQuestions));
+  if(submissionId)form.append('submissionId',submissionId);
   return parse<{ runId: string }>(await fetch("/api/analyze", { method: "POST", body: form }));
 }
 
@@ -21,8 +22,8 @@ export async function fetchStatus(runId: string) {
 export async function fetchExample(track: Track) {
   return parse<{ title: string; notice: string; result: ClientResult }>(await fetch(`/api/examples/${track}`, { cache: 'no-store' }));
 }
-export async function startCodeAnalysis(url: string, maxQuestions: number) {
-  return parse<{runId: string}>(await fetch('/api/analyze/code', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({url,maxQuestions}) }));
+export async function startCodeAnalysis(url: string, maxQuestions: number, submissionId?: string) {
+  return parse<{runId: string}>(await fetch('/api/analyze/code', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({url,maxQuestions,submissionId}) }));
 }
 export async function submitAnswer(runId: string, answer: AnswerRecord) {
   const result = await parse<{ok: boolean; saved: string; answers: AnswerRecord[]}>(await fetch(`/api/analyze/${runId}/answers`, {
@@ -37,4 +38,9 @@ export async function submitAnswers(runId: string, answers: AnswerRecord[]) {
   const result = await parse<{ ok: boolean; saved: number; storage: "local" | "supabase" }>(await fetch(`/api/analyze/${runId}/answers`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ answers }) }));
   if (result.ok !== true || result.saved !== answers.length) throw new Error("저장 응답의 답변 개수를 확인할 수 없어요.");
   return result;
+}
+
+export async function recruitingRequest<T>(url: string, body?: unknown, method=body===undefined?'GET':'POST'): Promise<T> {
+  return parse<T>(await fetch(url,{method,cache:'no-store',
+    ...(body===undefined?{}:{headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}));
 }

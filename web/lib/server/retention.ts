@@ -24,5 +24,6 @@ export async function cleanupExpiredRuns() {
       // Only this expired run's local backup, never benchmark originals or a workspace root.
       await rm(join(ROOT,'output','web','runs',run.id),{recursive:true,force:true});
     }
+    await rpc('proofolio_purge_recruiting',{});
   } finally { running=false; }
 }

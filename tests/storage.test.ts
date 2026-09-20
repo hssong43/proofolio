@@ -56,13 +56,14 @@ test('retention: protect examples; delete only expired owned files before guarde
         assert.equal(init!.method,'DELETE');assert.deepEqual(JSON.parse(init!.body as string).prefixes,[`${userId}/${runId}/portfolio.pdf`]);
         calls.push('remove');return storageFailure?Response.json({message:'synthetic failure'},{status:403}):Response.json([]);
       }
+      if(url.pathname==='/rest/v1/rpc/proofolio_purge_recruiting'){calls.push('purge-recruiting');return Response.json(null);}
       assert.equal(url.pathname,'/rest/v1/rpc/proofolio_purge_run');
       assert.equal(JSON.parse(init!.body as string).p_run_id,runId);calls.push('purge');return Response.json(null);
     };
     await assert.rejects(cleanupExpiredRuns(),/만료 파일 삭제 실패/);
     assert.deepEqual(calls,['list','remove']);assert.equal(existsSync(dir),true);
     calls.length=0;storageFailure=false;await cleanupExpiredRuns();
-    assert.deepEqual(calls,['list','remove','purge']);assert.equal(existsSync(dir),false);
+    assert.deepEqual(calls,['list','remove','purge','purge-recruiting']);assert.equal(existsSync(dir),false);
   }finally{globalThis.fetch=original;keys.forEach((k,i)=>{if(before[i]===undefined)delete process.env[k];else process.env[k]=before[i];});}
 });
 
