@@ -131,7 +131,7 @@ function numericBoundaryClipped(quote:string,source:string):boolean {
     const end=chars[at+key.length-1],before=text.slice(0,chars[at].index),after=text.slice(end.index+end[0].length);
     // ponytail: conservative numeric-edge check; ambiguous trailing words require a longer quote or image review.
     clipped=(/^\p{N}/u.test(key)&&/[\p{N}+\-‐‑‒–—−~<>≤≥=$€£₩]\s*$/u.test(before))||
-      (/\p{N}$/u.test(key)&&/^\s*(?:[\p{L}\p{N}%‰×/°]|[.,]\p{N})/u.test(after))||
+      (/\p{N}$/u.test(key)&&/^\s*(?:[\p{L}\p{N}%‰×/°]|[.,]\p{N}|[-‐‑‒–—−~]\s*\p{N})/u.test(after))||
       (/%$/u.test(key)&&/^\s*p(?![a-z])/iu.test(after));
     if(!clipped)return false;
   }

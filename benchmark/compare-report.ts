@@ -32,13 +32,13 @@ export function assessFirstDraft(draft:any,audit:any[]|null,source:any){
   const grounded=(q:any)=>q.grounded===true&&q.unsupported_premise===false&&q.wrong_page_or_evidence===false&&q.duplicate===false;
   const sourceGrounded=audit?audit.filter(grounded).length:null;
   if(!parsed.success)return {questions:count,passed:0,source_grounded:sourceGrounded,schema_valid:false,local_errors:parsed.error.issues,audit};
-  const seenIds=new Set<string>(),seenText=new Set<string>();
+  const seenText=new Set<string>();
   const local=parsed.data.questions.map((q,index)=>{
     const original=source.evidence.find((e:any)=>e.id===q.evidence_id),linked=original?{...original,anchors:q.anchor_indices.map(i=>original.anchors[i-1]).filter(Boolean)}:undefined;
-    const errors=questionErrors(q,linked,seenIds,seenText);
+    const errors=questionErrors(q,linked,seenText);
     if(!linked||linked.anchors.length!==q.anchor_indices.length)errors.push('unknown_question_anchor');
     if(linked)errors.push(...questionFocusErrors(q,linked,(source.selected_points??source.analysis_plan.selected_points).find((p:any)=>p.id===linked.focus_target_id)));
-    seenIds.add(q.evidence_id);seenText.add(q.question.normalize('NFC').replace(/[\p{P}\p{S}\s]/gu,''));
+    seenText.add(q.question.normalize('NFC').replace(/[\p{P}\p{S}\s]/gu,''));
     return {index:index+1,errors};
   });
   return {questions:count,passed:audit?local.filter((c,i)=>!c.errors.length&&grounded(audit[i])).length:null,

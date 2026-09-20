@@ -19,5 +19,7 @@ export async function fetchStatus(runId: string) {
 }
 
 export async function submitAnswers(runId: string, answers: AnswerRecord[]) {
-  return parse<{ ok: true }>(await fetch(`/api/analyze/${runId}/answers`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ answers }) }));
+  const result = await parse<{ ok: boolean; saved: number }>(await fetch(`/api/analyze/${runId}/answers`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ answers }) }));
+  if (result.ok !== true || result.saved !== answers.length) throw new Error("저장 응답의 답변 개수를 확인할 수 없어요.");
+  return result;
 }

@@ -9,7 +9,8 @@ import {runCli} from '../src/cli.ts';
 import {main as benchmarkMain} from '../src/benchmark.ts';
 import {analyzePdf} from '../src/pipeline.ts';
 import {DEFAULT_MAX_QUESTIONS} from '../src/questions.ts';
-import {analysisArgs,toClientResult,ROOT,sameOrigin} from '../web/lib/server/runner.ts';
+import {analysisArgs,toClientResult,ROOT,sameOrigin,saveAnswers,AnswerError} from '../web/lib/server/runner.ts';
+import {randomUUID} from 'node:crypto';
 
 test('same-origin upload uses the browser Host, not Next internal localhost, and rejects cross-site requests',()=>{
   const check=(origin?:string,site?:string)=>sameOrigin(new Request('http://localhost:3100/api/analyze',{
@@ -19,14 +20,15 @@ test('same-origin upload uses the browser Host, not Next internal localhost, and
   assert.equal(check(undefined,'cross-site'),false);assert.equal(check(undefined,'same-origin'),true);
 });
 
-test('web and CLI share OpenRouter, the same ledger, explicit spending and the five-question ceiling',()=>{
+test('web and CLI share OpenRouter, the same ledger, explicit spending and the ten-question ceiling',()=>{
   const env={PROOFOLIO_MAX_COST_USD:'10'},run='00000000-0000-4000-8000-000000000001';
-  const args=analysisArgs(run,'design',5,env),value=(flag:string)=>args[args.indexOf(flag)+1];
+  const args=analysisArgs(run,'design',10,env),value=(flag:string)=>args[args.indexOf(flag)+1];
   assert.equal(ROOT,resolve('.'));
   assert.equal(value('--provider'),'openrouter');assert.equal(value('--max-cost-usd'),'10');
   assert.equal(value('--budget-ledger'),executionBudget(ROOT,env).ledger);
   assert.equal(value('--max-questions'),String(DEFAULT_MAX_QUESTIONS));
-  assert.throws(()=>analysisArgs(run,'design',10,env));
+  assert.throws(()=>analysisArgs(run,'design',11,env));
+  assert.ok(value('--raw-response-dir').endsWith('/raw'));assert.ok(value('--preview-dir').endsWith('/regions'));
   assert.throws(()=>analysisArgs('../escape','design',5,env));
   for(const limit of [undefined,'0','-1','11','NaN','Infinity'])
     assert.throws(()=>analysisArgs(run,'design',5,{PROOFOLIO_MAX_COST_USD:limit}));
@@ -86,11 +88,32 @@ test('web runner handles a fast local child, atomic status polling and answer st
     const run=await startRun({bytes:Buffer.from('%PDF-fixture'),fileName:'fixture.pdf',track:'design'});
     let status;for(let i=0;i<300;i++){status=await readStatus(run.runId);assert.ok(status);if(status.state==='complete'||status.state==='failed')break;await setTimeout(10);}
     assert.equal(status.state,'complete');assert.equal(status.stage,3);assert.equal(status.result.questions.length,0);
-    await saveAnswers(run.runId,[]);console.log(run.runId);`;
+    await assert.rejects(saveAnswers(run.runId,[]),/질문이 있는/);console.log(run.runId);`;
   const result=spawnSync(process.execPath,['--input-type=module','-e',script],{cwd:root,encoding:'utf8',timeout:10000,
     env:{...process.env,PROOFOLIO_ROOT:root,PROOFOLIO_MAX_COST_USD:'10',PROOFOLIO_BUDGET_LEDGER:'output/openrouter-budget.jsonl',OPENROUTER_API_KEY:''}});
   assert.equal(result.status,0,result.stderr);
   const runId=result.stdout.trim();assert.match(runId,/^[a-f0-9-]{36}$/);
   assert.equal(existsSync(resolve(root,'output/openrouter-budget.jsonl')),false);
-  assert.deepEqual(JSON.parse(readFileSync(resolve(root,'output/web/runs',runId,'answers.json'),'utf8')).answers,[]);
+  assert.equal(existsSync(resolve(root,'output/web/runs',runId,'answers.json')),false);
+});
+
+test('v0.14 answer storage validates completed question IDs, values and immutable concurrent retries',async()=>{
+  // Synthetic run artifacts live only under ignored output; never alter real runs.
+  const runId=randomUUID(),dir=resolve(ROOT,'output/web/runs',runId);mkdirSync(dir,{recursive:true});
+  const questions=Array.from({length:10},(_,i)=>({id:'q'+(i+1)}));
+  const status={runId,state:'running',result:{questions}};
+  writeFileSync(resolve(dir,'status.json'),JSON.stringify(status));
+  const answers=questions.map(q=>({questionId:q.id,answer:'합성 답변',seconds:2}));
+  await assert.rejects(saveAnswers(runId,answers),(e:unknown)=>e instanceof AnswerError&&e.status===409);
+  status.state='complete';writeFileSync(resolve(dir,'status.json'),JSON.stringify(status));
+  for(const invalid of [null,[],answers.slice(1),[...answers.slice(1),answers[1]],
+    ...[{questionId:'unknown'},{answer:123},{answer:'x'.repeat(501)},{seconds:-1},{seconds:NaN},{seconds:Infinity},{seconds:'2'},{extra:true}]
+      .map(change=>[{...answers[0],...change},...answers.slice(1)])]){
+    await assert.rejects(saveAnswers(runId,invalid),(e:unknown)=>e instanceof AnswerError&&e.status===400);
+  }
+  assert.deepEqual(await Promise.all([saveAnswers(runId,answers),saveAnswers(runId,answers)]),[10,10]);
+  const before=readFileSync(resolve(dir,'answers.json'),'utf8');
+  assert.equal(await saveAnswers(runId,[...answers].reverse()),10);
+  await assert.rejects(saveAnswers(runId,[{...answers[0],answer:'수정'},...answers.slice(1)]),/덮어쓰지/);
+  assert.equal(readFileSync(resolve(dir,'answers.json'),'utf8'),before);
 });

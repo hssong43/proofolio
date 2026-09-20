@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: "**/paid.spec.ts",
   outputDir: join(tmpdir(), "proofolio-playwright-results"),
   reporter: "list",
   workers: 1,

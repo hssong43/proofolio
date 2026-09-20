@@ -11,8 +11,10 @@ export class HttpResponseError extends Error {
   readonly request_id:string|null;
   readonly generation_id:string|null;
   readonly usage:unknown;
-  constructor(message:string,status:number,requestId:string|null,usage?:unknown,generationId:string|null=null){
-    super(message);this.status=status;this.request_id=requestId;this.generation_id=generationId;this.usage=usage;
+  readonly diagnostics:Record<string,string|number|null>;
+  readonly retry_after_ms:number|null;
+  constructor(message:string,status:number,requestId:string|null,usage?:unknown,generationId:string|null=null,diagnostics:Record<string,string|number|null>={},retryAfter:number|null=null){
+    super(message);this.status=status;this.request_id=requestId;this.generation_id=generationId;this.usage=usage;this.diagnostics=diagnostics;this.retry_after_ms=retryAfter;
   }
 }
 export type Usage = {promptTokenCount: number; candidatesTokenCount: number; totalTokenCount: number;
@@ -187,6 +189,12 @@ export class Budget {
 export type ModelRequest = {kind:string;schema:z.ZodType;prompt:string;model:string;pdf?:Uint8Array;pdf_uri?:string;
   images?:Array<[string,Uint8Array]>;maxOutputTokens?:number;thinkingLevel?:'LOW'|'MEDIUM'|'HIGH'};
 export type Generate = (request:ModelRequest)=>Promise<unknown>;
+export function retryAfterMs(value:string|null,now=Date.now()):number|null {
+  if(value===null)return null;
+  const text=value.trim(),ms=/^\d+$/.test(text)?Number(text)*1000:
+    /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(text)?Math.max(0,Date.parse(text)-now):NaN;
+  return Number.isSafeInteger(ms)&&ms>=0?ms:null;
+}
 export async function requestJson(url:string,init:RequestInit,apiKey:string,fetcher:typeof fetch=fetch,provider='OpenRouter'):Promise<[Record<string,any>,Headers]> {
   let response:Response;
   try {response=await fetcher(url,{...init,redirect:'error',signal:init.signal??AbortSignal.timeout(120_000)});}
@@ -197,10 +205,21 @@ export async function requestJson(url:string,init:RequestInit,apiKey:string,fetc
   let value:unknown;
   const safeId=(v:unknown)=>typeof v==='string'&&/^[A-Za-z0-9_.:-]{1,200}$/.test(v)&&!v.includes(apiKey)?v:null;
   const headerId=safeId(response.headers.get('x-request-id'))??safeId(response.headers.get('request-id'));
-  try {value=size?JSON.parse(Buffer.concat(chunks).toString('utf8')):{};}catch {throw new HttpResponseError(`${provider} HTTP ${response.status}: 유효하지 않은 JSON.`,response.status,headerId);}
+  const generationId=safeId(response.headers.get('x-generation-id'));
+  const retryAfter=retryAfterMs(response.headers.get('retry-after'));
+  try {value=size?JSON.parse(Buffer.concat(chunks).toString('utf8')):{};}catch {throw new HttpResponseError(`${provider} HTTP ${response.status}: 유효하지 않은 JSON.`,response.status,headerId,undefined,generationId,{},retryAfter);}
   if(!response.ok){const message=(value as any)?.error?.message; const detail=typeof message==='string'?message.replaceAll(apiKey,'[REDACTED]').slice(0,800):'인증, 모델 접근, 할당량을 확인하세요.';
+    const metadata=(value as any)?.error?.metadata;
+    // Whitelist codes only: raw upstream messages can contain credentials or portfolio text.
+    const safeCode=(v:unknown)=>typeof v==='number'&&Number.isSafeInteger(v)?v:
+      typeof v==='string'&&/^[A-Za-z0-9_.:/ -]{1,120}$/.test(v)&&!v.includes(apiKey)?v:null;
+    let upstream:any;
+    try {upstream=typeof metadata?.raw==='string'?JSON.parse(metadata.raw):metadata?.raw;}catch{}
+    const diagnostics={provider_name:safeCode(metadata?.provider_name),error_type:safeCode(metadata?.error_type),
+      provider_code:safeCode(metadata?.provider_code),upstream_code:safeCode(upstream?.error?.code??upstream?.code),
+      upstream_status:safeCode(upstream?.error?.status??upstream?.status),upstream_type:safeCode(upstream?.error?.type??upstream?.type)};
     throw new HttpResponseError(`${provider} HTTP ${response.status}: ${detail}`,response.status,
-      headerId??safeId((value as any)?.id)??safeId((value as any)?.error?.metadata?.request_id),(value as any)?.usage,safeId((value as any)?.id));}
+      headerId??safeId((value as any)?.id)??safeId(metadata?.request_id),(value as any)?.usage,safeId((value as any)?.id)??generationId,diagnostics,retryAfter);}
   if(!value||typeof value!=='object'||Array.isArray(value)) throw new Error(`${provider} 응답 형식 오류.`);
   return [value as Record<string,any>,response.headers];
 }

@@ -4,7 +4,7 @@ import * as z from 'zod';
 import {mkdtemp,readFile,appendFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {Budget,BudgetError,HttpResponseError,requestJson,usageCost,priceFor} from '../src/llm.ts';
+import {Budget,BudgetError,HttpResponseError,requestJson,retryAfterMs,usageCost,priceFor} from '../src/llm.ts';
 import {DocumentMap,responseSchema} from '../src/schema.ts';
 
 const model='gemini-3.8-flash',schema=z.strictObject({value:z.string().min(1)});
@@ -25,6 +25,16 @@ test('Pro standard pricing includes long-context tier, cached input and thinking
   assert.throws(()=>priceFor('gemini-unpriced'),BudgetError);
 });
 const BASE_URL='https://openrouter.ai/api/v1';
+test('Retry-After supports delta seconds and HTTP dates without accepting invalid or negative values',async()=>{
+  const now=Date.parse('2026-09-20T00:00:00Z');
+  assert.equal(retryAfterMs('60',now),60_000);assert.equal(retryAfterMs('0',now),0);
+  assert.equal(retryAfterMs('Sun, 20 Sep 2026 00:01:00 GMT',now),60_000);
+  assert.equal(retryAfterMs('Sun, 20 Sep 2026 00:00:00 GMT',now+1000),0);
+  for(const v of [null,'','-1','0.1','fake-key','Infinity','999999999999999999999'])assert.equal(retryAfterMs(v,now),null);
+  for(const body of ['not json',JSON.stringify({error:{code:429}})])
+    await assert.rejects(requestJson(BASE_URL,{},'fake-key',(async()=>new Response(body,{status:429,headers:{'Retry-After':'45'}})) as typeof fetch),
+      e=>e instanceof HttpResponseError&&e.retry_after_ms===45_000);
+});
 async function budget(){return new Budget(join(await mkdtemp(join(tmpdir(),'portfolio-budget-')),'ledger.jsonl'));}
 test('HTTP diagnostics preserve status and safe request IDs, including non-JSON errors',async()=>{
   for(const json of [true,false]){
@@ -34,6 +44,20 @@ test('HTTP diagnostics preserve status and safe request IDs, including non-JSON 
   }
   await assert.rejects(requestJson(BASE_URL,{},'fake-key',(async()=>Response.json({error:{message:'denied'},id:'fake-key'},
     {status:401,headers:{'x-request-id':'fake-key'}})) as typeof fetch),e=>e instanceof HttpResponseError&&e.request_id===null);
+});
+test('HTTP 502 retains generation headers and provider codes without raw source or secrets',async()=>{
+  for(const json of [true,false]){
+    const body={error:{message:'Provider returned error',metadata:{provider_name:'Google Vertex',error_type:'provider_error',provider_code:'INTERNAL',
+      raw:JSON.stringify({error:{code:500,status:'INTERNAL',message:'private source fake-key'}})}}};
+    await assert.rejects(requestJson(BASE_URL,{},'fake-key',(async()=>new Response(json?JSON.stringify(body):'private source fake-key',
+      {status:502,headers:{'x-generation-id':'gen-header-123'}})) as typeof fetch),e=>{
+      assert.ok(e instanceof HttpResponseError);assert.equal(e.generation_id,'gen-header-123');assert.equal(e.usage,undefined);
+      if(json)assert.deepEqual(e.diagnostics,{provider_name:'Google Vertex',error_type:'provider_error',provider_code:'INTERNAL',upstream_code:500,upstream_status:'INTERNAL',upstream_type:null});
+      assert.ok(!JSON.stringify(e).includes('private source'));assert.ok(!JSON.stringify(e).includes('fake-key'));return true;
+    });
+  }
+  await assert.rejects(requestJson(BASE_URL,{},'fake-key',(async()=>Response.json({error:{metadata:{provider_name:'fake-key',raw:'not json'}}},
+    {status:502,headers:{'x-generation-id':'fake-key'}})) as typeof fetch),e=>e instanceof HttpResponseError&&e.generation_id===null&&e.diagnostics.provider_name===null);
 });
 test('21 wire schema property names preserved while local constraints remain',()=>{const shape=z.strictObject({pattern:z.string().max(3)}),wire=responseSchema(shape) as any;
   assert.deepEqual(wire.properties,{pattern:{type:'string'}});assert.deepEqual(wire.required,['pattern']);assert.equal(shape.safeParse({pattern:'long'}).success,false);

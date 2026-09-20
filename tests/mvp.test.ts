@@ -4,14 +4,154 @@ import {mkdtempSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {PDFDocument,rgb} from 'pdf-lib';
-import {DocumentMap, QuestionPlan, QuestionDrafts, type QuestionCard, type ResolvedEvidence} from '../src/schema.ts';
+import {DocumentMap, QuestionPlan, QuestionDrafts, QuestionFieldCheck, type QuestionCard, type ResolvedEvidence} from '../src/schema.ts';
 import {normalizeMap,validateMap,validateAnchors,selectPages,analyzePdf,localEvidenceChecks,atomicArtifacts} from '../src/pipeline.ts';
 import {pageTiles,pageBox,openRenderer,renderPage,alignRangeTypography,numericQuoteIssue,quoteTranscriptionIssue} from '../src/pdf.ts';
-import {questionQuality,questionFocusErrors,generateQuestions,materializeQuestion,interviewGuide,questionErrors,type Request} from '../src/questions.ts';
+import {questionQuality,questionFocusErrors,questionContext,generateQuestions,materializeQuestion,interviewGuide,questionErrors,questionFieldErrors,type Request} from '../src/questions.ts';
 import {Budget} from '../src/llm.ts';
 import {buildOpenRouterPayload} from '../src/openrouter.ts';
 
 const authored={question:'이 작업의 판단 기준을 설명해 주세요.',intent:'구체적인 판단 기준 확인',listen_for:['원문과 연결된 판단 기준']};
+const fieldChecks=[{field:'question',index:null},{field:'intent',index:null},{field:'listen_for',index:1}].map(c=>({...c,status:'supported',reason:'synthetic fixture',premise_checks:[]}));
+
+test('v0.16 context bundles keep exact scoped claims, not inferred authorship or unrelated project roles',()=>{
+  const source={unknown_fields:['iteration'],details:[{field:'own_scope',value:'표지 구성 담당',anchor_indices:[2]},
+    {field:'team_scope',value:null,anchor_indices:[]}],anchors:[{purpose:'artifact'},{purpose:'context',quote:'표지 구성 담당'}]} as ResolvedEvidence;
+  const bundle=questionContext(source);
+  assert.deepEqual(bundle.required_anchor_indices,[2]);assert.equal(bundle.authorship_verified,false);
+  assert.deepEqual(bundle.documented_details,[{field:'own_scope',value:'표지 구성 담당',anchor_indices:[2]}]);
+  assert.ok(!JSON.stringify(bundle).includes('전체 제작'));assert.deepEqual(bundle.unknown_fields,['iteration','team_scope']);
+});
+test('v0.16 exact field and experience checks reject unreported guide actions while keeping open explanations',()=>{
+  const anchors=[{quote:'원형 아이콘을 배치했습니다.',visual_description:null,crop_reading:{}}] as ResolvedEvidence['anchors'];
+  const make=(q=authored)=>fieldChecks.map(c=>QuestionFieldCheck.parse({...c,
+    field_text:c.field==='listen_for'?q.listen_for[c.index!-1]:q[c.field as 'question'|'intent'],
+    experience_check:{basis:'observed',condition:null,anchor_index:null,source_excerpt:null}}));
+  assert.deepEqual(questionFieldErrors({...authored,evidence_id:'e'},make(),anchors),[]);
+  for(const value of ['무엇을 덜어내고 남겼는지 설명','감수한 도달 손실의 이유','미리 정한 배치 규칙','역할을 나누어 적용한 기준',
+    '이 아이콘을 고른 이유','다르게 가져간 이유','특히 살린 표현','이렇게 한정해도 충분하다고 본 이유','기울기를 준 목적']){
+    const q={...authored,listen_for:[value]},checks=make(q);
+    assert.ok(questionFieldErrors({...q,evidence_id:'e'},checks,anchors).some(e=>e.startsWith('unverified_experience:listen_for')));
+    checks[2].experience_check={basis:'documented',condition:null,anchor_index:1,source_excerpt:'기록되지 않은 수정 과정'};
+    assert.ok(questionFieldErrors({...q,evidence_id:'e'},checks,anchors).length);
+  }
+  const q={...authored,listen_for:['수정했다면 변경 기준과 수정하지 않았다면 현재 구성의 해석']},checks=make(q);
+  checks[2].experience_check={basis:'conditional',condition:'수정했다면',anchor_index:null,source_excerpt:null};
+  assert.deepEqual(questionFieldErrors({...q,evidence_id:'e'},checks,anchors),[]);
+  checks[2].experience_check.condition='다른 필드라면';assert.ok(questionFieldErrors({...q,evidence_id:'e'},checks,anchors).length);
+  checks[2].field_text='다른 가이드';assert.ok(questionFieldErrors({...q,evidence_id:'e'},checks,anchors).some(e=>e.startsWith('missing_or_mismatched')));
+  const omitted=make();delete omitted[2].experience_check;
+  assert.ok(questionFieldErrors({...authored,evidence_id:'e'},omitted,anchors).length);
+  const partial={...authored,question:'실제 결과물에 적용할 때 기준이 있었나요? 있었다면 설명해 주세요.'},partialChecks=make(partial);
+  partialChecks[0].experience_check={basis:'conditional',condition:'있었다면 설명해 주세요',anchor_index:null,source_excerpt:null};
+  assert.ok(questionFieldErrors({...partial,evidence_id:'e'},partialChecks,anchors).includes('unverified_experience:question:'));
+  const fully={...authored,question:'실제 적용했다면 그 기준을, 아니라면 보이는 표현을 해석해 주세요.'},fullyChecks=make(fully);
+  fullyChecks[0].experience_check={basis:'conditional',condition:'실제 적용했다면',anchor_index:null,source_excerpt:null};
+  assert.deepEqual(questionFieldErrors({...fully,evidence_id:'e'},fullyChecks,anchors),[]);
+});
+test('v0.16 selection claims permit reasons, not invented populations or past audience interpretations',()=>{
+  const quote='인사이트 통계를 보고 도달 수가 높은 게시물을 선택했습니다.';
+  const anchors=[{quote,visual_description:null,crop_reading:{}}] as ResolvedEvidence['anchors'];
+  const make=(q=authored)=>fieldChecks.map(c=>QuestionFieldCheck.parse({...c,
+    field_text:c.field==='listen_for'?q.listen_for[c.index!-1]:q[c.field as 'question'|'intent'],
+    experience_check:{basis:'observed',condition:null,anchor_index:null,source_excerpt:null}}));
+  const chosen={...authored,question:'이 게시물을 고른 이유를 설명해 주세요.'},checks=make(chosen);
+  assert.ok(questionFieldErrors({...chosen,evidence_id:'e'},checks,anchors).length);
+  checks[0].premise_checks=[{premise:'게시물을 선택함',anchor_index:1,source_excerpt:'게시물을 선택했습니다.'}];
+  assert.deepEqual(questionFieldErrors({...chosen,evidence_id:'e'},checks,anchors),[]);
+  assert.ok(questionFieldErrors({...chosen,evidence_id:'e'},checks,[{...anchors[0],quote:'선택한 자료는 없습니다.'}]).length);
+  for(const value of ['당시 어떻게 해석하셨나요?','상정한 이용자 반응을 설명']){
+    const q={...authored,listen_for:[value]};
+    assert.ok(questionFieldErrors({...q,evidence_id:'e'},make(q),anchors).includes('unverified_experience:listen_for:1'));
+  }
+  const population={...authored,listen_for:['팔로워 기준 데이터와 광고 타깃의 차이']};
+  assert.ok(questionFieldErrors({...population,evidence_id:'e'},make(population),anchors).includes('unverified_population:listen_for:1'));
+  assert.deepEqual(questionFieldErrors({...population,evidence_id:'e'},make(population),[{...anchors[0],quote:'팔로워 기준 데이터를 사용했습니다.'}]),[]);
+  const clarify={...authored,listen_for:['팔로워 기준 데이터인지 다른 모수인지 먼저 확인']};
+  assert.deepEqual(questionFieldErrors({...clarify,evidence_id:'e'},make(clarify),anchors),[]);
+  const intent={...authored,intent:'본인 관여 범위를 조건부로 확인'},intentChecks=make(intent);
+  intentChecks[1].experience_check={basis:'conditional',condition:intent.intent,anchor_index:null,source_excerpt:null};
+  assert.deepEqual(questionFieldErrors({...intent,evidence_id:'e'},intentChecks,anchors),[]);
+});
+test('v0.16 writer gets selected facts, never the entire crop transcript or unreviewed source role',async()=>{
+  const source={id:'e',project_key:'a',category:'artifact',focus_target_id:null,question_eligible:true,details:[],unknown_fields:[],
+    anchors:[{page:1,region_id:'p1:r1',kind:'visual',purpose:'artifact',quote:null,visual_description:'파란 제목 상자',source_role:'candidate_work',
+      crop_reading:{text:'선택하지 않은 다른 수치',observations:['선택하지 않은 장식 설명']}}]} as unknown as ResolvedEvidence;
+  await generateQuestions([source],async(kind,schema,args)=>{
+    assert.equal(kind,'QuestionSet');const data=JSON.parse(args.prompt.split('근거 데이터:\n')[1]);
+    assert.equal(data[0].anchors[0].source_role,undefined);assert.equal(data[0].anchors[0].crop_reading,undefined);
+    assert.doesNotMatch(args.prompt,/선택하지 않은/);return schema.parse({questions:[]});
+  },{selectedPoints:[],evidenceOnly:true,imagesFor:async()=>[]});
+});
+test('v0.16 dropping a verified context anchor cannot pass merely by keeping the artifact page',async()=>{
+  const source={id:'e',project_key:'a',category:'artifact',focus_target_id:null,question_eligible:true,details:[],unknown_fields:[],
+    anchors:[{page:1,region_id:'p1:r1',kind:'visual',purpose:'artifact',quote:null,visual_description:'제목과 안내 문단'},
+      {page:1,region_id:'p1:r2',kind:'text',purpose:'context',quote:'참고 자료입니다.',visual_description:null}]} as unknown as ResolvedEvidence;
+  let rounds=0;
+  const result=await generateQuestions([source],async(kind,schema)=>{
+    assert.equal(kind,'QuestionSet','context omission is rejected before the paid reviewer');rounds++;
+    return schema.parse({questions:[{...authored,evidence_id:'e',anchor_indices:[1],angle:'decision'}]});
+  },{selectedPoints:[],evidenceOnly:true,imagesFor:async()=>[]});
+  assert.equal(rounds,2);assert.equal(result.cards.length,0);
+  assert.ok(result.checks.every(c=>c.reasons.includes('question_missing_bundle_context')));
+});
+
+test('v0.15 one source can support ten distinct tasks, but semantic duplicates still fail',async()=>{
+  const source={id:'e',project_key:'a',category:'artifact',focus_target_id:null,question_eligible:true,unknown_fields:[],
+    anchors:[{page:1,region_id:'p1:r1',quote:null,visual_description:'독립적으로 설명할 구성이 담긴 합성 작업물'}]} as unknown as ResolvedEvidence;
+  for(const duplicate of [false,true]){
+    let round=0,reviewed=0;
+    const request:Request=async(kind,schema,args,check)=>{
+      let raw:unknown;
+      if(kind==='QuestionSet')raw={questions:round++?[]:Array.from({length:10},(_,i)=>({...authored,evidence_id:'e',anchor_indices:[1],
+        angle:'decision',question:`합성 선택 ${String.fromCharCode(65+i)}의 기준을 설명해 주세요.`}))};
+      else {const rows=JSON.parse(args.prompt.split('\n').find(s=>s.startsWith('[{'))!);reviewed+=rows.length;
+        raw={reviews:rows.map((r:any,i:number)=>({question_id:r.question_id,field_checks:fieldChecks,status:'supported',reason:'synthetic semantic verdict',
+          region_support:true,no_added_premise:true,distinct_answer:!duplicate||i===0,addresses_focus:true,substantive:true})),focus_coverage:[]};}
+      const parsed=schema.parse(raw);check?.(parsed);return parsed;
+    };
+    const result=await generateQuestions([source],request,{evidenceOnly:true,selectedPoints:[],imagesFor:async()=>[]});
+    assert.equal(reviewed,10);assert.equal(result.cards.length,duplicate?1:10);assert.equal(round,duplicate?2:1);
+    if(duplicate)assert.equal(result.checks.filter(c=>c.reasons.includes('distinct_answer')).length,9);
+  }
+});
+test('v0.15 reviewer approval cannot bypass missing or foreign premise sources on any card field',()=>{
+  const anchors=[{quote:'이미지 제작과 영상 편집',visual_description:null},{quote:'별도 제목',visual_description:null}] as ResolvedEvidence['anchors'];
+  const base=fieldChecks.map(c=>QuestionFieldCheck.parse(c));
+  assert.deepEqual(questionFieldErrors({...authored,evidence_id:'e'},base,anchors),[],'open explanation does not need a documented answer');
+  for(const field of ['question','intent','listen_for'])for(const mode of ['valid','missing','foreign','unrecorded_action']){
+    const checks=structuredClone(base),check=checks.find(c=>c.field===field)!;
+    check.premise_checks=[{premise:'이미지 제작',anchor_index:mode==='missing'?null:mode==='foreign'?2:1,
+      source_excerpt:mode==='missing'?null:mode==='unrecorded_action'?'어긋남을 편집에서 해결':'이미지 제작'}];
+    assert.equal(questionFieldErrors({...authored,evidence_id:'e'},checks,anchors).length>0,mode!=='valid',field+':'+mode);
+  }
+  assert.equal(QuestionFieldCheck.safeParse({field:'question',index:null,status:'supported',reason:'normal workflow'}).success,false);
+});
+
+test('v0.14 ten questions: do not stop at three ready cards, never exceed two generation rounds',async()=>{
+  for(const counts of [[3,7],[3,3],[3,0],[10]]){
+    const sources=Array.from({length:10},(_,i)=>({id:'e'+i,project_key:'a',category:'artifact',focus_target_id:null,question_eligible:true,
+      unknown_fields:[],anchors:[{page:1,region_id:`p1:r${i+1}`,quote:null,visual_description:'서로 다른 작품 '+String.fromCharCode(65+i)}]})) as unknown as ResolvedEvidence[];
+    let round=0,used=0;
+    const request:Request=async(kind,schema,args,check)=>{
+      let raw:unknown;
+      if(kind==='QuestionSet'){
+        assert.match(args.prompt,/요청 목표: 10개/);
+        const count=counts[round++]??10;
+        raw={questions:sources.slice(used,used+count).map(e=>({...authored,evidence_id:e.id,anchor_indices:[1],angle:'decision'}))};used+=count;
+      }else{
+        const rows=JSON.parse(args.prompt.split('\n').find(s=>s.startsWith('[{'))!);
+        raw={reviews:rows.map((r:any)=>({question_id:r.question_id,field_checks:fieldChecks,status:'supported',reason:'fixture',
+          region_support:true,no_added_premise:true,distinct_answer:true,addresses_focus:true,substantive:true})),focus_coverage:[]};
+      }
+      const parsed=schema.parse(raw);check?.(parsed);return parsed;
+    };
+    const result=await generateQuestions(sources,request,{evidenceOnly:true,selectedPoints:[],imagesFor:async()=>[]});
+    assert.equal(result.cards.length,counts.reduce((a,b)=>a+b,0));assert.equal(round,counts.length);
+    assert.ok(result.cards.every(q=>q.field_checks?.length===3));
+  }
+  assert.equal(QuestionDrafts.safeParse({questions:Array.from({length:11},()=>({...authored,evidence_id:'e',anchor_indices:[1],angle:'decision'}))}).success,false);
+});
 
 test('v0.6 normalizes redundant context without hiding missing/cross-project references or project limits',()=>{
   const map=DocumentMap.parse({pages:Array.from({length:20},(_,i)=>({page:i+1,role:'project',readability:'readable',note:'work'})),
@@ -98,7 +238,7 @@ test('v0.6 question review sees only selected source crops and rejects false sup
   const request:Request=async <T>(kind:string,_schema:any,args:any):Promise<T>=>{
     if(kind==='QuestionSet'){rounds++;return {questions:rounds===1?[{...authored,evidence_id:'e1',anchor_indices:[1],angle:'decision'}]:[]} as T;}
     assert.equal(args.images[0][0],'p1:r1');seenImages++;
-    return {reviews:[{question_id:'candidate-1',status:'supported',reason:'fixture',region_support:true,no_added_premise:false,
+    return {reviews:[{question_id:'candidate-1',field_checks:fieldChecks,status:'supported',reason:'fixture',region_support:true,no_added_premise:false,
       distinct_answer:true,addresses_focus:true,substantive:true}]} as T;
   };
   const result=await generateQuestions([evidence],request,{contextImages:[],selectedPoints:[{id:'t1',project_key:'a',anchor_page:1,focus:'decision',specificity:'concrete_action',context_status:'located',reason:'fixture',required_context_pages:[],optional_context_pages:[]}],imagesFor:async rows=>{
@@ -164,7 +304,7 @@ test('v0.10.4 numeric boundaries cannot discard spaced signs or units, even in a
   const box=[0,0,500,500];
   for(const [quote,text]of [['CVR 2–3%','CVR 2–3% p'],['CVR 2–3%','CVR 2–3%p'],
     ['2–3','- 2–3'],['2–3','≤ 2–3'],['2–3','2–3 %'],['2–3','2–3 x'],
-    ['2–3','22–3'],['2–3','2–30'],['ROAS 3','ROAS 3.5x']]){
+    ['2–3','22–3'],['2–3','2–30'],['ROAS 3','ROAS 3.5x'],['1,250','1,250–2,500']]){
     const spans=[{box,text}],rough=quote.replaceAll('–','-');
     assert.equal(alignRangeTypography(rough,box,spans),rough,text);
     assert.equal(numericQuoteIssue(quote,box,spans),'numeric_text_layer_mismatch',text);
@@ -190,11 +330,13 @@ test('v0.10.3 full extraction records literal alignment but still requires visua
     if(request.kind==='VisualInventory')return {coverage:'complete',limitations:[],links:[],regions:[{key:'r1',kind:'text_block',box:[0,0,1000,1000],
       description:'fixture',salient_text:null,identification:'clear',readability:'readable',source_role:'unknown',role_basis:null}]};
     if(request.kind==='DesignExtraction')return {evidence:[raw]};
+    if(request.kind==='CropReadings')return {regions:[{region_id:'p1:r1',text:exact,observations:[],readability:'readable',limitations:[]}]};
     assert.equal(request.kind,'Reviews');reviewed=true;
     const [candidate]=JSON.parse(request.prompt.split('근거 후보 데이터:\n')[1]);
     assert.equal(candidate.anchors[0].quote,exact);assert.equal(candidate.statement,exact);
     assert.equal(candidate.details.find((d:{field:string})=>d.field==='result').value,exact);
     return {reviews:[{evidence_id:candidate.evidence_id,status:'unsupported',reason:'fixture: image contradicts text layer',
+      anchor_checks:[{anchor_index:1,status:'unsupported',reason:'fixture'}],
       document_support:{status:'not_assessed',reason:'fixture',anchor_indices:[]}}]};
   }});
   assert.equal(reviewed,true);assert.equal(raw.anchors[0].quote,original);
@@ -329,7 +471,7 @@ test('v0.9.1 second question round excludes prior review IDs and cannot shrink t
     }else{
       const rows=JSON.parse(args.prompt.split('\n').find(s=>s.startsWith('[{'))!);reviewRounds++;
       const first=reviewRounds===1,prefix=first?'candidate-':'q';
-      raw={reviews:rows.map((r:any)=>({question_id:r.question_id,status:'supported',reason:'fixture',region_support:true,
+      raw={reviews:rows.map((r:any)=>({question_id:r.question_id,field_checks:fieldChecks,status:'supported',reason:'fixture',region_support:true,
         no_added_premise:true,distinct_answer:true,addresses_focus:true,substantive:true})),focus_coverage:[
         {focus_target_id:'a',checks:[{aspect:'message',source_requirements:[{region_id:'p1:r1',quote:'retargeting'}],question_ids:[prefix+'1']}]},
         {focus_target_id:'b',checks:[{aspect:'PoAS',source_requirements:[{region_id:'p1:r2',quote:'PoAS'}],question_ids:[prefix+'2']}]},
@@ -375,11 +517,11 @@ test('v0.7.1 distinct work on one point is allowed but the same source cannot in
   const request:Request=async <T>(kind:string,_schema:any,args:any):Promise<T>=>{
     if(kind==='QuestionSet')return {questions:n++?[]:evidence.map(e=>({...authored,evidence_id:e.id,anchor_indices:[1],angle:'decision'}))} as T;
     const rows=JSON.parse(args.prompt.split('\n').find((s:string)=>s.startsWith('[{'))!);
-    return {reviews:rows.map((r:any)=>({question_id:r.question_id,status:'supported',reason:'fixture',region_support:true,
+    return {reviews:rows.map((r:any)=>({question_id:r.question_id,field_checks:fieldChecks,status:'supported',reason:'fixture',region_support:true,
       no_added_premise:true,distinct_answer:true,addresses_focus:true,substantive:true}))} as T;
   };
   const result=await generateQuestions(evidence,request,{contextImages:[],selectedPoints:[point],imagesFor:async()=>[]});
-  assert.equal(result.cards.length,2);assert.ok(result.checks.some(c=>c.reasons.includes('repeated_source_angle')));
+  assert.equal(result.cards.length,2);assert.ok(result.checks.some(c=>c.reasons.includes('duplicate_question')));
 });
 test('v0.7.1 numeric OCR cannot bypass quote checks by hiding inside a visual observation',()=>{
   const record={basis:'visual_observation',statement:'3 4 unified steps',anchors:[{quote:null,visual_description:'3 4 unified steps'}],details:[]} as any;
@@ -394,7 +536,7 @@ test('v0.11 identical authored questions reach semantic review for distinct regi
   const request:Request=async <T>(kind:string,_schema:any,args:any):Promise<T>=>{
     if(kind==='QuestionSet')return {questions:rounds++?[]:evidence.map(e=>({...authored,evidence_id:e.id,anchor_indices:[1],angle:'decision',aspect:'visual_style'}))} as T;
     const rows=JSON.parse(args.prompt.split('\n').find((s:string)=>s.startsWith('[{'))!);reviewed+=rows.length;
-    return {reviews:rows.map((r:any)=>({question_id:r.question_id,status:'supported',reason:'different source works',region_support:true,
+    return {reviews:rows.map((r:any)=>({question_id:r.question_id,field_checks:fieldChecks,status:'supported',reason:'different source works',region_support:true,
       no_added_premise:true,distinct_answer:true,addresses_focus:true,substantive:true}))} as T;
   };
   const result=await generateQuestions(evidence,request,{track:'design',contextImages:[],selectedPoints:[point],imagesFor:async()=>[]});
@@ -457,8 +599,8 @@ test('v0.11 schema requires bounded authored prose and has no neutral-template f
 test('v0.11 free-form numeric premises are checked even when intent sounds cautious',()=>{
   const source={question_eligible:true,anchors:[{quote:'ROAS 목표 300%'}]} as ResolvedEvidence;
   const q={...authored,evidence_id:'e',question:'ROAS 300%p 달성 비결은 무엇인가요?'};
-  assert.ok(questionErrors(q,source,new Set(),new Set()).includes('numeric_premise_requires_source_quote'));
-  assert.ok(questionErrors({...q,question:'어떻게 판단했나요?',intent:'ROI 300% 달성 확인'},source,new Set(),new Set()).length);
+  assert.ok(questionErrors(q,source,new Set()).includes('numeric_premise_requires_source_quote'));
+  assert.ok(questionErrors({...q,question:'어떻게 판단했나요?',intent:'ROI 300% 달성 확인'},source,new Set()).length);
 });
 test('v0.7.3 failed source-region review cannot be retried into acceptance',async()=>{
   const point={id:'t',project_key:'a',anchor_page:1,focus:'decision' as const,specificity:'concrete_action' as const,
@@ -469,7 +611,7 @@ test('v0.7.3 failed source-region review cannot be retried into acceptance',asyn
   const request:Request=async <T>(kind:string,_schema:any,args:any):Promise<T>=>{
     if(kind==='QuestionSet'){if(round++)assert.deepEqual(JSON.parse(args.prompt.split('\n').at(-1)),[]);
       return {questions:[{...authored,evidence_id:'e',anchor_indices:[1],angle:'decision'}]} as T;}
-    reviews++;return {reviews:[{question_id:'candidate-1',status:'unsupported',reason:'source mismatch',region_support:false,
+    reviews++;return {reviews:[{question_id:'candidate-1',field_checks:fieldChecks,status:'unsupported',reason:'source mismatch',region_support:false,
       no_added_premise:true,distinct_answer:true,addresses_focus:true,substantive:true}]} as T;
   };
   const result=await generateQuestions([e],request,{contextImages:[],selectedPoints:[point],imagesFor:async()=>[]});
@@ -492,7 +634,7 @@ test('v0.10.4 rejected question tasks cannot win a second vote by reordering anc
           angle:'decision',aspect:second&&mode==='new_aspect'?'flow':'information_hierarchy'}]};
       }else{
         const rows=JSON.parse(args.prompt.split('\n').find(s=>s.startsWith('[{'))!),second=reviews++>0;
-        raw={reviews:rows.map((r:any)=>({question_id:r.question_id,status:second?'supported':'unsupported',reason:'fixture',
+        raw={reviews:rows.map((r:any)=>({question_id:r.question_id,field_checks:fieldChecks,status:second?'supported':'unsupported',reason:'fixture',
           region_support:true,no_added_premise:true,distinct_answer:true,addresses_focus:second,substantive:true})),
           focus_coverage:[{focus_target_id:'t',checks:[{aspect:'navigation decision',
             source_requirements:[{region_id:'p1:r1',quote:'title'}],question_ids:rows.map((r:any)=>r.question_id)}]}]};

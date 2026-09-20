@@ -39,8 +39,7 @@ export const STEP_LABELS = ["직무 선택", "업로드", "분석", "준비", "�
 export const STAGE_LABELS = ["포트폴리오 읽는 중", "직무 핵심 내용 추출 중", "질문 만드는 중"] as const;
 
 /** 기본으로 요청하는 질문 수. 실제 질문 수는 분석 결과에 따라 이보다 적을 수 있다. */
-export const DEFAULT_QUESTION_COUNT = 5;
-export const ANSWER_MAX_LENGTH = 500;
+export { DEFAULT_MAX_QUESTIONS as DEFAULT_QUESTION_COUNT, ANSWER_MAX_LENGTH } from "../../src/constants.ts";
 
 const q = (text: string, project: string): Question => ({ text, project });
 

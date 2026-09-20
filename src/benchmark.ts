@@ -133,17 +133,24 @@ export function responseUsage(raws:Array<Record<string,any>>,fallbackModel:strin
   const rows=raws.map(raw=>{
     const model=raw._request_model??fallbackModel,provider=raw._request_provider==='openrouter'||Object.values(OPENROUTER_MODELS).includes(model)?'openrouter':model===OPUS_MODEL?'vertex':'gemini';
     try{const routed=provider==='openrouter'?openRouterUsage(raw.usage):null;
-      const usage=routed?{promptTokenCount:routed.promptTokenCount,candidatesTokenCount:routed.candidatesTokenCount,totalTokenCount:routed.totalTokenCount,
+      let usage=routed?{promptTokenCount:routed.promptTokenCount,candidatesTokenCount:routed.candidatesTokenCount,totalTokenCount:routed.totalTokenCount,
         thoughtsTokenCount:routed.thinking_tokens,cachedContentTokenCount:routed.cached_tokens}:provider==='vertex'?{...vertexUsage(raw.usage),thoughtsTokenCount:null}:raw.usageMetadata;
       const cost=routed?routed.cost_usd:usageCost(model,provider==='vertex'?vertexUsage(raw.usage):usage);
-      return {model,provider,stage:raw._request_stage??null,usage,cost_usd:cost,output_includes_thinking:provider!=='gemini'};
+      const partialError=routed?.totalTokenCount===0&&raw.choices?.some((c:any)=>
+        (c.error||c.finish_reason==='error')&&typeof c.message?.content==='string'&&c.message.content.length>0);
+      // Partial text plus zero native counters does not prove zero tokens. Keep API cost but never estimate missing tokens.
+      if(partialError)usage={promptTokenCount:null,candidatesTokenCount:null,totalTokenCount:null,thoughtsTokenCount:null,cachedContentTokenCount:null};
+      return {model,provider,stage:raw._request_stage??null,usage,cost_usd:cost,output_includes_thinking:provider!=='gemini',
+        ...(partialError?{token_usage_status:'unconfirmed_partial_error'}:{})};
     }catch{return {model,provider,stage:raw._request_stage??null,usage:{cachedContentTokenCount:null},cost_usd:null,output_includes_thinking:provider!=='gemini'};}
   });
   const summarize=(items:typeof rows,pending:boolean)=>({
     tokens:pending?{input:null,output:null,thinking:null,cached:null,total:null}:tokenTotals(items.map(r=>r.usage)),
     recorded_tokens:tokenTotals(items.map(r=>r.usage)),unresolved_call:pending,unknown_usage_responses:items.filter(r=>r.cost_usd===null).length,
     known_cost_usd:items.reduce((n,r)=>n+(r.cost_usd??0),0),cost_usd:pending||items.some(r=>r.cost_usd===null)?null:items.reduce((n,r)=>n+r.cost_usd!,0)});
-  return {...summarize(rows,unresolvedProviders.length>0),providers:Object.fromEntries([...new Set([...rows.map(r=>r.provider),...unresolvedProviders])]
+  return {...summarize(rows,unresolvedProviders.length>0),
+    application_http_retries:raws.filter(r=>Number.isSafeInteger(r._application_http_attempt)&&r._application_http_attempt>1).length,
+    providers:Object.fromEntries([...new Set([...rows.map(r=>r.provider),...unresolvedProviders])]
     .map(p=>[p,{...summarize(rows.filter(r=>r.provider===p),unresolvedProviders.includes(p)),output_includes_thinking:p!=='gemini'}])),rows};
 }
 export function pilotPass(result:{questions:unknown[];quality?:{status:string}},audit:z.infer<typeof Audit>|null){
@@ -168,7 +175,8 @@ export function report(runId:string){
     const accounting=responseUsage(raws,runInfo.model,unresolved),totals=accounting.tokens,unknownUsage=accounting.unknown_usage_responses;
     const costUnknown=accounting.cost_usd===null;
     const costs={known_cost_usd:accounting.known_cost_usd,cost_usd:costUnknown?null:accounting.cost_usd,
-      cost_may_be_unknown:costUnknown,providers:accounting.providers,provider_retries:null,application_http_retries:0};
+      cost_may_be_unknown:costUnknown,providers:accounting.providers,provider_retries:null,
+      application_http_retries:accounting.application_http_retries};
     if(!existsSync(path)){
       return {id:s.id,track:s.track,status:failure?.status??'unattempted',error:failure?.error??null,total_ms:failure?.elapsed_ms??null,
         questions:0,grounded_unique:null,reviewed:false,pass:false,pilot_pass:false,tokens:totals,...costs,unknown_usage_responses:unknownUsage,

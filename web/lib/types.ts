@@ -4,7 +4,7 @@ export type RunState = "queued" | "running" | "complete" | "failed";
 
 export type ClientQuestion = {
   id: string;
-  /** 질문 본문(마지막 줄). */
+  /** 인용을 분리한 전체 질문 본문(다중행 보존). */
   prompt: string;
   /** 검증된 원문 인용. */
   quotes: string[];

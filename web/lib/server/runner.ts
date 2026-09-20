@@ -1,16 +1,17 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rename, link, unlink } from "node:fs/promises";
 import { createWriteStream, existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { AnswerRecord, ClientQuestion, ClientResult, RunStatus, Track } from "../types.ts";
 import { loadRuntimeEnv, executionBudget } from "../../../src/env.ts";
+import { DEFAULT_MAX_QUESTIONS, ANSWER_MAX_LENGTH } from "../../../src/constants.ts";
+export { DEFAULT_MAX_QUESTIONS } from "../../../src/constants.ts";
 
 /** 분석 코어(루트 저장소) 위치. 기본은 web/의 상위 폴더. */
 export const ROOT = path.resolve(process.env.PROOFOLIO_ROOT ?? (existsSync(path.join(process.cwd(), "src", "cli.ts")) ? process.cwd() : path.join(process.cwd(), "..")));
 const RUNS_DIR = path.join(ROOT, "output", "web", "runs");
-export const DEFAULT_MAX_QUESTIONS = 5;
 const RUN_ID = /^[0-9a-f-]{36}$/;
 
 export function sameOrigin(request: Request) {
@@ -43,10 +44,33 @@ export async function readStatus(runId: string): Promise<RunStatus | null> {
   }
 }
 
-export async function saveAnswers(runId: string, answers: AnswerRecord[]) {
+export class AnswerError extends Error {
+  status: number;
+  constructor(message: string, status: number) { super(message); this.status = status; }
+}
+
+export async function saveAnswers(runId: string, input: unknown) {
   const status = await readStatus(runId);
-  if (!status) throw new Error("실행을 찾을 수 없습니다.");
-  await writeFile(path.join(runDir(runId), "answers.json"), JSON.stringify({ runId, savedAt: new Date().toISOString(), answers }, null, 2));
+  if (!status) throw new AnswerError("실행을 찾을 수 없습니다.", 404);
+  const ids = status.result?.questions.map(q => q.id) ?? [];
+  if (status.state !== "complete" || !ids.length) throw new AnswerError("질문이 있는 완료된 실행에만 답변할 수 있어요.", 409);
+  if (!Array.isArray(input) || input.length !== ids.length || new Set(input.map(a => a?.questionId)).size !== ids.length ||
+    input.some(a => !a || typeof a !== "object" || Object.keys(a).sort().join() !== "answer,questionId,seconds" ||
+      !ids.includes(a.questionId) || typeof a.answer !== "string" || a.answer.length > ANSWER_MAX_LENGTH ||
+      !Number.isSafeInteger(a.seconds) || a.seconds < 0)) throw new AnswerError("질문 ID·중복·답변 값 형식을 확인해주세요.", 400);
+  const answers: AnswerRecord[] = ids.map(id => input.find(a => a.questionId === id));
+  const target = path.join(runDir(runId), "answers.json"), temporary = target + "." + randomUUID() + ".tmp";
+  await writeFile(temporary, JSON.stringify({ runId, savedAt: new Date().toISOString(), answers }, null, 2), { flag: "wx", mode: 0o600 });
+  try {
+    // Publish a complete file exclusively. Concurrent identical retries cannot overwrite the first save.
+    try { await link(temporary, target); }
+    catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+      const existing = JSON.parse(await readFile(target, "utf8"));
+      if (JSON.stringify(existing.answers) !== JSON.stringify(answers)) throw new AnswerError("이미 저장된 답변과 달라 덮어쓰지 않았어요.", 409);
+    }
+  } finally { await unlink(temporary); }
+  return answers.length;
 }
 
 /** 코어의 stage/complete 이벤트를 화면 진행 단계로 바꾼다. */
@@ -126,11 +150,12 @@ export function toClientResult(raw: RawResult): ClientResult {
 
 export function analysisArgs(runId: string, track: Track, maxQuestions = DEFAULT_MAX_QUESTIONS, env = process.env) {
   if (track !== "design" && track !== "marketing") throw new Error("지원하지 않는 직무예요.");
-  if (!Number.isInteger(maxQuestions) || maxQuestions < 1 || maxQuestions > DEFAULT_MAX_QUESTIONS) throw new Error("질문 수는 1~5개예요.");
+  if (!Number.isInteger(maxQuestions) || maxQuestions < 1 || maxQuestions > DEFAULT_MAX_QUESTIONS) throw new Error(`질문 수는 1~${DEFAULT_MAX_QUESTIONS}개예요.`);
   const dir = runDir(runId), budget = executionBudget(ROOT, env);
   return [path.join(ROOT, "src", "cli.ts"), path.join(dir, "portfolio.pdf"),
     "--provider", "openrouter", "--track", track,
     "--output", path.join(dir, "result.json"), "--guide-output", path.join(dir, "questions.txt"),
+    "--raw-response-dir", path.join(dir, "raw"), "--preview-dir", path.join(dir, "regions"),
     "--budget-ledger", budget.ledger, "--max-cost-usd", String(budget.limit),
     "--max-questions", String(maxQuestions), "--events"];
 }

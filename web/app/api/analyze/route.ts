@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (bytes.length < 5 || !bytes.subarray(0, 5).every((b, i) => b === "%PDF-".charCodeAt(i))) return NextResponse.json({ error: "PDF 파일만 올릴 수 있어요." }, { status: 400 });
   if (!Number.isInteger(maxQuestionsRaw) || maxQuestionsRaw < 1 || maxQuestionsRaw > DEFAULT_MAX_QUESTIONS)
-    return NextResponse.json({ error: "질문 수는 1~5개예요." }, { status: 400 });
+    return NextResponse.json({ error: `질문 수는 1~${DEFAULT_MAX_QUESTIONS}개예요.` }, { status: 400 });
   const maxQuestions = maxQuestionsRaw;
   try {
     const status = await startRun({ bytes, fileName: file.name, track: track as Track, maxQuestions });

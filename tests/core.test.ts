@@ -27,33 +27,44 @@ export const details=(track:S.Track,category:string)=>Object.entries(track==='de
 export function item(track:S.Track):S.Evidence {
   if(track==='marketing')return {focus_target_id:null,statement:'ROAS 목표 300%',basis:'portfolio_claim',category:'metric',
     anchors:[{...anchor(),quote:'ROAS 목표 300%'}],details:details(track,'metric'),metric:{name:'ROAS',reported_value:'300%',result_type:'target',
-      baseline:null,period:null,denominator:null,data_source:null,attribution_method:null}};
+      baseline:null,period:null,denominator:null,data_source:null,attribution_method:null},
+    metric_sources:{name:[1],reported_value:[1],result_type:[1],baseline:[],period:[],denominator:[],data_source:[],attribution_method:[]}};
   const d=details('design','contribution');d[0]={field:'own_scope',value:'디자인 담당',anchor_indices:[1]};
   return {focus_target_id:null,statement:'디자인 담당',basis:'portfolio_claim',category:'contribution',anchors:[anchor()],details:d};
 }
 export function fake(track:S.Track,options:{map?:S.DocumentMap;statuses?:S.Review['status'][];transform?:(request:ModelRequest,raw:any)=>unknown}={}){
-  const calls:ModelRequest[]=[];let reviewIndex=0;
+  const calls:ModelRequest[]=[];let reviewIndex=0;const extracted:S.Evidence[]=[];
   const generate:Generate=async request=>{calls.push(request);let raw:any;
     if(request.kind==='DocumentMap')raw=structuredClone(options.map??mapped());
     else if(request.kind==='VisualInventory')raw=inventory();
     else if(request.kind.endsWith('Extraction')){const e=item(track),context=JSON.parse(request.prompt.split('대상 프로젝트 데이터: ')[1].split('\n')[0]);
       if(context.focus_targets_local_pages[0]){e.focus_target_id=context.focus_targets_local_pages[0].id;e.anchors[0].page=context.focus_targets_local_pages[0].anchor_page;}
       raw={evidence:[e]};
-    }else if(request.kind==='Reviews'){const candidates=JSON.parse(request.prompt.split('근거 후보 데이터:\n')[1].split('\n')[0]);
+    }else if(request.kind==='CropReadings')raw={regions:request.images!.map(([id])=>{
+      const anchors=extracted.flatMap(e=>e.anchors).filter(a=>`p${a.page}:${a.region_key}`===id);
+      return {region_id:id,text:anchors.flatMap(a=>a.quote?[a.quote]:[]).join('\n')||null,
+        observations:anchors.flatMap(a=>a.visual_description?[a.visual_description]:[]),readability:'readable',limitations:[]};
+    })};
+    else if(request.kind==='Reviews'){const candidates=JSON.parse(request.prompt.split('근거 후보 데이터:\n')[1].split('\n')[0]);
       const status=(options.statuses??['supported','unsupported'])[reviewIndex++]??'supported';raw={reviews:candidates.map((e:any)=>({
-        evidence_id:e.evidence_id,status,reason:'가짜 계약 응답; 시각 품질 평가가 아님',document_support:{status:status==='supported'?'needs_explanation':'not_assessed',reason:'추가 설명',anchor_indices:[]}}))};
+        evidence_id:e.evidence_id,status,reason:'가짜 계약 응답; 시각 품질 평가가 아님',anchor_checks:e.anchors.map((a:any,i:number)=>({anchor_index:i+1,status,reason:'fixture',reading_excerpt:a.quote??a.visual_description})),document_support:{status:status==='supported'?'needs_explanation':'not_assessed',reason:'추가 설명',anchor_indices:[]}}))};
     }else if(request.kind==='QuestionSet'){const source=JSON.parse(request.prompt.split('근거 데이터:\n')[1].split('\n')[0])[0];raw={questions:[{evidence_id:source.id,
       anchor_indices:[1],angle:'ownership',question:'이 자료에 참여했다면 담당한 범위를 설명해 주세요.',intent:'자료와 참여 관계 확인',listen_for:['참여 여부와 담당 범위']}]};
       if(['claude-opus-5','anthropic/claude-opus-5'].includes(request.model)){assert.equal(request.images,undefined);assert.match(request.prompt,/JSON만 제공/);}
       else assert.ok(request.images?.length,'Gemini question writer receives original context images');
     }else if(request.kind==='QuestionReviews'){const rows=JSON.parse(request.prompt.split('\n').find(s=>s.startsWith('[{'))!);
       const targets=JSON.parse(request.prompt.split('선정 포인트 가설: ')[1].split('\n')[0]);
-      raw={reviews:rows.map((r:any)=>({question_id:r.question_id,status:'supported',reason:'가짜 전제 검사',region_support:true,no_added_premise:true,distinct_answer:true,addresses_focus:true,substantive:false})),
+      raw={reviews:rows.map((r:any)=>({question_id:r.question_id,status:'supported',reason:'가짜 전제 검사',region_support:true,no_added_premise:true,distinct_answer:true,addresses_focus:true,substantive:false,
+        field_checks:[{field:'question',index:null},{field:'intent',index:null},...r.listen_for.map((_:unknown,i:number)=>({field:'listen_for',index:i+1}))].map(c=>({...c,status:'supported',reason:'fixture',premise_checks:[],
+          field_text:c.field==='listen_for'?r.listen_for[c.index!-1]:r[c.field],
+          experience_check:{basis:'observed',condition:null,anchor_index:null,source_excerpt:null}}))})),
         focus_coverage:targets.map((p:any)=>({focus_target_id:p.id,checks:[{aspect:'가짜 계약 검사',
           source_requirements:rows.filter((r:any)=>r.selected_target_hypothesis?.id===p.id).flatMap((r:any)=>r.source.anchors.map((a:any)=>({region_id:a.region_id,quote:a.quote}))).slice(0,1),
           question_ids:rows.filter((r:any)=>r.selected_target_hypothesis?.id===p.id).map((r:any)=>r.question_id)}]}))};}
     else throw new Error('Unknown fake request');
-    return options.transform?options.transform(request,raw):raw;
+    const result:any=options.transform?options.transform(request,raw):raw;
+    if(request.kind.endsWith('Extraction')){extracted.length=0;extracted.push(...result.evidence);}
+    return result;
   };return {generate,calls};
 }
 const run=async(track:S.Track='design',options:Parameters<typeof fake>[1]={},overrides:Partial<Parameters<typeof analyzePdf>[1]>={})=>{
@@ -70,7 +81,7 @@ test('parallel skim preserves the first API error after later queued calls fail 
 });
 
 test('01 separate tracks and original-page provenance',async()=>{for(const track of ['design','marketing'] as const){const {result:r,calls}=await run(track);
-  assert.equal(calls.length,10);assert.deepEqual(r.evidence.map(e=>e.anchors[0].page),[2,3]);assert.equal(r.questions[0].anchors[0].region_id,'p2:r1');
+  assert.equal(calls.length,12);assert.deepEqual(r.evidence.map(e=>e.anchors[0].page),[2,3]);assert.equal(r.questions[0].anchors[0].region_id,'p2:r1');
   assert.equal(r.evidence[1].question_eligible,false);assert.equal(r.evidence[0].verification_scope,'presence_in_pdf_only');
   const extracted=calls.filter(c=>c.kind.endsWith('Extraction'));assert.ok(extracted.every(c=>c.thinkingLevel==='MEDIUM'));
   assert.deepEqual(await Promise.all(extracted.map(async c=>(await readPdf(c.pdf!)).getPage(0).getWidth())),[201,202]);}});
@@ -183,7 +194,7 @@ test('15 support checks separate presence and proof, batch size four',async()=>{
   assert.equal(result.evidence.length,10);assert.equal(calls.filter(c=>c.kind==='Reviews').length,4);
   for(const call of calls.filter(c=>c.kind==='Reviews'))for(const record of JSON.parse(call.prompt.split('근거 후보 데이터:\n')[1])){
     assert.equal(record.anchors[0].anchor_index,1);assert.equal(record.anchors[0].region_key,'r2');}
-  const e=item('design');for(const status of ['documented','conflicting'] as const)assert.throws(()=>validateReviews([e],[{evidence_id:'e',status:'supported',reason:'검사',document_support:{status,reason:'검사',anchor_indices:[1]}}],['e']));});
+  const e=item('design');for(const status of ['documented','conflicting'] as const)assert.throws(()=>validateReviews([e],[{evidence_id:'e',status:'supported',reason:'검사',anchor_checks:[{anchor_index:1,status:'supported',reason:'fixture'}],document_support:{status,reason:'검사',anchor_indices:[1]}}],['e']));});
 test('16 unknown duplicate empty question candidates are excluded (v0.5 contract)',async()=>{for(const mode of ['unknown','duplicate','empty']){const {result}=await run('design',{transform:(q,r)=>{
   if(q.kind==='QuestionSet'){if(mode==='unknown')r.questions[0].evidence_id='invented';if(mode==='duplicate')r.questions.push(r.questions[0]);if(mode==='empty')r.questions=[];}return r;}});
   assert.equal(result.questions.length,mode==='duplicate'?1:0);if(mode!=='empty')assert.ok(result.question_checks.some(c=>c.status==='rejected'));}});
@@ -207,14 +218,143 @@ test('23 only schema failures retry once and failure events never complete',asyn
   for(const error of [new SchemaValidationError('again'),new Error('HTTP 429')]){let calls=0;await assert.rejects(analyzePdf(await pdfBytes(),{track:'design',model:'gemini-test',onEvent:e=>events.push(e),generate:async()=>{calls++;throw error;}}));assert.equal(calls,error instanceof SchemaValidationError?2:1);}
   assert.ok(events.every(e=>e.type!=='complete'));});
 test('24 review rules get the same single bounded retry',async()=>{let n=0;const {result}=await run('design',{statuses:['supported','supported','unsupported'],transform:(q,r)=>{
-  if(q.kind==='Reviews'&&n++===0)r.reviews[0].document_support={status:'documented',reason:'bad',anchor_indices:[1]};return r;}});assert.equal(result.metrics.model_calls,11);});
+  if(q.kind==='Reviews'&&n++===0)r.reviews[0].document_support={status:'documented',reason:'bad',anchor_indices:[1]};return r;}});assert.equal(result.metrics.model_calls,13);});
 test('25 artifact usage cannot infer collaboration',()=>{const e={...item('design'),category:'artifact',basis:'visual_observation',details:details('design','artifact'),anchors:[{...anchor(),quote:'Application 활용'}]};
   e.details[3]={field:'stated_usage',value:'Application 활용',anchor_indices:[1]};assert.equal(S.DesignEvidence.safeParse(e).success,true);
   e.details[3].value='Application 활용 (아티스트 협업 프로젝트)';assert.equal(S.DesignEvidence.safeParse(e).success,false);});
 test('regression: numeral subject target actual percentage-point and ROI substitution',()=>{const d=item('design');d.category='decision';d.details=details('design','decision');d.anchors[0].quote='3가지의 타입이 포함된 타입패밀리';d.statement='3개 타입패밀리';assert.ok(localEvidenceChecks(d).includes('claim_statement_not_verbatim'));
   for(const change of [{reported_value:'300%p'},{name:'ROI'},{result_type:'reported_actual'}]){const m=item('marketing') as S.Evidence&{metric:zMetric};Object.assign(m.metric,change);assert.ok(localEvidenceChecks(m).length>0);}
-  const q={evidence_id:'e',question:'전환율 300%p를 달성한 방법은?',intent:'확인',listen_for:['실적']};assert.ok(questionErrors(q,undefined,new Set(),new Set()).includes('numeric_premise_requires_source_quote'));});
+  const q={evidence_id:'e',question:'전환율 300%p를 달성한 방법은?',intent:'확인',listen_for:['실적']};assert.ok(questionErrors(q,undefined,new Set()).includes('numeric_premise_requires_source_quote'));});
 type zMetric={name:string;reported_value:string;result_type:string};
 test('regression: source summaries and skim hypotheses are not question inputs',async()=>{const {calls}=await run();const data=JSON.parse(calls.find(c=>c.kind==='QuestionSet')!.prompt.split('근거 데이터:\n')[1]);
   assert.ok(data.every((e:any)=>!('statement'in e)&&!('source_check'in e)&&!('question_focus'in e)));});
 test('regression: unsupported semantic question review excludes final question',async()=>{const {result}=await run('design',{transform:(q,r)=>{if(q.kind==='QuestionReviews')r.reviews[0].status='unsupported';return r;}});assert.equal(result.questions.length,0);assert.equal(result.status,'insufficient_evidence');assert.ok(result.quality.coverage.every(c=>!c.complete));});
+
+test('v0.14 linked crops only; missing, uncertain or body-outside-title anchors cannot pass',async()=>{
+  for(const mode of ['missing','uncertain','unsupported']){
+    const {result,calls}=await run('design',{transform:(q,r)=>{
+      if(q.kind==='Reviews'){
+        assert.equal(q.pdf,undefined);assert.equal(q.images,undefined);assert.match(q.prompt,/독립 판독 데이터/);
+        r.reviews[0].anchor_checks=mode==='missing'?[]:[{anchor_index:1,status:mode,reason:'설명문은 제목 크롭 밖에 있음'}];
+      }return r;
+    }});
+    assert.equal(result.questions.length,0);assert.ok(result.evidence.every(e=>!e.question_eligible));
+    assert.equal(calls.some(c=>c.kind==='QuestionSet'),false);
+  }
+  const {result}=await run();
+  assert.equal(result.schema_version,'0.16');assert.equal(result.max_questions,10);
+  assert.ok(result.evidence[0].local_checks.includes('text_layer:unavailable'));
+  assert.equal(result.evidence[0].question_eligible,true,'missing text layer is not absent image text');
+});
+test('v0.16 crop reading is blind, cached per region, and prior visual descriptions are never source facts',async()=>{
+  const {result,calls}=await run('design',{statuses:['supported','supported'],transform:(q,r)=>{
+    if(q.kind==='DesignExtraction'){
+      const e=r.evidence[0];e.category='artifact';e.basis='visual_observation';e.statement='카드 밖 화분 옆에 놓인 전단지';
+      e.details=details('design','artifact');e.anchors[0]={...e.anchors[0],kind:'visual',purpose:'artifact',quote:null,visual_description:e.statement};
+    }
+    if(q.kind==='CropReadings'){
+      assert.ok(q.images?.length);assert.equal(q.pdf,undefined);
+      assert.doesNotMatch(q.prompt,/화분|전단지|focus_target_id|statement|visual_description/);
+      for(const c of r.regions){c.text=null;c.observations=['초록 테두리와 가운데 제목이 있는 카드'];}
+    }
+    if(q.kind==='Reviews')for(const e of r.reviews)for(const c of e.anchor_checks)c.reading_excerpt='초록 테두리와 가운데 제목이 있는 카드';
+    return r;
+  }});
+  // Even an over-permissive comparison cannot leak its old object description to the writer.
+  assert.ok(result.evidence.every(e=>e.anchors[0].visual_description==='초록 테두리와 가운데 제목이 있는 카드'));
+  assert.doesNotMatch(calls.find(c=>c.kind==='QuestionSet')!.prompt,/화분|전단지/);
+  assert.equal(calls.filter(c=>c.kind==='CropReadings').length,2);
+});
+test('v0.16 source approval needs its own independent crop excerpt, not another region or a missing reading',async()=>{
+  for(const mode of ['missing_excerpt','wrong_text','unreadable','wrong_region']){
+    const {result}=await run('design',{statuses:['supported','supported'],transform:(q,r)=>{
+      if(q.kind==='CropReadings')for(const c of r.regions){
+        if(mode==='wrong_text')c.text='프로젝트 제목';
+        if(mode==='unreadable')c.readability='unreadable';
+      }
+      if(q.kind==='Reviews')for(const e of r.reviews)for(const c of e.anchor_checks){
+        if(mode==='missing_excerpt')delete c.reading_excerpt;
+        if(mode==='wrong_region')c.reading_excerpt='별도 문단 설명';
+      }
+      return r;
+    }});
+    assert.ok(result.evidence.every(e=>!e.question_eligible),mode);assert.equal(result.questions.length,0,mode);
+  }
+});
+test('v0.16 crop IDs fail closed after one format retry',async()=>{
+  for(const mode of ['missing','duplicate','unknown'])await assert.rejects(run('design',{transform:(q,r)=>{
+    if(q.kind==='CropReadings'){
+      if(mode==='missing')r.regions=[];
+      if(mode==='duplicate')r.regions.push(r.regions[0]);
+      if(mode==='unknown')r.regions[0].region_id='p99:r99';
+    }return r;
+  }}),/독립 판독|출력 필드/);
+});
+test('v0.14 each card field must pass, even if the global reviewer approves',async()=>{
+  for(const mode of ['missing','intent','listen_for']){
+    const {result}=await run('design',{transform:(q,r)=>{
+      if(q.kind==='QuestionReviews'){
+        if(mode==='missing')r.reviews[0].field_checks.pop();
+        else r.reviews[0].field_checks.find((c:any)=>c.field===mode).status='unsupported';
+      }return r;
+    }});
+    assert.equal(result.questions.length,0);
+    assert.ok(result.question_checks.some(c=>c.reasons.some(r=>/field_checks|field_premise/.test(r))));
+  }
+});
+test('v0.14 metric fields match only their own linked quotes and cannot clip percent-point units',()=>{
+  const m=S.MarketingEvidence.parse(item('marketing'));
+  m.anchors.push({...anchor(),quote:'출처 설문조사',purpose:'context'});
+  m.metric!.data_source='설문조사';m.metric_sources!.data_source=[1];
+  assert.ok(localEvidenceChecks(m).includes('metric_not_verbatim:data_source'));
+  m.metric_sources!.data_source=[2];assert.deepEqual(localEvidenceChecks(m),[]);
+  m.anchors[0].quote='ROAS 목표 300%p';m.statement=m.anchors[0].quote;
+  assert.ok(localEvidenceChecks(m).includes('metric_not_verbatim:reported_value'));
+  m.metric_sources!.name=[3];assert.equal(S.MarketingEvidence.safeParse(m).success,false);
+});
+test('v0.15 standalone dashboard counts survive without relaxing units, signs, ranges or denominators',()=>{
+  const m=S.MarketingEvidence.parse(item('marketing'));
+  const set=(quote:string,value='1,250')=>{m.anchors[0].quote=quote;m.statement=quote;
+    Object.assign(m.metric!,{name:'도달한 계정',reported_value:value,result_type:'reported_actual'});};
+  set('최근 한 달\n1,250\n도달한 계정');assert.deepEqual(localEvidenceChecks(m),[]);
+  for(const [quote,value] of [['1,250%\n도달한 계정','1,250'],['-\n1,250\n도달한 계정','1,250'],
+    ['1,250\n%\n도달한 계정','1,250'],['1,250개\n도달한 계정','1,250'],['1,250–2,500\n도달한 계정','1,250']]){
+    set(quote,value);assert.ok(localEvidenceChecks(m).includes('metric_not_verbatim:reported_value'),quote);
+  }
+  set('도달한 계정 12%p','12%');assert.ok(localEvidenceChecks(m).includes('metric_not_verbatim:reported_value'));
+  set('최근 한 달\n1,250\n도달한 계정');
+  m.anchors.push({...anchor(),quote:'상위 거주 도시',purpose:'context'});
+  m.metric!.denominator='상위 거주 도시';m.metric_sources!.denominator=[2];
+  assert.ok(localEvidenceChecks(m).includes('metric_denominator_is_dimension'));
+  m.metric!.denominator=null;m.metric_sources!.denominator=[];assert.deepEqual(localEvidenceChecks(m),[]);
+});
+test('v0.15 clear textless artwork is usable, unreadable text and uncertain visual objects are not',async()=>{
+  for(const mode of ['clear_visual','uncertain_visual','unreadable_text']){
+    const {result}=await run('design',{statuses:['supported','supported'],transform:(q,r)=>{
+      if(q.kind==='VisualInventory'){
+        r.regions[0].readability='unreadable';r.regions[0].salient_text=null;
+        if(mode==='uncertain_visual')r.regions[0].identification='uncertain';
+      }
+      if(q.kind==='DesignExtraction'&&mode!=='unreadable_text'){
+        const e=r.evidence[0];e.category='artifact';e.basis='visual_observation';e.statement='선명한 곡선형 로고';
+        e.details=details('design','artifact');e.anchors[0]={...e.anchors[0],kind:'visual',purpose:'artifact',quote:null,visual_description:e.statement};
+      }return r;
+    }});
+    assert.equal(result.evidence.some(e=>e.question_eligible),mode==='clear_visual',mode);
+    assert.equal(result.questions.length>0,mode==='clear_visual',mode);
+  }
+});
+test('v0.14 CLI archives actual raw usage and redacts the key even if analysis fails; no overwrite',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'proofolio-raw-')),pdf=join(dir,'source.pdf'),raw=join(dir,'raw');
+  const key='sk-or-test-000000000000000000';await writeFile(pdf,await pdfBytes());let calls=0;
+  const args=[pdf,'--track','design','--max-cost-usd','10','--raw-response-dir',raw,'--budget-ledger',join(dir,'ledger')];
+  const deps={env:{OPENROUTER_API_KEY:key},stdout:()=>{},stderr:()=>{},analyze:async(_b:Uint8Array,options:Parameters<typeof analyzePdf>[1])=>{
+    calls++;options.onResponse?.('QuestionSet',{usage:{prompt_tokens:10,completion_tokens:5,total_tokens:15,cost:.001},note:key},'fixture');throw new Error('fixture failure');
+  }};
+  assert.equal(await runCli(args,deps),1);
+  const text=await readFile(join(raw,'001.json'),'utf8');assert.ok(!text.includes(key));assert.match(text,/REDACTED/);
+  assert.equal(JSON.parse(text).raw.usage.prompt_tokens,10);assert.equal((await stat(join(raw,'001.json'))).mode&0o777,0o600);
+  assert.equal(await runCli(args,deps),1);assert.equal(calls,1);
+  for(const max of ['0','11','1.5'])assert.equal(await runCli([...args,'--max-questions',max],deps),1);
+  assert.equal(calls,1);
+});

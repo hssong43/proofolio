@@ -39,6 +39,8 @@ type State = {
   startedAt: number;
   endedAt: number;
   saveError: string | null;
+  saveState: "idle" | "saving" | "saved" | "failed";
+  limitation: { requested: number; status: string; issues: string[] } | null;
 };
 
 type Action =
@@ -52,7 +54,7 @@ type Action =
   | { type: "startAnalyze"; runId: string | null }
   | { type: "setStage"; stage: number }
   | { type: "analysisFailed"; error: string }
-  | { type: "analyzed"; summary: AnalyzedSummary; questions: UiQuestion[] }
+  | { type: "analyzed"; summary: AnalyzedSummary; questions: UiQuestion[]; limitation?: State["limitation"] }
   | { type: "backToUpload" }
   | { type: "goReady" }
   | { type: "startQuestions"; totalSeconds: number; now: number }
@@ -60,6 +62,8 @@ type Action =
   | { type: "setAnswer"; answer: string }
   | { type: "submit"; totalSeconds: number; now: number }
   | { type: "saveFailed"; error: string }
+  | { type: "saving" }
+  | { type: "saved" }
   | { type: "reset"; totalSeconds: number };
 
 const EMPTY_SUMMARY: AnalyzedSummary = { chipsLabel: "", chips: [], cards: [] };
@@ -85,6 +89,8 @@ const initialState = (totalSeconds: number): State => ({
   startedAt: 0,
   endedAt: 0,
   saveError: null,
+  saveState: "idle",
+  limitation: null,
 });
 
 function reducer(state: State, action: Action): State {
@@ -110,7 +116,7 @@ function reducer(state: State, action: Action): State {
     case "analysisFailed":
       return { ...state, analysisError: action.error };
     case "analyzed":
-      return { ...state, stage: STAGE_LABELS.length, summary: action.summary, questions: action.questions };
+      return { ...state, stage: STAGE_LABELS.length, summary: action.summary, questions: action.questions, limitation: action.limitation ?? null };
     case "backToUpload":
       return { ...state, screen: "upload", runId: null, stage: 0, analysisError: null };
     case "goReady":
@@ -122,6 +128,7 @@ function reducer(state: State, action: Action): State {
     case "setAnswer":
       return { ...state, answer: action.answer };
     case "submit": {
+      if (state.screen !== "question") return state;
       const current = state.questions[state.questionIndex];
       const record: AnswerRecord = { questionId: current?.id ?? `q${state.questionIndex + 1}`, answer: state.answer, seconds: Math.round((action.now - state.questionStartedAt) / 1000) };
       const answers = [...state.answers, record];
@@ -131,7 +138,11 @@ function reducer(state: State, action: Action): State {
       return { ...state, answers, questionIndex: state.questionIndex + 1, answer: "", secondsLeft: action.totalSeconds, questionStartedAt: action.now };
     }
     case "saveFailed":
-      return { ...state, saveError: action.error };
+      return { ...state, saveError: action.error, saveState: "failed" };
+    case "saving":
+      return { ...state, saveError: null, saveState: "saving" };
+    case "saved":
+      return { ...state, saveError: null, saveState: "saved" };
     case "reset":
       return initialState(action.totalSeconds);
   }
@@ -158,7 +169,7 @@ function questionsFromResult(result: ClientResult): UiQuestion[] {
 export type VerificationFlowProps = {
   /** 질문당 답변 시간(초). 기본 40. */
   totalSeconds?: number;
-  /** 요청할 최대 질문 수. 기본 5. */
+  /** 요청할 최대 질문 수. 기본 10. */
   questionCount?: number;
   /** true면 분석 코어 대신 목데이터로 흐름만 시연한다. */
   demo?: boolean;
@@ -170,6 +181,8 @@ export function VerificationFlow({ totalSeconds = 40, questionCount = DEFAULT_QU
   const [state, dispatch] = useReducer(reducer, totalSeconds, initialState);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const savingRef = useRef(false);
+  const submittedRef = useRef<string | null>(null);
 
   const roleInfo = ROLES.find((r) => r.id === state.role);
   const roleLabel = roleInfo?.label ?? "";
@@ -177,8 +190,24 @@ export function VerificationFlow({ totalSeconds = 40, questionCount = DEFAULT_QU
   const canAnalyze = demo ? (state.tab === "pdf" ? !!state.file : isValidLink(state.link)) : state.tab === "pdf" && !!state.file?.file && track !== null;
 
   const goUpload = useCallback(() => dispatch({ type: "goUpload" }), []);
-  const startQuestions = useCallback(() => dispatch({ type: "startQuestions", totalSeconds, now: Date.now() }), [totalSeconds]);
-  const submit = useCallback(() => dispatch({ type: "submit", totalSeconds, now: Date.now() }), [totalSeconds]);
+  const startQuestions = useCallback(() => { submittedRef.current = null; dispatch({ type: "startQuestions", totalSeconds, now: Date.now() }); }, [totalSeconds]);
+  const save = useCallback(async (runId: string, answers: AnswerRecord[]) => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    dispatch({ type: "saving" });
+    try { await submitAnswers(runId, answers); dispatch({ type: "saved" }); }
+    catch (e) { dispatch({ type: "saveFailed", error: (e as Error).message }); }
+    finally { savingRef.current = false; }
+  }, []);
+  const submit = useCallback(() => {
+    const s = stateRef.current, id = s.questions[s.questionIndex]?.id;
+    if (s.screen !== "question" || !id || submittedRef.current === id) return;
+    submittedRef.current = id;
+    const action: Action = { type: "submit", totalSeconds, now: Date.now() };
+    const next = reducer(s, action);
+    dispatch(action);
+    if (next.screen === "complete" && next.runId) void save(next.runId, next.answers);
+  }, [totalSeconds, save]);
 
   const startAnalyze = useCallback(async () => {
     const s = stateRef.current;
@@ -231,7 +260,8 @@ export function VerificationFlow({ totalSeconds = 40, questionCount = DEFAULT_QU
           return;
         }
         if (status.state === "complete" && status.result) {
-          dispatch({ type: "analyzed", summary: summaryFromResult(status.result), questions: questionsFromResult(status.result) });
+          dispatch({ type: "analyzed", summary: summaryFromResult(status.result), questions: questionsFromResult(status.result),
+            limitation: { requested: status.result.maxQuestions, status: status.result.status, issues: status.result.qualityIssues } });
           readyTimer = window.setTimeout(() => dispatch({ type: "goReady" }), READY_DELAY_MS);
           return;
         }
@@ -258,12 +288,6 @@ export function VerificationFlow({ totalSeconds = 40, questionCount = DEFAULT_QU
     }, 1000);
     return () => window.clearInterval(id);
   }, [state.screen, state.questionIndex, submit]);
-
-  // 완료: 답변을 서버에 저장한다
-  useEffect(() => {
-    if (state.screen !== "complete" || !state.runId) return;
-    submitAnswers(state.runId, state.answers).catch((e: Error) => dispatch({ type: "saveFailed", error: e.message }));
-  }, [state.screen, state.runId, state.answers]);
 
   // 전역 Enter: 다음 단계로 진행
   useEffect(() => {
@@ -317,7 +341,7 @@ export function VerificationFlow({ totalSeconds = 40, questionCount = DEFAULT_QU
         {state.screen === "analyzing" && (
           <AnalyzingScreen stage={state.stage} summary={state.summary} error={state.analysisError} onRetry={() => dispatch({ type: "backToUpload" })} />
         )}
-        {state.screen === "ready" && <ReadyScreen totalSeconds={totalSeconds} questionCount={total} onStart={startQuestions} />}
+        {state.screen === "ready" && <ReadyScreen totalSeconds={totalSeconds} questionCount={total} limitation={state.limitation} onStart={startQuestions} />}
         {state.screen === "question" && (
           <QuestionScreen
             index={state.questionIndex}
@@ -339,6 +363,8 @@ export function VerificationFlow({ totalSeconds = 40, questionCount = DEFAULT_QU
             questionCount={total}
             elapsed={formatElapsed(elapsedSeconds)}
             saveError={state.saveError}
+            saveState={state.saveState}
+            onRetry={() => { if (state.runId) void save(state.runId, state.answers); }}
             onHome={() => dispatch({ type: "reset", totalSeconds })}
           />
         )}
