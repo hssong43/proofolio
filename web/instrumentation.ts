@@ -1,5 +1,5 @@
 export async function register() {
-  if(process.env.NEXT_RUNTIME!=='nodejs')return;
+  if(process.env.NEXT_RUNTIME!=='nodejs'||process.env.VERCEL)return;
   const {loadRuntimeEnv}=await import('../src/env.ts');
   const {ROOT}=await import('./lib/server/runner.ts');
   loadRuntimeEnv(ROOT);

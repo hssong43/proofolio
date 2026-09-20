@@ -64,7 +64,7 @@ export function AccountApp({ resumeRunId, recovery, authError, loginRequested, r
   };
   return <>
     <div className="account-bar">
-      <span>{contest ? '대회 체험 · 로그인 없이 시작해요' : loading ? '계정 확인 중' : member ? member.email : '로그인 없이 예제를 체험해보세요'}</span>
+      <span>{contest ? '프리뷰 · 로그인 없이 시작해요' : loading ? '계정 확인 중' : member ? member.email : '로그인 없이 예제를 체험해보세요'}</span>
       <div>
         {contest && <Link className="text-button" href="/dashboard">관리자 패널</Link>}
         {!contest && <><Link className="text-button" href="/dashboard">채용 대시보드</Link>
@@ -80,10 +80,10 @@ export function AccountApp({ resumeRunId, recovery, authError, loginRequested, r
       </div>
     </div>
     {message && !loginOpen && <p className="account-message" role="status">{message}</p>}
-    {contest && <p className="account-message">이름·연락처 없이 체험해요. 파일과 답변은 비공개이며 24시간 후 만료돼요. 쿠키를 지우면 다시 열 수 없어요. 제출 자료는 AI 분석 제공사(OpenRouter)에 전송되므로 민감정보를 제거해주세요.</p>}
+    {contest && <p className="account-message">이름·연락처 없이 체험해요. 파일과 답변은 비공개이며 24시간 후 만료돼요. 쿠키를 지우면 다시 열 수 없어요.</p>}
     {!loading && (!contest || visitorReady || demo) && (history ? <main className="app-main"><section className="screen">
       <h1 className="screen-title">내 기록</h1>
-      <p className="screen-subtitle">{contest ? '이 브라우저에서 만든 기록만 보여요. 24시간 후 또는 대회 종료 시 만료되고, 다음 정리 주기에 원문과 답변을 삭제해요.' : '원문과 답변은 비공개로 30일 보관해요. 삭제한 기록은 7일 후 정리돼요.'}</p>
+      <p className="screen-subtitle">{contest ? '이 브라우저에서 만든 기록만 보여요. 24시간 후 또는 프리뷰 종료 시 만료되고, 다음 정리 주기에 원문과 답변을 삭제해요.' : '원문과 답변은 비공개로 30일 보관해요. 삭제한 기록은 7일 후 정리돼요.'}</p>
       {!history.length && <p>저장된 분석이 아직 없어요.</p>}
       {history.map(run => <article className="card history-card" key={run.id}>
         <div><h2>{run.file_name}</h2><p>{new Date(run.started_at).toLocaleDateString('ko-KR')} · 질문 {run.generated_question_count}개 · {run.state}</p></div>

@@ -68,7 +68,8 @@ export async function databaseRun(runId: string): Promise<StoredRun | null> {
   const r = rows?.[0];
   if (!r) return null;
   return { runId: r.id, userId: r.user_id, track: r.track, fileName: r.file_name, pdfSha256: r.pdf_sha256,
-    requestedQuestions: r.requested_question_count, state: r.state, stage: r.state === 'complete' ? 3 : 0,
+    requestedQuestions: r.requested_question_count, state: r.state, stage: r.state === 'complete' ? 3 : r.progress_stage ?? 0,
+    execution: r.execution ?? 'local', lastEvent: r.last_event ?? undefined,
     startedAt: r.started_at, finishedAt: r.finished_at ?? undefined, error: r.error ?? undefined,
     result: r.result ?? undefined, metrics: r.metrics, schemaVersion: r.schema_version, storage: 'supabase' };
 }

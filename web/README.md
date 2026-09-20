@@ -76,9 +76,13 @@ Vercel → Settings → Environment Variables의 **Production·Preview 양쪽**�
 설정 누락/잘못된 URL은 예제 API의 `EXAMPLE_CONFIGURATION_ERROR`(503), 그 밖의 조회 실패는
 `EXAMPLE_LOAD_FAILED`(503)로 구분한다. 예제 재시도는 같은 예제 GET만 다시 실행한다.
 
-위 설치 명령은 **빌드 의존성 누락 수정**이다. 현재 분석 실행은 로컬 자식 프로세스·영속 디스크·비용 원장에
-의존하므로, Vercel에서 실제 PDF 분석까지 운영하려면 별도 실행 구조가 필요하다.
-빌드 통과를 유료 분석·메일·DB 연동의 배포 검증 완료로 해석하지 않는다.
+Vercel 분석은 이제 `/api/analyze/:runId/step`을 사용한다. 한 요청에서 모델 호출 하나를 실행하고
+응답·비용·진행 상태는 Supabase에 저장한다. 브라우저가 다음 단계를 POST하며 GET은 분석을 시작하지 않는다.
+SQL005/006 및 승인된 DB 예산 설정이 필요하다. 중복 요청은 6분 lease로 차단하고 완료 응답을 재사용한다.
+요청 제한300초/내부 중단240초이며, 새로고침 후 같은 실행 ID로 이어간다. 창을 닫으면 새 단계는 대기한다.
+PDF.js 글꼴/CMap/WASM/worker와 플랫폼별 native canvas를 함수 tracing에 포함한다.
+로컬 기본 모드는 기존 CLI/영속 디스크 경로이며 `PROOFOLIO_EXECUTION=steps`로 단계 실행을 시험한다.
+빌드 통과를 Vercel 실제 유료 실행 성공으로 해석하지 않는다. 서버리스 물리 삭제 스케줄은 별도 설정 대상이다.
 
 ## 화면과 제한
 

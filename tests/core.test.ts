@@ -12,6 +12,42 @@ import {SchemaValidationError} from '../src/llm.ts';
 import type {Generate,ModelRequest} from '../src/llm.ts';
 import {runCli,loadEnv} from '../src/cli.ts';
 import {questionErrors} from '../src/questions.ts';
+import { nextModel, requestKey, resumedMetrics, type SavedCall } from '../src/resume.ts';
+import { OPENROUTER_MODELS } from '../src/openrouter.ts';
+
+test('checkpointed PDF analysis matches uninterrupted questions/evidence without resending any model call', async () => {
+  const bytes=await pdfBytes(),options={track:'design' as const,model:OPENROUTER_MODELS.vision,
+    skimModel:OPENROUTER_MODELS.skim,reviewModel:OPENROUTER_MODELS.vision,questionModel:OPENROUTER_MODELS.questions};
+  const baselineFake=fake('design'),baseline=await analyzePdf(bytes,{...options,generate:baselineFake.generate});
+  const resumedFake=fake('design'),saved:SavedCall[]=[];
+  for(let step=0;step<40;step++){
+    // A fresh pipeline/renderer per HTTP invocation; only JSON survives between invocations.
+    const work=await nextModel(generate=>analyzePdf(bytes,{...options,generate}),JSON.parse(JSON.stringify(saved)));
+    if(work.result){
+      assert.deepEqual(work.result.questions,baseline.questions);
+      assert.deepEqual(work.result.evidence,baseline.evidence);
+      assert.deepEqual(work.result.analysis_plan,baseline.analysis_plan);
+      assert.equal(resumedFake.calls.length,baselineFake.calls.length);
+      assert.equal(new Set(saved.map(c=>c.key)).size,saved.length);
+      assert.equal(resumedMetrics(saved,new Date().toISOString()).model_calls,saved.length);
+      return;
+    }
+    assert.ok(work.next);
+    const {request,key}=work.next;
+    const value=await resumedFake.generate(request);
+    saved.push({key,kind:request.kind,model:request.model,raw:{model:request.model,
+      choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}]},usage:{},elapsed_ms:1});
+  }
+  assert.fail('Checkpointed analysis did not finish');
+});
+
+test('split PDFs have stable bytes and no time-dependent creation metadata for checkpoint keys',async()=>{
+  const pdf=await readPdf(await pdfBytes()),one=await slicePdf(pdf,[2,3]),two=await slicePdf(pdf,[2,3]);
+  assert.deepEqual(one,two);assert.equal((await PDFDocument.load(one,{updateMetadata:false})).getCreationDate(),undefined);
+  const request={model:OPENROUTER_MODELS.skim,kind:'PageIndex',schema:S.PageIndex,prompt:'fixture',pdf:one};
+  assert.equal(requestKey(request),requestKey({...request,pdf:two}));
+  assert.notEqual(requestKey(request),requestKey({...request,prompt:'changed source instructions'}));
+});
 
 export async function pdfBytes(count=3){const pdf=await PDFDocument.create();for(let i=0;i<count;i++)pdf.addPage([200+i,300]);return pdf.save({addDefaultPage:false});}
 export const point=(project_key:string,anchor_page:number,focus:S.FocusTarget['focus'],changes:Partial<S.FocusTarget>={})=>({project_key,anchor_page,focus,

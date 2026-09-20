@@ -6,7 +6,7 @@ import { AnswerError } from './runner.ts';
 export async function runUser(request: Request) {
   const contest = contestSettings();
   if (contest.enabled) {
-    if (contest.closed) throw new AnswerError('대회 체험이 종료됐어요.', 410);
+    if (contest.closed) throw new AnswerError('프리뷰가 종료됐어요.', 410);
     const session = sessionUser(request);
     if (!session) throw new AnswerError('체험 세션이 없거나 만료됐어요. 새로고침해주세요.', 401);
     return { id: session.id, member: false as const, guestExpiresAt: contest.expiresAt };

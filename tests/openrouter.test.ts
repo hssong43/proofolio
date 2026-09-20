@@ -9,6 +9,8 @@ import {Budget,BudgetError,HttpResponseError,SchemaValidationError,freshMetrics}
 import {OPENROUTER_MODELS as MODELS,TRIAL_MODELS,trialInputAllowance,OPENROUTER_UPSTREAM,OPENROUTER_URL,buildOpenRouterPayload,openRouterModel,openRouterSession,openRouterUsage,parseOpenRouterResponse,validateOpenRouterKey} from '../src/openrouter.ts';
 import {loadEnv,runCli} from '../src/cli.ts';
 import {modelRequest} from '../src/questions.ts';
+import { RateLimitPause } from '../src/openrouter.ts';
+import { nextModel, requestKey, retryDelay, type SavedCall } from '../src/resume.ts';
 
 const key='sk-or-v1-private-fixture-never-log',schema=z.strictObject({value:z.string().min(1)});
 const request={model:MODELS.questions,kind:'QuestionSet',prompt:'검증된 근거 JSON만 이용한다.',schema};
@@ -16,6 +18,41 @@ const makeBudget=(limit=10)=>new Budget(join(mkdtempSync(join(tmpdir(),'proofoli
 const response=()=>({model:MODELS.questions,provider:'Google',choices:[{finish_reason:'stop',message:{content:'{"value":"question"}'}}],
   usage:{prompt_tokens:100,completion_tokens:30,total_tokens:130,cost:.00125,
     prompt_tokens_details:{cached_tokens:0},completion_tokens_details:{reasoning_tokens:10}}});
+
+test('serverless rate limit checkpoints one attempt, awaits persistence and resumes without a duplicate call',async(context)=>{
+  context.mock.method(timers,'setTimeout',async()=>assert.fail('Retry waiting belongs to the next HTTP invocation'));
+  const b=makeBudget(),t=transport('http_once'),saved:SavedCall[]=[],order:string[]=[];
+  const budget={provider:'openrouter' as const,blocked:false,
+    async reserveUsd(model:string,usd:number){await Promise.resolve();order.push('reserve');return b.reserveUsd(model,usd);},
+    async settleUsd(id:string,usd:number){await Promise.resolve();order.push('settle');return b.settleUsd(id,usd);},
+    async block(reason:string){b.block(reason);}};
+  const invoke=async(attempt:number)=>{
+    const stats=freshMetrics(),s=openRouterSession(key,stats,budget,{...t,initialAttempt:attempt,deferRateLimitRetry:true,
+      onResponse:async(kind,raw,model)=>{await new Promise(r=>setImmediate(r));order.push('persist');
+        saved.push({key:requestKey(request),kind,model,raw:raw as any,usage:stats.usage.at(-1)!,elapsed_ms:1});}});
+    try{return await s.generate(request);}finally{await s.close();}
+  };
+  try{
+    await assert.rejects(invoke(1),RateLimitPause);assert.deepEqual(order,['reserve','settle','persist']);
+    assert.equal(saved.length,1);assert.equal(retryDelay(saved[0].raw),45000);
+    const resume=await nextModel(g=>g(request),saved);assert.equal(resume.next?.attempt,2);
+    assert.deepEqual(await invoke(2),{value:'question'});
+    const complete=await nextModel(g=>g(request),saved);assert.deepEqual(complete.result,{value:'question'});
+    assert.equal(t.seen.filter(c=>c.body).length,2);assert.equal(b.spent,.0025);assert.equal(b.reserved,0);
+  }finally{b.close();}
+});
+
+test('checkpoint replay preserves the one schema retry and rejects a changed model identity',async()=>{
+  const saved:SavedCall[]=[],stats=freshMetrics();
+  const run=async(g:any)=>modelRequest(g,stats,{model:MODELS.questions,questionModel:MODELS.questions})('QuestionSet',schema,{prompt:request.prompt});
+  const first=await nextModel(run,saved);assert.ok(first.next);
+  const bad:any=response();bad.choices[0].message.content='not-json';
+  saved.push({key:first.next.key,kind:'QuestionSet',model:MODELS.questions,raw:bad,usage:{},elapsed_ms:1});
+  const retry=await nextModel(run,saved);assert.ok(retry.next);assert.notEqual(retry.next.key,first.next.key);
+  saved.push({key:retry.next.key,kind:'QuestionSet',model:MODELS.questions,raw:response(),usage:{},elapsed_ms:1});
+  assert.deepEqual((await nextModel(run,saved)).result,{value:'question'});
+  saved[1].model=MODELS.skim;await assert.rejects(nextModel(run,saved),/모델 요청/);
+});
 function transport(mode='ok',models:string[]=Object.values(MODELS)){
   const seen:Array<{url:string;body:any}>=[];let generations=0;
   const endpoint=(id:string)=>{const {context,rates}=openRouterModel(id);return {
