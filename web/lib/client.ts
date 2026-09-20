@@ -1,4 +1,5 @@
-import type { AnswerRecord, PortfolioExample, RunStatus, Track } from "./types";
+import type { AnswerRecord, PortfolioExample, RunStatus, Track } from "./types.ts";
+import { MAX_PDF_BYTES } from '../../src/constants.ts';
 
 async function parse<T>(res: Response): Promise<T> {
   const body = (await res.json().catch(() => ({}))) as T & { error?: string };
@@ -7,12 +8,24 @@ async function parse<T>(res: Response): Promise<T> {
 }
 
 export async function startAnalysis(file: File, track: Track, maxQuestions: number, submissionId?: string) {
-  const form = new FormData();
-  form.append("file", file);
-  form.append("track", track);
-  form.append("maxQuestions", String(maxQuestions));
-  if(submissionId)form.append('submissionId',submissionId);
-  return parse<{ runId: string }>(await fetch("/api/analyze", { method: "POST", body: form }));
+  if (file.size < 5 || file.size > MAX_PDF_BYTES) throw new Error('PDF는 50MB 이하여야 해요.');
+  if (await file.slice(0, 5).text() !== '%PDF-') throw new Error('PDF 파일만 올릴 수 있어요.');
+  const sha256 = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer())),
+    byte => byte.toString(16).padStart(2, '0')).join('');
+  const headers = { 'Content-Type': 'application/json' };
+  const upload = await parse<{ runId: string; uploadUrl: string }>(await fetch('/api/analyze/upload', {
+    method: 'POST', headers, body: JSON.stringify({ fileName: file.name, size: file.size, sha256, track, maxQuestions, submissionId }),
+  }));
+  try {
+    // Only this object-scoped, expiring URL crosses into the browser. No server key is sent.
+    const response = await fetch(upload.uploadUrl, { method: 'PUT', body: file, credentials: 'omit', redirect: 'error',
+      headers: { 'Content-Type': 'application/pdf', 'x-upsert': 'false' }, signal: AbortSignal.timeout(300000) });
+    if (!response.ok) throw new Error(response.status === 413 ? 'PDF는 50MB 이하여야 해요.' : 'PDF 업로드에 실패했어요. 네트워크를 확인해주세요.');
+    return await parse<{ runId: string }>(await fetch('/api/analyze', { method: 'POST', headers, body: JSON.stringify({ runId: upload.runId }) }));
+  } catch (e) {
+    await fetch('/api/analyze/upload', { method: 'DELETE', headers, body: JSON.stringify({ runId: upload.runId }) }).catch(() => {});
+    throw e;
+  }
 }
 
 export async function fetchStatus(runId: string) {

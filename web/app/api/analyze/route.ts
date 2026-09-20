@@ -4,17 +4,27 @@ import type { Track } from "@/lib/types";
 import { runUser } from "@/lib/server/access";
 import { ensureMember } from '@/lib/server/database';
 import { AnswerError } from "@/lib/server/runner";
-import { MIN_TARGET_QUESTIONS } from "../../../../src/constants.ts";
+import { MIN_TARGET_QUESTIONS, MAX_PDF_BYTES } from "../../../../src/constants.ts";
 import { authorizeCandidateAnalysis } from '@/lib/server/recruiting';
+import { finishPdfUpload, uploadJson } from '@/lib/server/upload';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const MAX_PDF_BYTES = 50_000_000;
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   if (!sameOrigin(request))
     return NextResponse.json({ error: "같은 사이트에서만 분석을 시작할 수 있어요." }, { status: 403 });
+  if (request.headers.get('content-type')?.startsWith('application/json')) {
+    try {
+      const user = await runUser(request), body = await uploadJson(request);
+      return NextResponse.json(await finishPdfUpload(body?.runId, user), { headers: { 'Cache-Control': 'private, no-store' } });
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof AnswerError ? e.message : 'PDF는 업로드됐지만 분석을 시작하지 못했어요.' },
+        { status: e instanceof AnswerError ? e.status : 503, headers: { 'Cache-Control': 'private, no-store' } });
+    }
+  }
+  // Legacy multipart remains available on a persistent local server, never for the deployed browser flow.
   if (Number(request.headers.get("content-length")) > MAX_PDF_BYTES + 1_000_000)
     return NextResponse.json({ error: "PDF는 50MB 이하여야 해요." }, { status: 413 });
   const form = await request.formData();
