@@ -46,6 +46,7 @@ test('recruiting reads are owner-scoped; candidate preflight preserves role/coun
       if(url.pathname==='/rest/v1/proofolio_runs')return Response.json([{id:runId,user_id:candidate,state:'complete',track:'design',started_at:t.created_at,
         file_name:'synthetic.pdf',result:{questions:[],sourceAssets:[{id:'private',path:'secret/path'}]}}]);
       if(url.pathname==='/rest/v1/proofolio_answers')return Response.json([]);
+      if(url.pathname==='/rest/v1/proofolio_submission_scores')return Response.json([]);
       throw new Error('Unexpected URL');
     };
     await assert.rejects(ownedTest(testId,foreign),/찾을 수/);

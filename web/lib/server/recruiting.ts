@@ -6,6 +6,7 @@ import { validateCandidate } from '../candidate.ts';
 import { validatePeriod, testStatus } from '../period.ts';
 import { ROLES } from '../data.ts';
 import type { Candidate, PublicTest, Submission, SubmissionDetail, TestRecord, TestSummary } from '../types.ts';
+import { isScoring, scoreSubmission, scoresFor } from './scoring.ts';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function validId(value: unknown): asserts value is string {
@@ -15,13 +16,15 @@ function validMember(value: string) {
   if (!/^[a-f0-9]{64}$/.test(value)) throw new AnswerError('로그인이 필요해요.', 401);
 }
 type TestRow = { id: string; code: string; title: string; role: TestRecord['role']; starts_at: string; ends_at: string;
-  created_at: string; total_seconds: number; question_count: number; submission_count: number; completed_count: number };
+  created_at: string; total_seconds: number; question_count: number; submission_count: number; completed_count: number;
+  scored_count?: number | null; average_score?: number | string | null };
 type SubmissionRow = { id: string; test_id: string; candidate_name: string; birth_date: string; phone: string;
   joined_at: string; completed_at: string | null; run_id: string | null };
 const toTest = (r: TestRow): TestRecord => ({id:r.id,code:r.code,title:r.title,role:r.role,startsAt:r.starts_at,
   endsAt:r.ends_at,createdAt:r.created_at,totalSeconds:r.total_seconds,questionCount:r.question_count});
 const toSummary = (r: TestRow): TestSummary => ({...toTest(r),status:testStatus(toTest(r)),
-  submissionCount:Number(r.submission_count),completedCount:Number(r.completed_count)});
+  submissionCount:Number(r.submission_count),completedCount:Number(r.completed_count),
+  scoredCount:Number(r.scored_count??0),averageScore:r.average_score===null||r.average_score===undefined?null:Number(r.average_score)});
 const toSubmission = (r: SubmissionRow): Submission => ({id:r.id,testId:r.test_id,
   candidate:{name:r.candidate_name,birthDate:r.birth_date,phone:r.phone},joinedAt:r.joined_at,
   completedAt:r.completed_at,state:r.completed_at?'completed':'joined',runId:r.run_id});
@@ -67,14 +70,15 @@ export async function listSubmissions(testId: string, userId: string) {
   const test=await ownedTest(testId,userId);
   // ponytail: at most 500 applicants per view; add cursor pagination before larger hiring campaigns.
   const rows: SubmissionRow[]=await dbRequest('/rest/v1/proofolio_submissions?test_id=eq.'+testId+'&'+active()+'&select=*&order=joined_at.desc&limit=500');
-  return {test,submissions:rows.map(toSubmission)};
+  const scores=await scoresFor(rows.filter(r=>r.completed_at).map(r=>r.id));
+  return {test,submissions:rows.map(r=>({...toSubmission(r),score:scores.get(r.id)??null}))};
 }
 export async function submissionDetail(testId: string, submissionId: string, ownerId: string): Promise<SubmissionDetail> {
   validId(submissionId);
   const test=await ownedTest(testId,ownerId);
   const rows=await dbRequest('/rest/v1/proofolio_submissions?id=eq.'+submissionId+'&test_id=eq.'+testId+'&'+active()+'&select=*&limit=1');
   if(!rows?.[0])throw new AnswerError('응시 결과를 찾을 수 없어요.',404);
-  const submission=toSubmission(rows[0]);
+  const submission:Submission={...toSubmission(rows[0]),score:(await scoresFor([submissionId])).get(submissionId)??null};
   // Read canonical answers; never accept snapshots or questions from a browser.
   const stored=submission.runId ? await databaseRun(submission.runId) : null;
   const run=stored && stored.userId===rows[0].user_id ? publicStatus(stored) : null;
@@ -131,6 +135,21 @@ export async function completeSubmission(id: string, userId: string, body: Recor
   validId(id);validMember(userId);const runId=canonicalRunId(body);
   const saved=await rpc('proofolio_complete_submission',{p_submission_id:id,p_user_id:userId,p_run_id:runId});
   if(saved!==id)throw new AnswerError('제출 완료 응답을 확인하지 못했어요. 제출 확인만 재시도해주세요.',503);
+  // Scoring runs after the response; its result is read from the scores table, never from this request.
+  void scoreSubmission({submissionId:id,userId,runId}).catch(()=>{});
+}
+/** 담당자가 실패/미채점 제출을 다시 채점한다. 진행 중이면 409. */
+export async function rescoreSubmission(testId: string, submissionId: string, ownerId: string) {
+  validId(submissionId);
+  await ownedTest(testId,ownerId);
+  const rows=await dbRequest('/rest/v1/proofolio_submissions?id=eq.'+submissionId+'&test_id=eq.'+testId+'&'+active()+'&select=id,user_id,run_id,completed_at&limit=1');
+  const row=rows?.[0] as {id:string;user_id:string;run_id:string|null;completed_at:string|null}|undefined;
+  if(!row)throw new AnswerError('응시 결과를 찾을 수 없어요.',404);
+  if(!row.completed_at||!row.run_id)throw new AnswerError('제출이 완료된 뒤에 채점할 수 있어요.',409);
+  const current=(await scoresFor([row.id])).get(row.id);
+  if(isScoring(row.id)||current?.state==='running')throw new AnswerError('이미 채점이 진행 중이에요.',409);
+  void scoreSubmission({submissionId:row.id,userId:row.user_id,runId:row.run_id},{force:true}).catch(()=>{});
+  return {ok:true as const,state:'running' as const};
 }
 export async function deleteTest(id: string, userId: string) {
   await ownedTest(id,userId);

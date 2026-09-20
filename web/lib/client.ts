@@ -44,3 +44,8 @@ export async function recruitingRequest<T>(url: string, body?: unknown, method=b
   return parse<T>(await fetch(url,{method,cache:'no-store',
     ...(body===undefined?{}:{headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}));
 }
+
+/** 담당자가 완료된 제출을 다시 채점한다. 결과는 상세 조회로 확인한다. */
+export function rescoreSubmission(testId: string, submissionId: string) {
+  return recruitingRequest<{ ok: true; state: 'running' }>('/api/admin/tests/' + testId + '/submissions/' + submissionId + '/score', {});
+}

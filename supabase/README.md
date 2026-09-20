@@ -22,7 +22,7 @@ PROOFOLIO_CONTEST_ENDS_AT=2026-10-20T23:59:59+09:00
 
 아래는 보존된 회원 모드의 설정과 과거 확인 기록이다.
 
-2026-09-20 대상 프로젝트에 migration **001/002/003 적용**. 기존 회원·예제에 PR #2 채용 테스트 연결을 추가했다. 이메일·비밀번호 로그인만 사용한다. **Google 로그인·플랫폼 전체 관리자·자동 평가는 제외**, 실제 메일 발송 설정/수신 확인은 사용자 요청으로 보류했다. 메일 확인을 끄지는 않았다.
+2026-09-20 대상 프로젝트에 migration **001/002/003 적용**. 기존 회원·예제에 PR #2 채용 테스트 연결을 추가했다. 이메일·비밀번호 로그인만 사용한다. **Google 로그인·플랫폼 전체 관리자는 제외**. `feat/testscore`는 migration **004**(`proofolio_submission_scores`, `proofolio_save_submission_score`, `proofolio_test_summaries`에 `scored_count`/`average_score`)를 추가하며 대상 프로젝트에 별도 적용이 필요하다, 실제 메일 발송 설정/수신 확인은 사용자 요청으로 보류했다. 메일 확인을 끄지는 않았다.
 
 ## 새 환경 설정
 
@@ -140,4 +140,4 @@ select * from public.proofolio_admin_answers
 where run_id = '실제-실행-UUID'::uuid order by position;
 ```
 
-남은 운영 작업은 플랫폼 전체 관리자 권한/화면(필요 시), 사용자가 보류한 메일 설정·수신 확인, 공개 HTTPS 배포·운영 예산 연결이다. 답변 평가·음성·Google 로그인·다중 서버는 이번 범위가 아니다.
+남은 운영 작업은 플랫폼 전체 관리자 권한/화면(필요 시), 사용자가 보류한 메일 설정·수신 확인, 공개 HTTPS 배포·운영 예산 연결이다. 음성·Google 로그인·다중 서버는 이번 범위가 아니다. AI 답변 채점은 004 적용 후 서버 키로만 저장·조회한다.
