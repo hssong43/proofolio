@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { DEFAULT_QUESTION_COUNT, ROLES, formatElapsed, formatFileSize, type RoleId, type UiQuestion } from '@/lib/data';
 import { advanceAnalysis, fetchExample, fetchStatus, startAnalysis, startCodeAnalysis, submitAnswer } from '@/lib/client';
-import type { AnswerRecord, ClientResult, ExampleImage } from '@/lib/types';
+import type { AnswerRecord, ClientResult, ExampleImage, ExampleScores } from '@/lib/types';
 import { Header } from './Header';
 import { RoleScreen } from './screens/RoleScreen';
 import { UploadScreen, type UploadedFile, type UploadTab } from './screens/UploadScreen';
@@ -26,9 +26,10 @@ type State = {
   questionStartedAt: number; startedAt: number; endedAt: number;
   saveState: 'idle' | 'saving' | 'saved' | 'failed'; storageError?: string;
   exampleImages: ExampleImage[]; portfolioUrl: string | null;
+  sampleScores: ExampleScores | null; analysisFailed: boolean;
 };
 const initial = (seconds: number): State => ({screen:'role',role:null,tab:'pdf',file:null,link:'',runId:null,stage:0,result:null,error:null,submitting:false,
-  questionIndex:0,answer:'',answers:[],secondsLeft:seconds,questionStartedAt:0,startedAt:0,endedAt:0,saveState:'idle',exampleImages:[],portfolioUrl:null});
+  questionIndex:0,answer:'',answers:[],secondsLeft:seconds,questionStartedAt:0,startedAt:0,endedAt:0,saveState:'idle',exampleImages:[],portfolioUrl:null,sampleScores:null,analysisFailed:false});
 const draftKey = (id: string) => `proofolio:draft:v1:${id}`;
 function runUrl(id?: string) { const url = new URL(location.href); if(id) url.searchParams.set('run',id); else url.searchParams.delete('run'); history.replaceState(null,'',url); }
 
@@ -94,7 +95,7 @@ export function VerificationFlow({totalSeconds=40,questionCount=DEFAULT_QUESTION
           update({stage:status.stage});status=await advanceAnalysis(s.runId!);if(cancelled)return;
         }
         update({role:ROLES.find(r=>r.track===status.track)?.id ?? null});
-        if(status.state==='failed'){update({error:status.error||'분석이 완료되지 않았어요.'});return;}
+        if(status.state==='failed'){update({error:status.error||'분석이 완료되지 않았어요.',analysisFailed:true});return;}
         if(status.state==='complete'&&status.result){loadResult(status.result,status.answers,status.storageError);return;}
         update({stage:status.stage});timer=setTimeout(poll,2000);
       }catch(e){if(!cancelled)update({error:(e as Error).message});}
@@ -153,11 +154,11 @@ export function VerificationFlow({totalSeconds=40,questionCount=DEFAULT_QUESTION
       if(demo){
         update({screen:'analyzing'});
         const item=await fetchExample(role.track);
-        update({exampleImages:item.images??[],portfolioUrl:item.portfolioUrl??null});
+        update({exampleImages:item.images??[],portfolioUrl:item.portfolioUrl??null,sampleScores:item.sampleScores??null});
         loadResult({...item.result,exampleNotice:item.notice});
       }else{
         const run=role.track==='coding'?await startCodeAnalysis(s.link.trim(),questionCount,submissionId):await startAnalysis(s.file!.file!,role.track,questionCount,submissionId);
-        runUrl(run.runId);update({screen:'analyzing',runId:run.runId,stage:0,result:null});
+        runUrl(run.runId);update({screen:'analyzing',runId:run.runId,stage:0,result:null,analysisFailed:false,sampleScores:null});
       }
     }catch(e){update({error:(e as Error).message});}finally{busy.current=false;update({submitting:false});}
   };
@@ -171,8 +172,13 @@ export function VerificationFlow({totalSeconds=40,questionCount=DEFAULT_QUESTION
         canAnalyze={canAnalyze} submitting={s.submitting} error={s.error} onTabChange={tab=>update({tab})}
         onFile={file=>file&&update({file:{name:file.name,size:formatFileSize(file.size),file},error:null})}
         onRemoveFile={()=>update({file:null})} onLinkChange={link=>update({link})} onAnalyze={()=>void start()}/>}
-      {s.screen==='analyzing'&&<AnalyzingScreen stage={s.stage} summary={summary} demo={demo} error={s.error}
-        onRetry={()=>{if(demo)void start();else if(s.runId)update({error:null});else update({screen:'upload',error:null});}}/>}
+      {s.screen==='analyzing'&&<AnalyzingScreen stage={s.stage} summary={summary} demo={demo} error={s.error} failed={s.analysisFailed}
+        onRetry={()=>{
+          if(demo)void start();
+          else if(s.analysisFailed){runUrl();update({screen:'upload',runId:null,result:null,error:null,analysisFailed:false,stage:0});}
+          else if(s.runId)update({error:null});
+          else update({screen:'upload',error:null});
+        }}/>}
       {s.screen==='ready'&&<ReadyScreen totalSeconds={totalSeconds} questionCount={total}
         storageError={s.storageError} demo={demo}
         onStart={()=>update({screen:'question',startedAt:Date.now(),questionStartedAt:Date.now()})}/>}
@@ -184,6 +190,7 @@ export function VerificationFlow({totalSeconds=40,questionCount=DEFAULT_QUESTION
         elapsed={formatElapsed(s.answers.reduce((n,a)=>n+a.seconds,0))}
         saveError={onComplete?completionError:s.error} saveState={onComplete?(completionSave==='idle'?'saving':completionSave):s.saveState}
         savedStorage="supabase" recruiting={!!onComplete}
+        sampleScores={demo?s.sampleScores:null}
         onRetry={()=>onComplete?void finalize():void submit()} onHome={home}/>}
     </main>
   </div>;

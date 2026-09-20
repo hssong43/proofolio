@@ -1,10 +1,13 @@
 import { CheckIcon } from "../icons";
+import type { ExampleScores } from '@/lib/types';
+import { ExampleScoreSummary } from '../dashboard/ScorePanel';
 
 type Props = { roleLabel: string; answeredCount: number; questionCount: number; elapsed: string; saveError: string | null;
   savedStorage: "local" | "supabase"; recruiting?: boolean;
+  sampleScores?: ExampleScores | null;
   saveState: "idle" | "saving" | "saved" | "failed"; onRetry: () => void; onHome: () => void };
 
-export function CompleteScreen({ roleLabel, answeredCount, questionCount, elapsed, saveError, saveState, savedStorage, recruiting=false, onRetry, onHome }: Props) {
+export function CompleteScreen({ roleLabel, answeredCount, questionCount, elapsed, saveError, saveState, savedStorage, recruiting=false, sampleScores, onRetry, onHome }: Props) {
   return (
     <div className="screen" style={{ alignItems: "center", animation: "fadeIn .3s ease-out" }}>
       <div style={{ width: 80, height: 80, borderRadius: "50%", background: "#18181B", display: "grid", placeItems: "center" }}>
@@ -26,6 +29,14 @@ export function CompleteScreen({ roleLabel, answeredCount, questionCount, elapse
         <Stat label="답변한 질문 수" value={`${answeredCount} / ${questionCount}`} bordered />
         <Stat label="총 소요 시간" value={elapsed} />
       </div>
+      {sampleScores ? <>
+        <ExampleScoreSummary score={sampleScores} />
+        <section className="card" style={{ width: '100%', padding: 20 }} aria-label="예시 문항별 점수">
+          <h3 style={{ marginTop: 0 }}>문항별 점수</h3>
+          <div className="question-thumbnails">{sampleScores.items.map((item, i) =>
+            <span className="chip" key={item.questionId}>질문 {i + 1} · {item.score}점</span>)}</div>
+        </section>
+      </> : null}
       <button type="button" className="btn-secondary focus-ring" disabled={saveState === "saving" || saveState === "failed"} onClick={onHome}>
         홈으로
       </button>

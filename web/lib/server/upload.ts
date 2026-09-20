@@ -50,7 +50,12 @@ export function uploadMetadata(value: unknown) {
 
 export async function preparePdfUpload(metadata: ReturnType<typeof uploadMetadata>, user: UploadUser) {
   if (storageMode() !== 'supabase') throw new AnswerError('직접 업로드에는 비공개 Storage 연결이 필요해요.', 503);
-  if (process.env.VERCEL || process.env.PROOFOLIO_EXECUTION === 'steps') await (await import('./steps.ts')).requireStepBudget();
+  if (process.env.VERCEL || process.env.PROOFOLIO_EXECUTION === 'steps') {
+    let steps: typeof import('./steps.ts');
+    try { steps = await import('./steps.ts'); }
+    catch { throw new AnswerError('분석 실행 모듈을 불러오지 못했어요. 운영자가 배포 파일을 확인해야 해요.', 503); }
+    await steps.requireStepBudget();
+  }
   const status: StoredRun = { runId: randomUUID(), userId: user.id, fileName: metadata.fileName, track: metadata.track,
     pdfSha256: metadata.sha256, requestedQuestions: metadata.maxQuestions, state: 'running', stage: 0,
     startedAt: new Date().toISOString(), storage: 'supabase' };

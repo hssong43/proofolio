@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { exampleAssetPath, EXAMPLE_LIBRARY_OWNER } from '../web/lib/server/database.ts';
-import { exampleAnswers } from '../web/lib/server/example-answers.ts';
+import { exampleAnswers, exampleScores } from '../web/lib/server/example-answers.ts';
 import type { ClientQuestion } from '../web/lib/types.ts';
 
 test('public examples only resolve curated PDFs and linked images owned by the matching example library', async () => {
@@ -59,5 +59,9 @@ test('public examples only resolve curated PDFs and linked images owned by the m
 test('authored example answers are not reused for another question with the same ID', () => {
   const question: ClientQuestion = { id: 'q1', prompt: '합성 질문', quotes: ['합성 원문'], notes: [], pages: [2],
     projectTitle: '별도 합성 프로젝트', intent: '합성', listenFor: [], answerTarget: '설명' };
-  for (const slug of ['design', 'marketing', 'coding', 'unknown']) assert.deepEqual(exampleAnswers(slug, [question]), []);
+  for (const slug of ['design', 'marketing', 'coding', 'unknown']) {
+    assert.deepEqual(exampleAnswers(slug, [question]), []);
+    assert.equal(exampleScores(slug,[question]),null);
+    assert.equal(exampleScores(slug,[]),null);
+  }
 });

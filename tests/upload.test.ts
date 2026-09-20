@@ -65,6 +65,24 @@ test('quota rejection happens before creating an upload capability or storing an
   finally { globalThis.fetch = original; }
 });
 
+test('step upload reports disabled budget separately and never admits an upload', async () => {
+  const original=globalThis.fetch,keys=['VERCEL','PROOFOLIO_MAX_COST_USD'] as const,before=keys.map(k=>process.env[k]);
+  let calls=0;
+  process.env.VERCEL='1';
+  globalThis.fetch=async(input)=>{
+    calls++;assert.match(String(input),/proofolio_execution_budget\?/);
+    return Response.json([{limit_usd:10,spent_usd:0,reserved_usd:0,blocked:true,legacy_sha256:'a'.repeat(64)}]);
+  };
+  try {
+    process.env.PROOFOLIO_MAX_COST_USD='0';
+    await assert.rejects(preparePdfUpload(uploadMetadata(metadata),user),/일시 중지/);assert.equal(calls,0);
+    process.env.PROOFOLIO_MAX_COST_USD='10';
+    await assert.rejects(preparePdfUpload(uploadMetadata(metadata),user),/예산을 다시 승인/);assert.equal(calls,1);
+    globalThis.fetch=async()=>Response.json({}, {status:503});
+    await assert.rejects(preparePdfUpload(uploadMetadata(metadata),user),/분석 예산 DB/);
+  } finally {globalThis.fetch=original;keys.forEach((key,i)=>{if(before[i]===undefined)delete process.env[key];else process.env[key]=before[i];});}
+});
+
 test('foreign owner is rejected; same-ID concurrent finish cannot launch twice; zero budget blocks Vercel model calls', async () => {
   const original = globalThis.fetch, previousVercel = process.env.VERCEL;
   process.env.VERCEL = '1';

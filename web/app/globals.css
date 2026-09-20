@@ -653,7 +653,7 @@ select.text-input { appearance: auto; }
 .portfolio-image-caption { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-top: 1px solid #e4e4e7; font-size: 12px; }
 .portfolio-thumbnail .empty-state { padding: 12px; }
 @media (max-width: 720px) {
-  .applicant-table, .applicant-table tbody { display: block; width: 100%; }
+  .applicant-table, .applicant-table tbody { display: block; width: 100%; min-width: 0; }
   .applicant-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .applicant-table tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 20px; border-bottom: 1px solid #e4e4e7; }
   .applicant-table tr:last-child { border-bottom: 0; }
@@ -661,6 +661,7 @@ select.text-input { appearance: auto; }
   .applicant-table td:first-child { grid-column: 1 / -1; min-width: 0; max-width: none; }
   .applicant-table td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 4px; color: #71717a; font-size: 12px; }
   .applicant-table td:nth-child(4) { grid-column: 1 / -1; }
+  .applicant-table td:nth-last-child(2) { grid-column: 1; }
   .applicant-table button { width: 100%; }
 }
 

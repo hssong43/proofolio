@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { ClientQuestion, ExampleAnswer } from '../types.ts';
+import type { ClientQuestion, ExampleAnswer, ExampleScores } from '../types.ts';
 
 // Authored demo answers, NOT statements by the portfolio authors or submitted answers.
 // Bind each sample to the saved question and source; never attach it to a changed question.
@@ -41,4 +41,20 @@ export function exampleAnswers(slug: string, questions: ClientQuestion[]): Examp
     const fingerprint = createHash('sha256').update(JSON.stringify([q.prompt, q.quotes, q.projectTitle])).digest('hex');
     return sample?.fingerprint === fingerprint ? [{ questionId: q.id, answer: sample.answer }] : [];
   });
+}
+
+// Fixed display fixtures, not AI output or an assessment of the visitor's answers.
+// Reuse the exact question fingerprint gate; a changed example must not inherit a score.
+export function exampleScores(slug: string, questions: ClientQuestion[]): ExampleScores | null {
+  const values: Record<string, number[]> = {
+    design: [88, 84, 82, 86, 92, 80, 90],
+    marketing: [86, 90, 84, 80, 88, 86, 92, 90, 82],
+    coding: [90, 88, 84, 92, 86, 82, 94],
+  };
+  const items = exampleAnswers(slug, questions).flatMap(a => {
+    const score = values[slug]?.[Number(a.questionId.slice(1)) - 1];
+    return score === undefined ? [] : [{ questionId: a.questionId, score }];
+  });
+  if (!items.length || items.length !== questions.length) return null;
+  return { overallScore: Math.round(items.reduce((sum, item) => sum + item.score, 0) / items.length), items };
 }

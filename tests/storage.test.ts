@@ -29,6 +29,9 @@ test('guest identity: stable secret cookie, hashed user ID, secure flags, no pub
   assert.deepEqual(publicStatus(status),{runId,state:'complete'});
   const withAsset={...status,result:{sourceAssets:[{id:'pdf',page:0,kind:'pdf',path:'private/path'}]}} as StoredRun;
   assert.deepEqual(publicStatus(withAsset).result!.sourceAssets,[{id:'pdf',page:0,kind:'pdf'}]);
+  const legacy={...status,state:'failed',error:'파일 전송 경로는 준비됐지만, 현재 Vercel 배포에는 장시간 분석 실행 환경이 연결되지 않았어요.'} as StoredRun;
+  assert.match(publicStatus(legacy).error!,/이전 배포/);
+  assert.match(legacy.error!,/장시간 분석/); // Preserve the historical DB record.
   delete status.userId;writeFileSync(resolve(dir,'status.json'),JSON.stringify(status));
   await assert.rejects(ownedStatus(runId,user.id),/찾을 수/);
 });
