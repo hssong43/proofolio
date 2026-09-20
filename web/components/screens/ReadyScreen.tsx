@@ -23,11 +23,11 @@ export function ReadyScreen({ totalSeconds, questionCount, onStart }: Props) {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ fontSize: 13, color: "#71717A" }}>질문 미리보기</div>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {Array.from({ length: questionCount }, (_, i) => (
               <div
                 key={i}
-                style={{ width: 56, height: 56, borderRadius: "50%", border: "1px solid #D4D4D8", display: "grid", placeItems: "center", fontSize: 13, fontWeight: 500, color: "#71717A" }}
+                style={{ width: 48, height: 48, borderRadius: "50%", border: "1px solid #D4D4D8", display: "grid", placeItems: "center", fontSize: 12, fontWeight: 500, color: "#71717A", fontVariantNumeric: "tabular-nums" }}
               >
                 Q{i + 1}
               </div>
