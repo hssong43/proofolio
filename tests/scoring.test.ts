@@ -24,12 +24,12 @@ test('coverage items are intent first, then listen_for, and the score follows th
   assert.equal(oneMissing.score,73);assert.deepEqual(oneMissing.missing,['협업자와 나눈 역할']);
   const twoMissing=computeScore({relevance:'partial',coverage:cov(questions[0],[true,false,false]),depth:0,logic:0,creativity:0});
   assert.equal(twoMissing.score,67);
-  // 항목을 전혀 다루지 못했지만 답변은 있는 경우: 60점 하한, 등급으로 최대 80까지
-  assert.equal(computeScore({relevance:'partial',coverage:cov(questions[0],[false,false,false]),depth:1,logic:0,creativity:0}).score,62);
+  // 답변이 있으면 항목을 전혀 다루지 못해도 60점 하한, 등급으로 최대 80까지
+  assert.equal(computeScore({relevance:'partial',coverage:cov(questions[0],[false,false,false]),depth:0,logic:0,creativity:0}).score,60);
+  assert.equal(computeScore({relevance:'none',coverage:cov(questions[0],[false,false,false]),depth:0,logic:0,creativity:0}).score,60);
   assert.equal(computeScore({relevance:'partial',coverage:cov(questions[0],[false,false,false]),depth:3,logic:4,creativity:3}).score,80);
-  // 빈/무관 답변 또는 아무 항목도 없이 depth 0이면 0점
-  assert.equal(computeScore({relevance:'none',coverage:cov(questions[0],[false,false,false]),depth:3,logic:4,creativity:3}).score,0);
-  assert.equal(computeScore({relevance:'partial',coverage:cov(questions[0],[false,false,false]),depth:0,logic:4,creativity:3}).score,0);
+  // 빈 답변만 0점 (코드가 원문으로 판단)
+  assert.equal(computeScore({relevance:'none',coverage:cov(questions[0],[false,false,false]),depth:3,logic:4,creativity:3},false).score,0);
 });
 
 test('judgment check enforces order, coverage items and relevance consistency',()=>{

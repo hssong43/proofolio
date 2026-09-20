@@ -30,13 +30,12 @@ export function coverageItems(q:{intent:string;listenFor:string[]}):string[] {
 
 /**
  * 규칙: 의도와 확인 사항을 모두 다루면 80점 기준. 누락은 비례 감점하되 60점 아래로 내려가지 않는다.
- * 분량·논리·창의성 등급으로 최대 20점을 더해 100점까지. 무관한/빈 답변은 0점.
- * 모델은 등급과 포함 여부만 내고 점수는 여기서만 계산한다.
+ * 분량·논리·창의성 등급으로 최대 20점을 더해 100점까지. 답변이 있으면 무조건 60점 이상, 빈 답변만 0점.
+ * 모델은 등급과 포함 여부만 내고 점수는 여기서만 계산한다. answered는 코드가 답변 원문으로 판단한다.
  */
-export function computeScore(j:Pick<ScoringJudgment,'relevance'|'coverage'|'depth'|'logic'|'creativity'>) {
+export function computeScore(j:Pick<ScoringJudgment,'relevance'|'coverage'|'depth'|'logic'|'creativity'>,answered=true) {
   const missing=j.coverage.filter(c=>!c.covered).map(c=>c.item);
-  if(j.relevance==='none'||(j.coverage.length&&missing.length===j.coverage.length&&j.depth===0))
-    return {score:0,coverageScore:0,bonus:0,missing};
+  if(!answered)return {score:0,coverageScore:0,bonus:0,missing};
   const total=Math.max(1,j.coverage.length);
   const coverageScore=Math.max(SCORING_FLOOR,SCORING_BASELINE-(SCORING_BASELINE-SCORING_FLOOR)*missing.length/total);
   const bonus=Math.min(SCORING_BONUS_MAX,Math.round(SCORING_BONUS_MAX*(j.depth+j.logic+j.creativity)/(DEPTH_MAX+LOGIC_MAX+CREATIVITY_MAX)));
@@ -74,7 +73,8 @@ export async function scoreAnswers(input:{questions:ScoringQuestion[];answers:Sc
   if(!answered.length)return {items:empty,overallScore:0};
   const parsed=await request(SCORING_KIND,AnswerScoring,{prompt:scoringPrompt(questions,input.answers),maxOutputTokens:SCORING_MAX_OUTPUT_TOKENS},
     data=>checkJudgments(questions,data.items));
-  const items:ScoreItem[]=parsed.items.map(j=>{const computed=computeScore(j);
+  const answeredIds=new Set(answered.map(a=>a.questionId));
+  const items:ScoreItem[]=parsed.items.map(j=>{const computed=computeScore(j,answeredIds.has(j.question_id));
     return {questionId:j.question_id,...computed,relevance:j.relevance,coverage:j.coverage,depth:j.depth,logic:j.logic,creativity:j.creativity,comment:j.comment};});
   const overallScore=Math.round(items.reduce((sum,i)=>sum+i.score,0)/items.length);
   return {items,overallScore};
