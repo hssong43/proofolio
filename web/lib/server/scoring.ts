@@ -62,7 +62,6 @@ export async function scoreSubmission(job: ScoringJob, options: { generate?: Gen
     const questions = run.result.questions.map(q => ({ id: q.id, prompt: q.prompt, intent: q.intent, listenFor: q.listenFor }));
     const stats = freshMetrics();
     let generate = options.generate;
-    if (!generate && env.PROOFOLIO_SCORING_MOCK === '1') generate = (await import('./scoring-mock.ts')).mockScoringGenerate; // TEMPORARY mock
     if (!generate) {
       const { limit, ledger } = executionBudget(ROOT, env);
       validateOpenRouterKey(env.OPENROUTER_API_KEY);
