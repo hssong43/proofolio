@@ -16,7 +16,7 @@ export async function POST(request:Request){
     if(typeof body?.url!=='string'||!Number.isInteger(count)||count<6||count>10)throw new AnswerError('저장소 주소와 질문 수 6~10개를 확인해주세요.',400);
     if(user.member)await ensureMember(user.id,user.authId);
     if(body.submissionId!==undefined){
-      if(!user.member)throw new AnswerError('대회 체험에서는 채용 응시 정보를 받지 않아요.',403);
+      if(!user.member)throw new AnswerError('프리뷰에서는 채용 응시 정보를 받지 않아요.',403);
       await authorizeCandidateAnalysis(body.submissionId,user.id,'coding',count);
     }
     const code=await githubCode(body.url);

@@ -32,6 +32,10 @@ export async function fetchStatus(runId: string) {
   return parse<RunStatus>(await fetch(`/api/analyze/${runId}`, { cache: "no-store" }));
 }
 
+export async function advanceAnalysis(runId: string) {
+  return parse<RunStatus>(await fetch(`/api/analyze/${runId}/step`, { method: 'POST', cache: 'no-store' }));
+}
+
 export async function fetchExample(track: Track) {
   return parse<PortfolioExample>(await fetch(`/api/examples/${track}`, { cache: 'no-store' }));
 }

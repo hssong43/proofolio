@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { DEFAULT_QUESTION_COUNT, ROLES, formatElapsed, formatFileSize, type RoleId, type UiQuestion } from '@/lib/data';
-import { fetchExample, fetchStatus, startAnalysis, startCodeAnalysis, submitAnswer } from '@/lib/client';
+import { advanceAnalysis, fetchExample, fetchStatus, startAnalysis, startCodeAnalysis, submitAnswer } from '@/lib/client';
 import type { AnswerRecord, ClientResult, ExampleImage } from '@/lib/types';
 import { Header } from './Header';
 import { RoleScreen } from './screens/RoleScreen';
@@ -88,7 +88,11 @@ export function VerificationFlow({totalSeconds=40,questionCount=DEFAULT_QUESTION
         // Connecting a recruiting run is idempotent. A failure retries this link, never the paid analysis.
         if(linkedRun.current!==s.runId){await callbacks.current.onRunReady?.(s.runId!);linkedRun.current=s.runId;}
         if(cancelled)return;
-        const status=await fetchStatus(s.runId!); if(cancelled)return;
+        let status=await fetchStatus(s.runId!); if(cancelled)return;
+        // GET is read-only. Only this owned, explicit POST advances one checkpointed model call.
+        if(status.execution==='steps'&&status.state==='running') {
+          update({stage:status.stage});status=await advanceAnalysis(s.runId!);if(cancelled)return;
+        }
         update({role:ROLES.find(r=>r.track===status.track)?.id ?? null});
         if(status.state==='failed'){update({error:status.error||'분석이 완료되지 않았어요.'});return;}
         if(status.state==='complete'&&status.result){loadResult(status.result,status.answers,status.storageError);return;}

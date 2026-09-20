@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     const user = await runUser(request);
     if(user.member)await ensureMember(user.id,user.authId);
     if(form.has('submissionId')) {
-      if (!user.member) throw new AnswerError('대회 체험에서는 채용 응시 정보를 받지 않아요.', 403);
+      if (!user.member) throw new AnswerError('프리뷰에서는 채용 응시 정보를 받지 않아요.', 403);
       await authorizeCandidateAnalysis(form.get('submissionId'),user.id,track,maxQuestions);
     }
     const status = await startRun({ bytes, fileName: file.name, track: track as Track, maxQuestions, userId: user.id, member: user.member, guestExpiresAt: user.guestExpiresAt });

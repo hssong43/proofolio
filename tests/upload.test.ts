@@ -65,7 +65,7 @@ test('quota rejection happens before creating an upload capability or storing an
   finally { globalThis.fetch = original; }
 });
 
-test('foreign owner is rejected; same-ID concurrent finish cannot launch twice; Vercel fails without model calls', async () => {
+test('foreign owner is rejected; same-ID concurrent finish cannot launch twice; zero budget blocks Vercel model calls', async () => {
   const original = globalThis.fetch, previousVercel = process.env.VERCEL;
   process.env.VERCEL = '1';
   let state = 'queued', claims = 0, failures = 0;
@@ -94,7 +94,7 @@ test('foreign owner is rejected; same-ID concurrent finish cannot launch twice; 
     assert.equal(results.filter(r => r.status === 'rejected').length, 1);
     assert.equal(failures, 1); assert.equal(state, 'failed'); assert.ok(claims >= 1);
     const failed = results.find(r => r.status === 'rejected') as PromiseRejectedResult;
-    assert.match(failed.reason.message, /장시간 분석 실행 환경/);
+    assert.match(failed.reason.message, /승인한 누적 한도/);
   } finally { globalThis.fetch = original; if (previousVercel === undefined) delete process.env.VERCEL; else process.env.VERCEL = previousVercel; }
 });
 

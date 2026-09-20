@@ -1,5 +1,21 @@
 # Supabase 회원·질문·답변·파일 저장
 
+## Vercel 단계 실행 (005/006)
+
+001~004를 적용한 프로젝트에 `202609200005_analysis_steps.sql`, `202609200006_execution_budget_audit.sql`을 한 번씩 적용한다.
+005의 초기 예산은 **0/blocked**이며 모델을 호출하지 않는다. 승인 창 활성화는 운영자가 SQL Editor에서 명시적으로 수행한다.
+이전 파일 원장의 SHA-256·확인 지출·미확인 유보를 `approval`에 보존한다. 원장 삭제/재생성이나 미확인 비용의 0원 정산은 하지 않는다.
+이번 사용자 승인 파일은 로컬 Git 제외 `output/operations/vercel-steps-trial-20260920.sql`이며, 006이 포함되어 있으므로 중복 실행하지 않는다.
+
+- `proofolio_analysis_jobs`: private 모델 응답 체크포인트, 6분 실행 잠금, 다음 호출 가능 시각. 브라우저 직접 읽기/쓰기 불가.
+- `proofolio_execution_budget`/`proofolio_execution_calls`: 서버 전역 예약·실제 비용. 결과 삭제 후에도 원문 없는 비용 기록은 유지한다.
+- 응답과 정산은 단일 RPC 트랜잭션으로 저장한다. 저장 성공이 불명확하면 추가 호출하지 않는다. 타임아웃 후 미정산 예약도 유지한다.
+- 예산 종료는 서버에서 `proofolio_close_execution_budget` RPC. 닫힌 예산을 자동으로 재개하지 않는다.
+- 최종 결과/이미지/답변은 기존 테이블·비공개 버킷·소유권·ACK 방식 재사용. 완료되지 않은 결과는 응시 화면에 게시하지 않는다.
+- 서버리스의 접근 만료와 물리 삭제는 다르다. 기존 `cleanupExpiredRuns`는 별도 정기 작업에서 실행해야 하며 함수 내 타이머는 사용하지 않는다.
+
+아래는 과거 설정/검사 이력이다. 004/005 원격 적용은 2026-09-20 사용자 실행 후 확인했다.
+
 ## 대회 모드 (004)
 
 현재 브랜치 `codex/contest-guest-demo`에서는 기존 Auth 회원가입 대신 **서버의 HttpOnly 익명 쿠키**를 사용한다. Supabase Anonymous Sign-in 설정이나 OAuth 키는 필요하지 않다. 기존 서비스 키/비공개 버킷/답변 RPC를 재사용하고 RLS·anon/authenticated 직접 접근 차단을 유지한다.

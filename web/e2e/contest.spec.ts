@@ -10,6 +10,47 @@ test.beforeEach(async({context})=>{
     r=>r.fulfill({contentType:'text/css',body:''}));
 });
 
+test('checkpoint steps: retry and reload resume the same upload, then save seven answers',async({page,context},info)=>{
+  const answers:AnswerRecord[]=[],errors:string[]=[];
+  const questions=Array.from({length:7},(_,i)=>({...result.questions[0],id:`step-q${i}`,prompt:`단계 분석 질문 ${i+1}`}));
+  let uploads=0,steps=0,fail=true,ready=false;
+  page.on('pageerror',e=>errors.push(e.message));
+  page.on('console',m=>{if(['error','warning'].includes(m.type())&&!m.text().includes('503 (Service Unavailable)'))errors.push(m.text());});
+  const status=()=>({runId,track:'design',execution:'steps',stage:Math.min(2,steps),state:ready?'complete':'running',
+    ...(ready?{result:{...result,questions},answers}:{})});
+  await mockPdfUpload(context,runId,{track:'design',maxQuestions:10});
+  await context.route('**/api/analyze',r=>{uploads++;return r.fulfill({json:{runId}});});
+  await context.route('**/api/analyze/'+runId,r=>r.fulfill({json:status()}));
+  await context.route('**/api/analyze/'+runId+'/step',r=>{
+    expect(r.request().method()).toBe('POST');steps++;
+    if(fail){fail=false;return r.fulfill({status:503,json:{error:'합성 단계 저장 지연'}});}
+    return r.fulfill({json:status()});
+  });
+  await context.route('**/api/analyze/'+runId+'/answers',r=>{
+    const a=r.request().postDataJSON() as AnswerRecord;answers.push(a);
+    return r.fulfill({json:{ok:true,saved:a.questionId,answers,storage:'supabase'}});
+  });
+  await page.goto('/');await expect(page).toHaveTitle('Proofolio');
+  await page.getByRole('button',{name:'디자이너',exact:true}).click();await page.getByRole('button',{name:'다음',exact:true}).click();
+  await page.locator('input[type=file]').setInputFiles({name:'steps.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-synthetic')});
+  await page.getByRole('button',{name:'AI 분석 시작'}).click();
+  await expect(page.getByText('합성 단계 저장 지연',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'다시 확인',exact:true}).click();await expect.poll(()=>steps).toBeGreaterThanOrEqual(2);
+  await page.reload();await expect.poll(()=>steps).toBeGreaterThanOrEqual(3);ready=true;
+  await expect(page.getByRole('heading',{name:'질문 7개, 각 40초예요'})).toBeVisible();
+  expect(uploads).toBe(1);await expect(page).toHaveURL(new RegExp('run='+runId));
+  await page.getByRole('button',{name:'준비 완료'}).click();
+  for(let i=0;i<7;i++){
+    await page.getByRole('textbox',{name:'답변',exact:true}).fill(`단계 시험 답변 ${i+1}`);
+    await page.getByRole('button',{name:i===6?'제출하고 완료':'제출하고 다음',exact:true}).click();
+  }
+  await expect(page.getByRole('heading',{name:'저장 완료',exact:true})).toBeVisible();
+  expect(answers.map(a=>a.questionId)).toEqual(questions.map(q=>q.id));expect(errors).toEqual([]);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await expect(page.locator('nextjs-portal [data-nextjs-dialog-overlay]')).toHaveCount(0);
+  await page.screenshot({path:info.outputPath('steps-saved.png'),fullPage:true,animations:'disabled'});
+});
+
 test('contest: no identity form, real anonymous cookie, upload to six saved answers, retry and reload',async({page,context},info)=>{
   const answers:AnswerRecord[]=[],attempts:AnswerRecord[]=[],errors:string[]=[];
   let uploads=0,authRequests=0;

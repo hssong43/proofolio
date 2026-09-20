@@ -5,7 +5,7 @@ import { exampleAnswers } from '@/lib/server/example-answers';
 export const dynamic = 'force-dynamic';
 export async function GET(_request: Request, context: { params: Promise<{ slug: string }> }) {
   const contest=contestSettings();
-  if(contest.enabled&&contest.closed)return NextResponse.json({error:'대회 체험이 종료됐어요.'},{status:410,headers:{'Cache-Control':'no-store'}});
+  if(contest.enabled&&contest.closed)return NextResponse.json({error:'프리뷰가 종료됐어요.'},{status:410,headers:{'Cache-Control':'no-store'}});
   try {
     const item = await example((await context.params).slug);
     // Only curated examples are public; storage paths and visitor data stay out of this response.

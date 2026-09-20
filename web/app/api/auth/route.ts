@@ -17,7 +17,7 @@ export async function GET() {
   } catch { return json({ user: null, configured: false }); }
 }
 export async function POST(request: Request) {
-  if (contestSettings().enabled) return json({ error: '대회 체험에는 회원가입이나 로그인이 필요 없어요.' }, 404);
+  if (contestSettings().enabled) return json({ error: '프리뷰에는 회원가입이나 로그인이 필요 없어요.' }, 404);
   if (!sameOrigin(request)) return json({ error: "같은 사이트에서만 로그인할 수 있어요." }, 403);
   const text = await request.text();
   if (text.length > 4096) return json({ error: "요청이 너무 커요." }, 413);

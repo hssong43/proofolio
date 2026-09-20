@@ -9,7 +9,7 @@ export async function POST(request: Request) {
   if (!sameOrigin(request)) return json({ error: '허용되지 않는 요청이에요.' }, 403);
   const contest = contestSettings();
   if (!contest.enabled) return json({ error: '체험 경로가 아니에요.' }, 404);
-  if (contest.closed) return json({ error: '대회 체험이 종료됐어요.' }, 410);
+  if (contest.closed) return json({ error: '프리뷰가 종료됐어요.' }, 410);
   // No Auth account, email, identity form or DB row on entry. The secret stays HttpOnly.
   const user = sessionUser(request, true)!;
   const response = json({ ready: true });
