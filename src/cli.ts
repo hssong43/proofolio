@@ -46,7 +46,7 @@ export async function runCli(argv=process.argv.slice(2),deps:{analyze?:typeof an
     const config=executionBudget(root,env,{limit:v['max-cost-usd'],ledger:v['budget-ledger']});
     const track=Track.parse(v.track),maxQuestions=Number(v['max-questions']);
     if(v.scope!=='focused'&&v.scope!=='full')throw new Error('scope은 focused/full입니다.');
-    if(!Number.isInteger(maxQuestions)||maxQuestions<1||maxQuestions>DEFAULT_MAX_QUESTIONS)throw new Error('최대 질문 수는 1~5입니다.');
+    if(!Number.isInteger(maxQuestions)||maxQuestions<1||maxQuestions>DEFAULT_MAX_QUESTIONS)throw new Error('최대 질문 수는 1~10입니다.');
     checkDestinations([v.output,v['guide-output'],v['preview-dir']]);
     if(v['inspect-only']&&v['guide-output'])throw new Error('이미지 구분 모드에서는 질문 가이드를 만들지 않습니다.');
     const bytes=await readPdfFile(positionals[0]);

@@ -1,9 +1,13 @@
 import type { PublicTest, TestRecord } from "../types.ts";
 import { testStatus, formatDateTime } from "../period.ts";
 import { findTestByCode } from "./store.ts";
+import { ROLES } from "../data.ts";
 
 export function publicTest(test: TestRecord): PublicTest {
-  return { testId: test.id, title: test.title, startsAt: test.startsAt, endsAt: test.endsAt, mode: test.mode, totalSeconds: test.totalSeconds, questionCount: test.questionCount };
+  return {
+    testId: test.id, title: test.title, startsAt: test.startsAt, endsAt: test.endsAt, mode: test.mode, totalSeconds: test.totalSeconds, questionCount: test.questionCount,
+    role: test.role, roleLabel: ROLES.find((r) => r.id === test.role)?.label ?? test.role,
+  };
 }
 
 /** 코드로 테스트를 찾고 지금 참여 가능한지 판단한다. */

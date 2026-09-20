@@ -66,16 +66,21 @@ export type TestRecord = {
   id: string;
   code: string;
   title: string;
+  /** 담당자가 테스트 생성 시 정한 직무. 응시자는 확인만 한다. */
+  role: RoleId;
   startsAt: string;
   endsAt: string;
   createdAt: string;
+  createdBy?: string;
   totalSeconds: number;
   questionCount: number;
+  /** 종합 점수가 이 값 이상이면 통과. 0~100. */
+  passScore: number;
   /** demo: 목데이터 분석, live: 실제 분석 코어(추후). */
   mode: AnalysisMode;
 };
 
-export type TestSummary = TestRecord & { status: TestStatus; submissionCount: number; completedCount: number };
+export type TestSummary = TestRecord & { status: TestStatus; submissionCount: number; completedCount: number; passedCount: number };
 
 export type Candidate = { name: string; birthDate: string; phone: string };
 
@@ -95,7 +100,22 @@ export type Submission = {
   answers?: AnswerRecord[];
   elapsedSeconds?: number;
   runId?: string | null;
+  evaluation?: Evaluation;
 };
+
+export type EvaluationItem = { questionId: string; score: number; comment: string; signals: string[] };
+
+export type Evaluation = {
+  method: "mock-rules";
+  version: 1;
+  passScore: number;
+  overallScore: number;
+  passed: boolean;
+  items: EvaluationItem[];
+  evaluatedAt: string;
+};
+
+export type Account = { id: string; email: string; name: string; company: string; passwordHash: string; createdAt: string };
 
 export type CompletionPayload = {
   role: RoleId;
@@ -107,4 +127,4 @@ export type CompletionPayload = {
 };
 
 /** 응시자에게 노출하는 테스트 요약. */
-export type PublicTest = Pick<TestRecord, "title" | "startsAt" | "endsAt" | "mode" | "totalSeconds" | "questionCount"> & { testId: string };
+export type PublicTest = Pick<TestRecord, "title" | "startsAt" | "endsAt" | "mode" | "totalSeconds" | "questionCount" | "role"> & { testId: string; roleLabel: string };

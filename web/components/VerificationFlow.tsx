@@ -60,13 +60,15 @@ type Action =
   | { type: "setAnswer"; answer: string }
   | { type: "submit"; totalSeconds: number; now: number }
   | { type: "saveFailed"; error: string }
-  | { type: "reset"; totalSeconds: number };
+  | { type: "reset"; totalSeconds: number; initialRole: RoleId | null };
 
 const EMPTY_SUMMARY: AnalyzedSummary = { chipsLabel: "", chips: [], cards: [] };
 
-const initialState = (totalSeconds: number): State => ({
-  screen: "role",
-  role: null,
+type Init = { totalSeconds: number; initialRole: RoleId | null };
+
+const initialState = ({ totalSeconds, initialRole }: Init): State => ({
+  screen: initialRole ? "upload" : "role",
+  role: initialRole,
   tab: "pdf",
   file: null,
   link: "",
@@ -133,7 +135,7 @@ function reducer(state: State, action: Action): State {
     case "saveFailed":
       return { ...state, saveError: action.error };
     case "reset":
-      return initialState(action.totalSeconds);
+      return initialState({ totalSeconds: action.totalSeconds, initialRole: action.initialRole });
   }
 }
 
@@ -164,6 +166,8 @@ export type VerificationFlowProps = {
   demo?: boolean;
   /** 데모 모드의 분석 대기 시간을 짧게 줄인다. */
   fastAnalysis?: boolean;
+  /** 직무가 정해진 경우 직무 선택 화면을 건너뛰고 업로드부터 시작한다. */
+  initialRole?: RoleId;
   /** 완료 시 호출. 거부되면 완료 화면에 저장 오류를 표시한다. */
   onComplete?: (result: CompletionPayload) => Promise<unknown> | void;
   /** "홈으로" 동작. 기본은 흐름 초기화. */
@@ -175,8 +179,10 @@ export type VerificationFlowProps = {
   headerRight?: ReactNode;
 };
 
-export function VerificationFlow({ totalSeconds = 40, questionCount = DEFAULT_QUESTION_COUNT, demo = false, fastAnalysis = false, onComplete, onHome, headerSteps, stepOffset = 0, headerRight }: VerificationFlowProps) {
-  const [state, dispatch] = useReducer(reducer, totalSeconds, initialState);
+export function VerificationFlow({ totalSeconds = 40, questionCount = DEFAULT_QUESTION_COUNT, demo = false, fastAnalysis = false, initialRole, onComplete, onHome, headerSteps, stepOffset = 0, headerRight }: VerificationFlowProps) {
+  const [state, dispatch] = useReducer(reducer, { totalSeconds, initialRole: initialRole ?? null }, initialState);
+  // 직무 선택 단계가 없으면 헤더 단계 번호를 하나 당긴다.
+  const stepBase = initialRole ? -1 : 0;
   const stateRef = useRef(state);
   stateRef.current = state;
   const onCompleteRef = useRef(onComplete);
@@ -323,7 +329,7 @@ export function VerificationFlow({ totalSeconds = 40, questionCount = DEFAULT_QU
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-      <Header stepIndex={stepOffset + STEP_INDEX[state.screen]} steps={headerSteps} right={headerRight} />
+      <Header stepIndex={stepOffset + stepBase + STEP_INDEX[state.screen]} steps={headerSteps} right={headerRight} />
       <main className="app-main">
         {state.screen === "role" && <RoleScreen role={state.role} demo={demo} onSelect={(role) => dispatch({ type: "selectRole", role })} onNext={goUpload} />}
         {state.screen === "upload" && (
@@ -368,7 +374,7 @@ export function VerificationFlow({ totalSeconds = 40, questionCount = DEFAULT_QU
             questionCount={total}
             elapsed={formatElapsed(elapsedSeconds)}
             saveError={state.saveError}
-            onHome={onHome ?? (() => dispatch({ type: "reset", totalSeconds }))}
+            onHome={onHome ?? (() => dispatch({ type: "reset", totalSeconds, initialRole: initialRole ?? null }))}
           />
         )}
       </main>

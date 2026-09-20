@@ -606,3 +606,101 @@ button {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- 계정 · 평가 ---------- */
+
+.login-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 40px;
+  padding: 4px;
+  background: #f4f4f5;
+  border-radius: 8px;
+}
+
+.login-tabs .tab-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.badge[data-status="passed"] {
+  background: #18181b;
+  color: #fff;
+}
+
+.badge[data-status="failed"] {
+  background: #fef2f2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+.result-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 16px 20px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.result-score {
+  font-size: 36px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.result-unit {
+  font-size: 16px;
+  font-weight: 500;
+  margin-left: 2px;
+  color: #71717a;
+}
+
+.qa-eval {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border: 1px dashed #d4d4d8;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.qa-eval-comment {
+  color: #3f3f46;
+}
+
+.score-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: #f4f4f5;
+  color: #3f3f46;
+}
+
+.score-pill[data-level="high"] {
+  background: #18181b;
+  color: #fff;
+}
+
+.score-pill[data-level="low"] {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+select.text-input {
+  appearance: auto;
+}

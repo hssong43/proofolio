@@ -7,20 +7,26 @@ Gemini 직접 API 및 GCP/ADC 경로는 사용하지 않는다.
 
 | 경로 | 대상 | 설명 |
 |---|---|---|
-| `/` | 채용 담당자 | 대시보드. `PROOFOLIO_ADMIN_PASSWORD`로 로그인(`/login`). 기간을 정해 테스트를 열면 6자리 코드가 발급된다. |
-| `/tests/[testId]` | 채용 담당자 | 테스트별 응시자 목록. `/tests/[testId]/submissions/[id]`에서 질문·인용·답변을 본다. |
-| `/test` | 응시자 | 코드 입력 → 이름·생년월일·전화번호 → 직무 선택 → 업로드 → 분석 → 질문 → 완료. 로그인 불필요. |
-| `/demo` | 개발 | 이전 단일 흐름. `?demo=1&fast=1`로 목데이터 시연, 없으면 실제 분석 API 사용. |
+| `/login` | 채용 담당자 | 이메일+비밀번호 로그인, 회원가입 탭(이메일·비밀번호·이름·회사). 계정은 저장소 JSON, 비밀번호는 scrypt 해시. |
+| `/` | 채용 담당자 | 대시보드. 제목·직무·통과 점수·기간을 정해 테스트를 열면 6자리 코드가 발급된다. 목록에 제출 수와 통과 수가 보인다. |
+| `/tests/[testId]` | 채용 담당자 | 응시자 목록(점수·통과/미통과). `/tests/[testId]/submissions/[id]`에서 종합 점수, 질문별 점수와 AI 코멘트, 답변을 본다. |
+| `/test` | 응시자 | 코드 입력 → 이름·생년월일·전화번호 → **직무 확인**(담당자가 정한 직무가 맞는지만 확인, 아니면 담당자에게 연락 안내) → 업로드 → 분석 → 질문 10개 → 완료. 로그인 불필요. |
+| `/demo` | 개발 | 이전 단일 흐름(직무 선택 포함). `?demo=1&fast=1`로 목데이터 시연, 없으면 실제 분석 API 사용. |
 
-**mock 단계**: 테스트의 `mode`는 `demo`로 고정되어 분석은 직무별 목데이터를 쓴다. 저장은 `output/web/store/`(또는 `PROOFOLIO_STORE_DIR`)의 JSON 파일이다.
+**mock 단계**: 테스트의 `mode`는 `demo`로 고정되어 분석은 직무별 목데이터(10문항)를 쓴다. 답변 평가도 `lib/server/evaluate.ts`의 **규칙 기반 mock**(`method: "mock-rules"`)이다. 답변 길이와 수치·판단 기준·결과·대안·직접 수행 신호로 0~100점을 매기고 코멘트를 만든다. 종합 점수(평균)가 테스트의 통과 점수(기본 70) 이상이면 통과다. LLM 평가로 바꿀 때는 `evaluateSubmission`의 시그니처만 유지하면 된다.
+
+저장은 `output/web/store/`(또는 `PROOFOLIO_STORE_DIR`)의 JSON 파일이다.
 
 ```
-store/tests/<testId>.json            테스트(코드, 기간, 모드)
-store/codes/<CODE>.json              코드 → testId (wx 생성으로 유일성 보장)
-store/submissions/<testId>/<id>.json 응시자 정보, 본 질문 스냅샷, 답변, 소요 시간
+store/accounts/<accountId>.json       담당자 계정(scrypt 해시)
+store/account-emails/<sha256>.json    이메일 → accountId (wx 생성으로 중복 가입 차단)
+store/session-secret                  세션 서명 비밀(PROOFOLIO_SESSION_SECRET이 없을 때 자동 생성)
+store/tests/<testId>.json             테스트(직무, 코드, 기간, 통과 점수, 모드)
+store/codes/<CODE>.json               코드 → testId (wx 생성으로 유일성 보장)
+store/submissions/<testId>/<id>.json  응시자 정보, 본 질문 스냅샷, 답변, 소요 시간, 평가
 ```
 
-담당자 세션은 비밀번호에서 파생한 HMAC 토큰을 담은 httpOnly 쿠키(12시간)다. 응시자는 참여 시 발급되는 쿠키로만 자기 제출에 답변을 저장할 수 있다.
+담당자 세션은 계정 ID를 담은 HMAC 토큰의 httpOnly 쿠키(12시간)다. 응시자는 참여 시 발급되는 쿠키로만 자기 제출에 답변을 저장할 수 있고, 직무는 테스트에 고정된 값을 서버가 쓴다.
 로그인·저장소 모두 로컬 MVP 수준이며 인터넷 공개용이 아니다.
 
 ## 실행
@@ -52,7 +58,7 @@ Playwright는 프로덕션 빌드 후 `127.0.0.1:3101`에 전용 서버를 띄�
 
 직무 선택 → PDF 업로드 → 진행 상태 조회 → 준비 → 질문 답변 → 완료.
 
-- `?questions=1..5`: 최대 질문 수. 기본 5개, 근거가 부족하면 더 적다.
+- `?questions=1..10`: 최대 질문 수. 기본 10개, 근거가 부족하면 더 적다.
 - `?seconds=10..120`: 질문당 시간, 기본 40초.
 - `?demo=1&fast=1`: 목데이터 화면 시연. 실제 PDF 분석이나 품질 검증이 아니다.
 - 디자인·마케팅 PDF만 실제 분석한다. 개발자·링크 분석은 미지원.

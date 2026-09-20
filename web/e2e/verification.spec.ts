@@ -14,7 +14,7 @@ for (const [track, role, count] of [["design", "디자이너", 5], ["marketing",
     const result: ClientResult = {
       status: "ready", qualityIssues: [], pageCount: 5,
       projects: [{ key: "demo", title: "합성 테스트 프로젝트", pages: [1, 2, 3, 4, 5] }],
-      evidenceCount: count, estimatedCostUsd: 0, maxQuestions: 5,
+      evidenceCount: count, estimatedCostUsd: 0, maxQuestions: 10,
       questions: Array.from({ length: count }, (_, i) => ({
         id: `q${i + 1}`, prompt: `테스트 질문 ${i + 1}: 이 작업에서 직접 맡은 범위를 설명해 주세요.\n판단 근거도 함께 설명해 주세요.`,
         quotes: [`테스트용 원문 ${i + 1}\n선택 이유를 설명한 예시입니다.`], notes: [], pages: [i + 1],
@@ -27,7 +27,7 @@ for (const [track, role, count] of [["design", "디자이너", 5], ["marketing",
     await context.route("**/api/analyze", async route => {
       uploads++;
       expect(route.request().method()).toBe("POST");
-      expect(route.request().postData()).toContain('name="maxQuestions"\r\n\r\n5');
+      expect(route.request().postData()).toContain('name="maxQuestions"\r\n\r\n10');
       expect(route.request().postData()).toContain(`name="track"\r\n\r\n${track}`);
       await route.fulfill({ json: { runId } });
     });

@@ -19,14 +19,14 @@ test('same-origin upload uses the browser Host, not Next internal localhost, and
   assert.equal(check(undefined,'cross-site'),false);assert.equal(check(undefined,'same-origin'),true);
 });
 
-test('web and CLI share OpenRouter, the same ledger, explicit spending and the five-question ceiling',()=>{
+test('web and CLI share OpenRouter, the same ledger, explicit spending and the ten-question ceiling',()=>{
   const env={PROOFOLIO_MAX_COST_USD:'10'},run='00000000-0000-4000-8000-000000000001';
-  const args=analysisArgs(run,'design',5,env),value=(flag:string)=>args[args.indexOf(flag)+1];
+  const args=analysisArgs(run,'design',DEFAULT_MAX_QUESTIONS,env),value=(flag:string)=>args[args.indexOf(flag)+1];
   assert.equal(ROOT,resolve('.'));
   assert.equal(value('--provider'),'openrouter');assert.equal(value('--max-cost-usd'),'10');
   assert.equal(value('--budget-ledger'),executionBudget(ROOT,env).ledger);
   assert.equal(value('--max-questions'),String(DEFAULT_MAX_QUESTIONS));
-  assert.throws(()=>analysisArgs(run,'design',10,env));
+  assert.throws(()=>analysisArgs(run,'design',11,env));
   assert.throws(()=>analysisArgs('../escape','design',5,env));
   for(const limit of [undefined,'0','-1','11','NaN','Infinity'])
     assert.throws(()=>analysisArgs(run,'design',5,{PROOFOLIO_MAX_COST_USD:limit}));

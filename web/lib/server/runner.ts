@@ -11,7 +11,7 @@ import { writeJsonAtomic } from "./json-file.ts";
 /** 분석 코어(루트 저장소) 위치. 기본은 web/의 상위 폴더. */
 export const ROOT = path.resolve(process.env.PROOFOLIO_ROOT ?? (existsSync(path.join(process.cwd(), "src", "cli.ts")) ? process.cwd() : path.join(process.cwd(), "..")));
 const RUNS_DIR = path.join(ROOT, "output", "web", "runs");
-export const DEFAULT_MAX_QUESTIONS = 5;
+export const DEFAULT_MAX_QUESTIONS = 10;
 const RUN_ID = /^[0-9a-f-]{36}$/;
 
 export function sameOrigin(request: Request) {
@@ -125,7 +125,7 @@ export function toClientResult(raw: RawResult): ClientResult {
 
 export function analysisArgs(runId: string, track: Track, maxQuestions = DEFAULT_MAX_QUESTIONS, env = process.env) {
   if (track !== "design" && track !== "marketing") throw new Error("지원하지 않는 직무예요.");
-  if (!Number.isInteger(maxQuestions) || maxQuestions < 1 || maxQuestions > DEFAULT_MAX_QUESTIONS) throw new Error("질문 수는 1~5개예요.");
+  if (!Number.isInteger(maxQuestions) || maxQuestions < 1 || maxQuestions > DEFAULT_MAX_QUESTIONS) throw new Error("질문 수는 1~10개예요.");
   const dir = runDir(runId), budget = executionBudget(ROOT, env);
   return [path.join(ROOT, "src", "cli.ts"), path.join(dir, "portfolio.pdf"),
     "--provider", "openrouter", "--track", track,

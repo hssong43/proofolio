@@ -95,14 +95,14 @@ export function questionQuality(cards:QuestionCard[],selectedPointIds:string[],a
   return {status:issues.length?'needs_review' as const:'ready' as const,coverage,missing_focus_target_ids:missing,
     substantive_questions:substantive,issues,verification:'automated_source_checks_not_independent_accuracy_proof'};
 }
-export const DEFAULT_MAX_QUESTIONS=5;
+export const DEFAULT_MAX_QUESTIONS=10;
 export async function generateQuestions(evidence:ResolvedEvidence[],request:Request,options:{
   track?:Track;selectedPoints:SelectedPoint[];contextImages?:Array<[string,Uint8Array]>;evidenceOnly?:boolean;
   maxQuestions?:number;
   imagesFor:(cards:Array<{question_id:string;source:ResolvedEvidence}>)=>Promise<Array<[string,Uint8Array]>>;
 }) {
   const eligible=evidence.filter(e=>e.question_eligible),maxQuestions=options.maxQuestions??DEFAULT_MAX_QUESTIONS;
-  if(!Number.isInteger(maxQuestions)||maxQuestions<1||maxQuestions>DEFAULT_MAX_QUESTIONS)throw new Error('최대 질문 수는 1~5입니다.');
+  if(!Number.isInteger(maxQuestions)||maxQuestions<1||maxQuestions>DEFAULT_MAX_QUESTIONS)throw new Error('최대 질문 수는 1~10입니다.');
   const checks:QuestionCheck[]=[];let cards:QuestionCard[]=[],focusCoverage:FocusCoverage[]=[];
   if(!eligible.length)return {cards,checks,focusCoverage};
   const selectedPointIds=options.selectedPoints.map(p=>p.id),pointById=new Map(options.selectedPoints.map(p=>[p.id,p]));

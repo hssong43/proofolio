@@ -57,9 +57,9 @@ npm --prefix web run start      # 빌드한 앱 실행, 기본 localhost 전용
 
 화면은 둘로 나뉜다. 자세한 내용은 [web/README](web/README.md).
 
-- `/` 채용 담당자 대시보드. `PROOFOLIO_ADMIN_PASSWORD`로 로그인해 기간별 테스트를 열고 6자리 코드를 받는다. 응시 결과는 `/tests/[testId]`에서 본다.
-- `/test` 응시자. 코드 → 이름·생년월일·전화번호 → 직무 선택 → 업로드 → 분석 → 질문. **mock 단계**라 분석은 목데이터이며 결과는 `output/web/store/` JSON에 저장된다.
-- `/demo` 이전 단일 흐름. `?questions=1..5`(최대 문항 수), `?seconds=10..120`(답변 시간), `?demo=1&fast=1`(고정 목데이터 시연)을 받는다.
+- `/` 채용 담당자 대시보드. `/login`에서 회원가입·로그인(계정은 저장소 JSON) 후 직무·기간·통과 점수를 정해 테스트를 열고 6자리 코드를 받는다. 응시 결과와 AI 평가(점수·코멘트·통과 여부)는 `/tests/[testId]`에서 본다.
+- `/test` 응시자. 코드 → 이름·생년월일·전화번호 → 직무 확인 → 업로드 → 분석 → 질문 10개. **mock 단계**라 분석과 평가 모두 목데이터·규칙 기반이며 결과는 `output/web/store/` JSON에 저장된다.
+- `/demo` 이전 단일 흐름. `?questions=1..10`(최대 문항 수), `?seconds=10..120`(답변 시간), `?demo=1&fast=1`(고정 목데이터 시연)을 받는다.
 - 개발 서버에서 macOS 파일 감시 한도 `EMFILE`이 나타나면 `WATCHPACK_POLLING=1000 npm run dev` 또는 빌드 후 `start`를 사용한다.
 - 질문·인용문은 줄바꿈까지 보존하며 페이지 번호는 코어가 검증한 앵커에서 가져온다.
 - 답변은 `output/web/runs/<runId>/answers.json`에 로컬 저장한다. 기업 전송·답변 평가 기능은 없다.

@@ -28,7 +28,7 @@ export function InfoScreen({ test, submitting, error, onSubmit }: Props) {
     <div className="screen">
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <h2 className="screen-title">응시자 정보를 입력해주세요</h2>
-        <p className="screen-subtitle">{test.title} · {formatDateTime(test.startsAt)} ~ {formatDateTime(test.endsAt)}</p>
+        <p className="screen-subtitle">{test.title} · {test.roleLabel} · {formatDateTime(test.startsAt)} ~ {formatDateTime(test.endsAt)}</p>
       </div>
       <form onSubmit={submit} className="card" style={{ padding: 32, display: "flex", flexDirection: "column", gap: 24 }}>
         <div className="field">

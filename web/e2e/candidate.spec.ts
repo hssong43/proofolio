@@ -5,12 +5,12 @@ import type { CompletionPayload, PublicTest } from "../lib/types";
 const upload = { name: "synthetic.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7\nsynthetic UI fixture") };
 const submissionId = "00000000-0000-4000-8000-000000000002";
 const publicTest: PublicTest = {
-  testId: "00000000-0000-4000-8000-000000000003", title: "합성 채용 테스트", mode: "demo", totalSeconds: 40, questionCount: 5,
+  testId: "00000000-0000-4000-8000-000000000003", title: "합성 채용 테스트", role: "dev", roleLabel: "개발자", mode: "demo", totalSeconds: 40, questionCount: 10,
   startsAt: new Date(Date.now() - 3_600_000).toISOString(), endsAt: new Date(Date.now() + 3_600_000).toISOString(),
 };
 
 // 응시자 흐름의 UI 연결만 검사한다. API는 스텁이며 분석 품질과 무관하다.
-test("candidate: code, info, demo analysis, answers are posted to the submission", async ({ page, context }, testInfo) => {
+test("candidate: code, info, role confirmation, demo analysis, answers are posted to the submission", async ({ page, context }, testInfo) => {
   const problems: string[] = [];
   page.on("pageerror", error => problems.push(error.message));
   page.on("console", message => { if (["error", "warning"].includes(message.type())) problems.push(message.text()); });
@@ -48,17 +48,25 @@ test("candidate: code, info, demo analysis, answers are posted to the submission
   await page.getByLabel("생년월일").fill("1999-02-28");
   await page.getByRole("button", { name: "시작하기", exact: true }).click();
 
-  await expect(page.getByRole("heading", { name: "어떤 직무로 검증받을까요?" })).toBeVisible();
+  // 직무는 담당자가 정했고 응시자는 확인만 한다.
+  await expect(page.getByRole("heading", { name: "지원 직무를 확인해주세요" })).toBeVisible();
   await expect(page.getByText("홍길동", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: /개발자/ })).toBeEnabled();
-  await page.getByRole("button", { name: "개발자", exact: true }).click();
-  await page.getByRole("button", { name: "다음", exact: true }).click();
+  await page.getByRole("button", { name: "아니에요", exact: true }).click();
+  await expect(page.locator(".notice-box")).toContainText("채용 담당자에게 연락");
+  await expect(page.getByRole("button", { name: "맞아요, 계속", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "다시 확인", exact: true }).click();
+  await page.getByRole("button", { name: "맞아요, 계속", exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: "포트폴리오를 올려주세요" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "어떤 직무로 검증받을까요?" })).toHaveCount(0);
+  await expect(page.getByText("개발자 직무에 맞춰", { exact: false })).toBeVisible();
   await page.locator("input[type=file]").setInputFiles(upload);
   await page.getByRole("button", { name: "AI 분석 시작", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "질문 5개, 각 40초예요" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "질문 10개, 각 40초예요" })).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "준비 완료", exact: true }).click();
 
   const questions = ROLE_DATA.dev.questions;
+  expect(questions).toHaveLength(10);
   for (const [i, q] of questions.entries()) {
     await expect(page.getByRole("heading", { level: 3, name: q.text, exact: true })).toBeVisible();
     await expect(page.locator("blockquote")).toHaveCount(0);
