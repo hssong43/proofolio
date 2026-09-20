@@ -29,6 +29,7 @@ test('dashboard: real-contract test creation, applicant list and canonical quest
   await page.screenshot({path:testInfo.outputPath('applicants.png'),fullPage:true});
   await page.getByRole('link',{name:'질문·답변 보기'}).click();
   await expect(page.locator('.qa-item')).toHaveCount(6);
+  await expect(page.locator('.qa-item blockquote, .qa-item pre')).toHaveCount(0);
   await expect(page.locator('.qa-answer').first()).toHaveText('저장된 합성 답변 q1');
   await expect(page.locator('.qa-eval')).toHaveCount(0);
   await page.locator('summary').first().click();await expect(page.getByText('판단 기준 확인',{exact:true}).first()).toBeVisible();

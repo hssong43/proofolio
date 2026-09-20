@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, type ChangeEvent, type KeyboardEvent } from "react";
 import { ANSWER_MAX_LENGTH, type UiQuestion } from "@/lib/data";
-import type { SourceAsset } from '@/lib/types';
-import { SourcePreview } from '../SourcePreview';
+import type { ExampleImage, SourceAsset } from '@/lib/types';
+import { PortfolioImages } from '../PortfolioImages';
 
 const RING_RADIUS = 72;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
@@ -19,23 +19,27 @@ type Props = {
   totalSeconds: number;
   chipsLabel: string;
   chips: string[];
-  runId?: string; assets?: SourceAsset[]; demo?: boolean;
+  runId?: string; assets?: SourceAsset[]; exampleImages?: ExampleImage[]; portfolioUrl?: string | null;
   saveState: 'idle' | 'saving' | 'saved' | 'failed'; saveError: string | null;
   onAnswerChange: (value: string) => void;
   onSubmit: () => void;
 };
 
-export function QuestionScreen({ index, questionCount, question, answer, secondsLeft, totalSeconds, chipsLabel, chips, onAnswerChange, onSubmit, runId, assets, demo, saveState, saveError }: Props) {
+export function QuestionScreen({ index, questionCount, question, answer, secondsLeft, totalSeconds, chipsLabel, chips, onAnswerChange, onSubmit, runId, assets, exampleImages, portfolioUrl, saveState, saveError }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isLast = index >= questionCount - 1;
   const warn = secondsLeft <= WARN_AT;
   const ringColor = warn ? "#EF4444" : "#18181B";
+  const sourceUrl = (asset: string) => `/api/analyze/${runId}/source?asset=${encodeURIComponent(asset)}&view=1`;
+  const images = runId ? (assets ?? []).filter(a => a.kind === 'page' && question.pages.includes(a.page))
+    .map(a => ({ page: a.page, url: sourceUrl(a.id) })) : (exampleImages ?? []).filter(image => question.pages.includes(image.page));
+  const fullPortfolio = runId ? assets?.some(a => a.id === 'pdf' && a.kind === 'pdf') ? sourceUrl('pdf') : null : portfolioUrl;
 
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = `${MIN_TEXTAREA_HEIGHT}px`;
-    const id = window.setTimeout(() => el.focus(), 50);
+    const id = window.setTimeout(() => el.focus({ preventScroll: true }), 50);
     return () => window.clearTimeout(id);
   }, [index]);
 
@@ -73,19 +77,12 @@ export function QuestionScreen({ index, questionCount, question, answer, seconds
         </div>
         <div className="card" style={{ padding: 32, display: "flex", flexDirection: "column", gap: 24 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {question.quotes.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {question.quotes.map((quote, i) => (
-                  <blockquote key={i} className="quote-box" style={{ margin: 0 }}>{quote}</blockquote>
-                ))}
-              </div>
-            )}
-            {question.notes.map((note, i) => (
-              <p key={i} style={{ margin: 0, fontSize: 13, color: "#71717A" }}>{note}</p>
-            ))}
+            {question.pages.length > 0 && <>
+              <PortfolioImages key={question.id} images={images} label="질문 연결" />
+              {fullPortfolio && <a className="text-button" href={fullPortfolio} target="_blank" rel="noopener noreferrer">전체 포트폴리오 보기 ↗</a>}
+            </>}
             <h3 style={{ margin: 0, fontSize: 24, fontWeight: 600, lineHeight: 1.4, letterSpacing: "-.01em", textWrap: "pretty", whiteSpace: "pre-wrap" }}>{question.prompt}</h3>
             <p style={{ margin: 0, fontSize: 14, color: "#71717A" }}>{question.source}</p>
-            <SourcePreview key={question.id} runId={runId} anchors={question.anchors} assets={assets} demo={demo}/>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <textarea

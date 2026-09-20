@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { DEFAULT_QUESTION_COUNT, ROLES, formatElapsed, formatFileSize, type RoleId, type UiQuestion } from '@/lib/data';
 import { fetchExample, fetchStatus, startAnalysis, startCodeAnalysis, submitAnswer } from '@/lib/client';
-import type { AnswerRecord, ClientResult } from '@/lib/types';
+import type { AnswerRecord, ClientResult, ExampleImage } from '@/lib/types';
 import { Header } from './Header';
 import { RoleScreen } from './screens/RoleScreen';
 import { UploadScreen, type UploadedFile, type UploadTab } from './screens/UploadScreen';
@@ -25,9 +25,10 @@ type State = {
   questionIndex: number; answer: string; answers: AnswerRecord[]; secondsLeft: number;
   questionStartedAt: number; startedAt: number; endedAt: number;
   saveState: 'idle' | 'saving' | 'saved' | 'failed'; storageError?: string;
+  exampleImages: ExampleImage[]; portfolioUrl: string | null;
 };
 const initial = (seconds: number): State => ({screen:'role',role:null,tab:'pdf',file:null,link:'',runId:null,stage:0,result:null,error:null,submitting:false,
-  questionIndex:0,answer:'',answers:[],secondsLeft:seconds,questionStartedAt:0,startedAt:0,endedAt:0,saveState:'idle'});
+  questionIndex:0,answer:'',answers:[],secondsLeft:seconds,questionStartedAt:0,startedAt:0,endedAt:0,saveState:'idle',exampleImages:[],portfolioUrl:null});
 const draftKey = (id: string) => `proofolio:draft:v1:${id}`;
 function runUrl(id?: string) { const url = new URL(location.href); if(id) url.searchParams.set('run',id); else url.searchParams.delete('run'); history.replaceState(null,'',url); }
 
@@ -44,8 +45,8 @@ export function VerificationFlow({totalSeconds=40,questionCount=DEFAULT_QUESTION
   const [completionError,setCompletionError]=useState<string|null>(null);
   const update = useCallback((patch: Partial<State>) => set(s => ({...s,...patch})),[]);
   const role = ROLES.find(r=>r.id===s.role), total=s.result?.questions.length ?? 0;
-  const questions: UiQuestion[] = s.result?.questions.map(q=>({id:q.id,prompt:q.prompt,quotes:q.quotes,notes:q.notes,anchors:q.anchors,
-    source:`${q.projectTitle}${q.pages.length ? ` · ${q.pages.join(', ')}페이지 근거` : ' · 코드 원문 근거'}`})) ?? [];
+  const questions: UiQuestion[] = s.result?.questions.map(q=>({id:q.id,prompt:q.prompt,pages:q.pages,
+    source:`${q.projectTitle}${q.pages.length ? ` · ${q.pages.join(', ')}페이지` : ''}`})) ?? [];
   const summary = {chipsLabel:'분석한 프로젝트',chips:s.result?.projects.map(p=>p.title) ?? [],
     cards:s.result?.projects.map(p=>({label:'프로젝트',name:p.title,desc:p.pages.length ? `${p.pages.length}페이지 · 전체 ${s.result!.pageCount}페이지 중` : '코드 구조 기반'})) ?? []};
   const canAnalyze = role?.track === 'coding' ? /^https:\/\/github\.com\/[^/]+\/[^/]+\/?$/.test(s.link.trim()) : !!s.file?.file && s.tab==='pdf';
@@ -148,6 +149,7 @@ export function VerificationFlow({totalSeconds=40,questionCount=DEFAULT_QUESTION
       if(demo){
         update({screen:'analyzing'});
         const item=await fetchExample(role.track);
+        update({exampleImages:item.images??[],portfolioUrl:item.portfolioUrl??null});
         loadResult({...item.result,exampleNotice:item.notice});
       }else{
         const run=role.track==='coding'?await startCodeAnalysis(s.link.trim(),questionCount,submissionId):await startAnalysis(s.file!.file!,role.track,questionCount,submissionId);
@@ -172,7 +174,7 @@ export function VerificationFlow({totalSeconds=40,questionCount=DEFAULT_QUESTION
         onStart={()=>update({screen:'question',startedAt:Date.now(),questionStartedAt:Date.now()})}/>}
       {s.screen==='question'&&<QuestionScreen index={s.questionIndex} questionCount={total} question={questions[s.questionIndex]}
         answer={s.answer} secondsLeft={s.secondsLeft} totalSeconds={totalSeconds} chipsLabel={summary.chipsLabel} chips={summary.chips}
-        runId={s.runId??undefined} assets={s.result?.sourceAssets} demo={demo} saveState={s.saveState} saveError={s.error}
+        runId={s.runId??undefined} assets={s.result?.sourceAssets} exampleImages={s.exampleImages} portfolioUrl={s.portfolioUrl} saveState={s.saveState} saveError={s.error}
         onAnswerChange={answer=>!pending.current&&update({answer})} onSubmit={()=>void submit()}/>}
       {s.screen==='complete'&&<CompleteScreen roleLabel={role?.label??''} answeredCount={s.answers.filter(a=>a.answer.trim()).length} questionCount={total}
         elapsed={formatElapsed(s.answers.reduce((n,a)=>n+a.seconds,0))}

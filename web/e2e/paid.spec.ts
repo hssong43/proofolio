@@ -87,8 +87,9 @@ test("two PDFs: member login -> real upload -> source-linked questions -> immuta
         for (const [i, q] of client.questions.entries()) {
           const heading = page.getByRole("heading", { level: 3, name: q.prompt, exact: true });
           await expect(heading).toBeVisible();expect(await heading.textContent()).toBe(q.prompt);
-          await expect(page.locator("blockquote")).toHaveText(q.quotes);
-          await expect(page.getByText(`${q.projectTitle} · ${q.pages.join(", ")}페이지 근거`, { exact: true })).toBeVisible();
+          await expect(page.locator("blockquote, pre")).toHaveCount(0);
+          await expect(page.locator('.question-originals img')).toHaveCount(q.pages.length);
+          await expect(page.getByText(`${q.projectTitle} · ${q.pages.join(", ")}페이지`, { exact: true })).toBeVisible();
           expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
           if (i === 0) await page.screenshot({ path: testInfo.outputPath(doc.id + "-question.png"), fullPage: true, animations: "disabled" });
           const answer = `자동 E2E 저장 확인: ${q.id}. 지원자의 실제 답변이 아닙니다.`;
@@ -107,7 +108,7 @@ test("two PDFs: member login -> real upload -> source-linked questions -> immuta
         await page.screenshot({ path: testInfo.outputPath(doc.id + "-saved.png"), fullPage: true, animations: "disabled" });
         expect(problems).toEqual([]);await expect(page.locator("nextjs-portal")).toHaveCount(0);
         fresh(join(dir, "completion.json"), { status: "completed", elapsed_ms: Date.now() - start, webRunId, budget: snapshot(),
-          ui_checks: { title: true, nonblank: true, no_overlay: true, console: problems, whole_questions_quotes_pages: true, answers_saved: saved.answers.length } });
+          ui_checks: { title: true, nonblank: true, no_overlay: true, console: problems, whole_questions_and_page_images: true, raw_evidence_hidden: true, answers_saved: saved.answers.length } });
       } catch (e) {
         const budget = snapshot();failures.push(doc.id + ": " + (e as Error).message);
         fresh(join(dir, "error.json"), { status: "failed", error: (e as Error).message, elapsed_ms: Date.now() - start, budget, webRunId, console: problems });

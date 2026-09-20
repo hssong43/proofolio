@@ -8,12 +8,12 @@ export async function GET(_request: Request, context: { params: Promise<{ slug: 
   if(contest.enabled&&contest.closed)return NextResponse.json({error:'대회 체험이 종료됐어요.'},{status:410,headers:{'Cache-Control':'no-store'}});
   try {
     const item = await example((await context.params).slug);
-    // Only curated questions, authored samples and linked page images are public.
-    // Storage paths, full PDFs and visitor data are never returned.
+    // Only curated examples are public; storage paths and visitor data stay out of this response.
     const { sourceAssets: _assets, ...result } = item.result;
     const images = [...new Set(result.questions.flatMap(q => q.pages))].sort((a,b) => a-b)
       .map(page => ({ page, url: `/api/examples/${item.slug}/image?page=${page}` }));
-    return NextResponse.json({ title: item.title, notice: item.notice, result, images, sampleAnswers: exampleAnswers(item.slug, result.questions) },
+    const portfolioUrl = item.slug === 'coding' ? null : `/api/examples/${item.slug}/portfolio`;
+    return NextResponse.json({ title: item.title, notice: item.notice, result, images, portfolioUrl, sampleAnswers: exampleAnswers(item.slug, result.questions) },
       { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     const configurationError = error instanceof Error && error.message === 'Supabase URL과 서버 전용 키를 설정해주세요.';

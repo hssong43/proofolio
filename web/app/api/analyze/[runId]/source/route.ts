@@ -9,6 +9,11 @@ export async function GET(request: Request, context: { params: Promise<{ runId: 
     const id = new URL(request.url).searchParams.get('asset');
     const asset = run.result?.sourceAssets?.find(a => a.id === id);
     if (!asset) return NextResponse.json({ error: '원문을 찾을 수 없어요.' }, { status: 404 });
+    if (new URL(request.url).searchParams.get('view') === '1') {
+      if (asset.kind !== 'page' && asset.kind !== 'pdf') return NextResponse.json({ error: '원문을 표시할 수 없어요.' }, { status: 400 });
+      return NextResponse.redirect(await signedAsset(user.id, runId, asset.path), { status: 307,
+        headers: { 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer' } });
+    }
     return NextResponse.json({ url: await signedAsset(user.id, runId, asset.path), kind: asset.kind, box: asset.box, page: asset.page },
       { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (e) { return NextResponse.json({ error: '원문을 열지 못했어요.' }, { status: e instanceof AnswerError ? e.status : 503 }); }
