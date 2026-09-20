@@ -1,13 +1,20 @@
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import path from "node:path";
 import type { Candidate, CompletionPayload, Submission, TestRecord, TestSummary } from "../types.ts";
-import { generateCode, isValidCode, normalizeCode } from "../codes.ts";
+import { CODE_ALPHABET, CODE_LENGTH, isValidCode, normalizeCode } from "../codes.ts";
 import { testStatus } from "../period.ts";
 import { readJson, writeJsonAtomic } from "./json-file.ts";
 
 const UUID_RE = /^[0-9a-f-]{36}$/;
+
+/** 서버 전용: 브라우저 번들에 node:crypto가 들어가지 않도록 codes.ts와 분리한다. */
+export function generateCode(): string {
+  let code = "";
+  for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
+  return code;
+}
 const DEFAULT_TOTAL_SECONDS = 40;
 const DEFAULT_QUESTION_COUNT = 5;
 

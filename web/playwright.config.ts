@@ -25,7 +25,7 @@ export default defineConfig({
     url: "http://127.0.0.1:3101",
     // Never reuse a server that may have real credentials or a paid budget.
     reuseExistingServer: false,
-    env: { OPENROUTER_API_KEY: "", PROOFOLIO_MAX_COST_USD: "0" },
+    env: { OPENROUTER_API_KEY: "", PROOFOLIO_MAX_COST_USD: "0", PROOFOLIO_ADMIN_PASSWORD: "e2e-password", PROOFOLIO_STORE_DIR: join(tmpdir(), "proofolio-e2e-store") },
     timeout: 120_000,
   },
 });

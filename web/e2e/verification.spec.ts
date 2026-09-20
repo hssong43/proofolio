@@ -42,9 +42,9 @@ for (const [track, role, count] of [["design", "디자이너", 5], ["marketing",
       await route.fulfill({ json: { ok: true } });
     });
 
-    await page.goto("/");
+    await page.goto("/demo");
     await expect(page).toHaveTitle("Proofolio");
-    await expect(page).toHaveURL("http://127.0.0.1:3101/");
+    await expect(page).toHaveURL("http://127.0.0.1:3101/demo");
     await expect(page.getByRole("heading", { name: "어떤 직무로 검증받을까요?" })).toBeVisible();
     await expect(page.getByRole("button", { name: /개발자/ })).toBeDisabled();
     await page.getByRole("button", { name: role, exact: true }).click();
@@ -80,7 +80,7 @@ for (const [track, role, count] of [["design", "디자이너", 5], ["marketing",
 }
 
 test("real API rejects invalid PDF, zero budget and cross-origin requests", async ({ page, request }, testInfo) => {
-  await page.goto("/");
+  await page.goto("/demo");
   await page.getByRole("button", { name: "디자이너", exact: true }).click();
   await page.getByRole("button", { name: "다음", exact: true }).click();
   await page.locator("input[type=file]").setInputFiles({ ...upload, buffer: Buffer.from("%P") });

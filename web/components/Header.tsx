@@ -1,9 +1,10 @@
+import type { ReactNode } from "react";
 import { STEP_LABELS } from "@/lib/data";
 import { CheckIcon, Logo } from "./icons";
 
-type Props = { stepIndex: number };
+type Props = { stepIndex: number; steps?: readonly string[]; right?: ReactNode };
 
-export function Header({ stepIndex }: Props) {
+export function Header({ stepIndex, steps = STEP_LABELS, right = null }: Props) {
   return (
     <header className="app-header">
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -11,7 +12,7 @@ export function Header({ stepIndex }: Props) {
         <span style={{ fontSize: 17, fontWeight: 700, letterSpacing: "-.03em" }}>Proofolio</span>
       </div>
       <nav style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 14 }} aria-label="진행 단계">
-        {STEP_LABELS.map((label, i) => {
+        {steps.map((label, i) => {
           const done = i < stepIndex;
           const current = i === stepIndex;
           const active = done || current;
@@ -37,31 +38,12 @@ export function Header({ stepIndex }: Props) {
                 </div>
                 <span style={{ color: active ? "#18181B" : "#71717A", fontWeight: active ? 500 : 400 }}>{label}</span>
               </div>
-              {i < STEP_LABELS.length - 1 && (
-                <div style={{ width: 32, height: 1, background: done ? "#18181B" : "#E4E4E7" }} />
-              )}
+              {i < steps.length - 1 && <div style={{ width: 32, height: 1, background: done ? "#18181B" : "#E4E4E7" }} />}
             </div>
           );
         })}
       </nav>
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <div
-          aria-label="사용자"
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: "50%",
-            background: "#E4E4E7",
-            display: "grid",
-            placeItems: "center",
-            fontSize: 13,
-            fontWeight: 600,
-            color: "#3F3F46",
-          }}
-        >
-          지
-        </div>
-      </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12 }}>{right}</div>
     </header>
   );
 }

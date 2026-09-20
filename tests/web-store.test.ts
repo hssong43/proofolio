@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,existsSync,readdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {CODE_RE,generateCode,normalizeCode,isValidCode} from '../web/lib/codes.ts';
+import {CODE_RE,normalizeCode,isValidCode} from '../web/lib/codes.ts';
 import {testStatus,validatePeriod,formatDateTime} from '../web/lib/period.ts';
 import {validateCandidate,isValidBirthDate,formatPhone} from '../web/lib/candidate.ts';
 import {checkPassword,issueAdminToken,verifyAdminToken,issueCandidateToken,verifyCandidateToken,parseCookies,isAdminRequest,candidateOf,ADMIN_COOKIE,CANDIDATE_COOKIE,ADMIN_TTL_MS,cookieHeader} from '../web/lib/server/auth.ts';
-import {storeDir,createTest,getTest,findTestByCode,listTests,createSubmission,getSubmission,listSubmissions,completeSubmission} from '../web/lib/server/store.ts';
+import {generateCode,storeDir,createTest,getTest,findTestByCode,listTests,createSubmission,getSubmission,listSubmissions,completeSubmission} from '../web/lib/server/store.ts';
 
 test('join codes avoid ambiguous characters and normalize loose input',()=>{
   for(let i=0;i<200;i++){const code=generateCode();assert.match(code,CODE_RE);assert.doesNotMatch(code,/[IO01]/);}

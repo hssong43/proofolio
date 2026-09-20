@@ -105,3 +105,6 @@ export type CompletionPayload = {
   elapsedSeconds: number;
   runId: string | null;
 };
+
+/** 응시자에게 노출하는 테스트 요약. */
+export type PublicTest = Pick<TestRecord, "title" | "startsAt" | "endsAt" | "mode" | "totalSeconds" | "questionCount"> & { testId: string };

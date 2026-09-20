@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef, type ReactNode } from "react";
 import { DEFAULT_QUESTION_COUNT, ROLES, ROLE_DATA, STAGE_LABELS, demoQuestions, formatElapsed, formatFileSize, isValidLink, type RoleId, type UiQuestion } from "@/lib/data";
 import { fetchStatus, startAnalysis, submitAnswers } from "@/lib/client";
-import type { AnswerRecord, ClientResult } from "@/lib/types";
+import type { AnswerRecord, ClientResult, CompletionPayload } from "@/lib/types";
 import { Header } from "./Header";
 import { RoleScreen } from "./screens/RoleScreen";
 import { UploadScreen, type UploadTab, type UploadedFile } from "./screens/UploadScreen";
@@ -164,12 +164,24 @@ export type VerificationFlowProps = {
   demo?: boolean;
   /** 데모 모드의 분석 대기 시간을 짧게 줄인다. */
   fastAnalysis?: boolean;
+  /** 완료 시 호출. 거부되면 완료 화면에 저장 오류를 표시한다. */
+  onComplete?: (result: CompletionPayload) => Promise<unknown> | void;
+  /** "홈으로" 동작. 기본은 흐름 초기화. */
+  onHome?: () => void;
+  /** 헤더 단계 라벨. 응시자 흐름처럼 앞에 단계를 붙일 때 사용. */
+  headerSteps?: readonly string[];
+  /** 헤더 단계 인덱스에 더할 값. */
+  stepOffset?: number;
+  headerRight?: ReactNode;
 };
 
-export function VerificationFlow({ totalSeconds = 40, questionCount = DEFAULT_QUESTION_COUNT, demo = false, fastAnalysis = false }: VerificationFlowProps) {
+export function VerificationFlow({ totalSeconds = 40, questionCount = DEFAULT_QUESTION_COUNT, demo = false, fastAnalysis = false, onComplete, onHome, headerSteps, stepOffset = 0, headerRight }: VerificationFlowProps) {
   const [state, dispatch] = useReducer(reducer, totalSeconds, initialState);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+  const completedForRef = useRef(0);
 
   const roleInfo = ROLES.find((r) => r.id === state.role);
   const roleLabel = roleInfo?.label ?? "";
@@ -265,6 +277,23 @@ export function VerificationFlow({ totalSeconds = 40, questionCount = DEFAULT_QU
     submitAnswers(state.runId, state.answers).catch((e: Error) => dispatch({ type: "saveFailed", error: e.message }));
   }, [state.screen, state.runId, state.answers]);
 
+  // 완료: 외부 콜백(응시자 제출 저장 등)을 완료 1회당 한 번만 호출한다
+  useEffect(() => {
+    if (state.screen !== "complete" || !onCompleteRef.current || !state.role || completedForRef.current === state.endedAt) return;
+    completedForRef.current = state.endedAt;
+    const role = ROLES.find((r) => r.id === state.role);
+    Promise.resolve(
+      onCompleteRef.current({
+        role: state.role,
+        roleLabel: role?.label ?? "",
+        questions: state.questions,
+        answers: state.answers,
+        elapsedSeconds: Math.max(0, Math.round((state.endedAt - state.startedAt) / 1000)),
+        runId: state.runId,
+      }),
+    ).catch((e: Error) => dispatch({ type: "saveFailed", error: e.message }));
+  }, [state.screen, state.endedAt, state.role, state.questions, state.answers, state.startedAt, state.runId]);
+
   // 전역 Enter: 다음 단계로 진행
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
@@ -294,7 +323,7 @@ export function VerificationFlow({ totalSeconds = 40, questionCount = DEFAULT_QU
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-      <Header stepIndex={STEP_INDEX[state.screen]} />
+      <Header stepIndex={stepOffset + STEP_INDEX[state.screen]} steps={headerSteps} right={headerRight} />
       <main className="app-main">
         {state.screen === "role" && <RoleScreen role={state.role} demo={demo} onSelect={(role) => dispatch({ type: "selectRole", role })} onNext={goUpload} />}
         {state.screen === "upload" && (
@@ -339,7 +368,7 @@ export function VerificationFlow({ totalSeconds = 40, questionCount = DEFAULT_QU
             questionCount={total}
             elapsed={formatElapsed(elapsedSeconds)}
             saveError={state.saveError}
-            onHome={() => dispatch({ type: "reset", totalSeconds })}
+            onHome={onHome ?? (() => dispatch({ type: "reset", totalSeconds }))}
           />
         )}
       </main>

@@ -1,4 +1,5 @@
 import { CheckIcon } from "../icons";
+import { Stat } from "../Stat";
 
 type Props = { roleLabel: string; answeredCount: number; questionCount: number; elapsed: string; saveError: string | null; onHome: () => void };
 
@@ -25,25 +26,6 @@ export function CompleteScreen({ roleLabel, answeredCount, questionCount, elapse
       <button type="button" className="btn-secondary focus-ring" onClick={onHome}>
         홈으로
       </button>
-    </div>
-  );
-}
-
-function Stat({ label, value, bordered }: { label: string; value: string; bordered?: boolean }) {
-  return (
-    <div
-      style={{
-        padding: 24,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 6,
-        borderLeft: bordered ? "1px solid #E4E4E7" : undefined,
-        borderRight: bordered ? "1px solid #E4E4E7" : undefined,
-      }}
-    >
-      <span style={{ fontSize: 13, color: "#71717A" }}>{label}</span>
-      <span style={{ fontSize: 22, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{value}</span>
     </div>
   );
 }
