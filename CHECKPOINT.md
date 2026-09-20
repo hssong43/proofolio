@@ -1,5 +1,14 @@
 # 작업 상태와 중단·재개 이력
 
+## 2026-09-20 — Production 확인·공개 재개·실제 429 저장 결함 발견
+
+- PR11을 main `8393534`에 병합, Vercel Production 배포 `6552690254` 성공. 실제 `proofolio-drab.vercel.app`에서 step GET405, 예제 API3종200 및 점수86/86/88 확인. 7,542,405바이트 d-shuu PDF로 준비200→직접Storage PUT200→분석 초기화200→execution=steps/running까지 확인 후 모델 호출 전에 해당 QA 실행만 종료했다. 비용0/원문은 기존 보관 정책 유지.
+- 사용자 SQL 실행으로 기존DB limit10/spent0.050412/reserved0/blockedfalse 확인. 원래 approval에 재개 이력을 추가했으며 과거 지출/미확인 유보는 그대로다. 사용자 기존 실패 실행1건의 guest quota를 실제 호출0·다른 최신 실행 없음·원래 timestamp 조건으로1회 복구했다. 파일/실패 기록/비용 행은 수정하지 않았다.
+- 실제 배포 예제는 desktop1440×1000/mobile390×844 모두7문항 완료·예시 종합86점/문항7개·관리자3명·답변7개 표시 통과. 모델/답변 API 쓰기0, 콘솔/페이지 오류0, 가로 넘침0. 최초 screenshot의 진입 애니메이션은 비활성화해 재촬영했다. `/private/tmp/proofolio-production-preview.OIyi02/` (Git 제외).
+- 승인된 추가 **실제 배포 전체 시험1회**: 실행 `6fd7de29-65fc-4ec2-92b0-0be2aa45a235`, 약73초에서 step503. PageIndex2개 성공 후3번째 HTTP200 응답 내부의 upstream429가 발생했다. 재시도 대기값을 DB 저장 후 같은 usage 객체에 추가해 저장 비교가 실패했다. 단위 검사로 동일 불일치를 재현했고, transport 메타데이터 확정 시점을 persistence 앞으로 이동하고 checkpoint raw/usage를 복제하도록 수정했다. 모델/프롬프트/429 상한은 변경하지 않았다.
+- 시험 결과: 질문0/답변0, **전체 성공 아님**. 호출3개/정산3개/추가 재시도0/미정산0, 실제 비용$0.01618725. 확인된 성공2응답 input10843/output2148/reasoning0이며 실패 응답 토큰은 미확인이라 전체 토큰 합계도 미확인이다. DB 누적$0.06659925, 잔여$9.93340075, 공개예산 유지. 해당 시험 실행만 종료해 전역 동시 실행 슬롯을 해제했다.
+- 회귀35/35·타입·diff 통과. 추가 전체 유료 시험은 별도 승인 요청 중. 소스/질문 결과를 재생성하거나 원장/유보를 초기화하지 않는다. 세부 기록은 `output/operations/production-paid-trial-20260920/`에만 있다.
+
 ## 2026-09-20 — 배포 업로드 복구와 공개 분석 잔여 예산 재개
 
 - 기존 main4ea423c의 step GET500을 확인. 로컬 clean build GET405와 달리, Next trace에는 동적 resolve에 필요한 PDF.js package.json이 빠져 있었다. 모든 분석 경로에 manifest/글꼴/worker/native canvas를 포함하도록 수정하고 upload/analyze/step 3개 trace를 확인했다. Vercel 실검증 결과는 후속 기록을 따른다.

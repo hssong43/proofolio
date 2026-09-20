@@ -232,6 +232,13 @@ export function openRouterSession(apiKey:string,stats:Metrics,budget:CostBudget|
           allowed_providers:payload.provider.only,allow_fallbacks:true,application_http_attempt:attempt,
           output_tokens_include_thinking:true,provider_retries:null};
         stats.usage.push(row);
+        const rateLimited=failure instanceof HttpResponseError
+          ?failure.status===429||failure.diagnostics.upstream_code===429
+          :[raw.error,raw.choices?.[0]?.error].some(e=>e?.code===429||e?.code==='429');
+        if(rateLimited){
+          retryWait=Math.max(30_000*2**(attempt-1),raw._retry_after_ms??0);
+          if(attempt<=OPENROUTER_MAX_RATE_LIMIT_RETRIES&&retryWait<=120_000)row.retry_wait_ms=retryWait;
+        }
         try{
           let usage;try{usage=openRouterUsage(raw.usage);}catch(e){await budget.block(failure?'openrouter_generation_usage_unknown':'openrouter_usage_unavailable');throw failure??e;}
           Object.assign(row,usage,{thinking_tokens_status:usage.thinking_tokens===null?'unconfirmed':'reported',cost_source:'api_usage_cost'});
@@ -246,15 +253,10 @@ export function openRouterSession(apiKey:string,stats:Metrics,budget:CostBudget|
           }
         }finally{await options.onResponse?.(request.kind,raw,request.model);}
         // Retry only explicit 429 after measured usage/cost is settled. Unknown cost keeps the budget blocked.
-        const rateLimited=failure instanceof HttpResponseError
-          ?failure.status===429||failure.diagnostics.upstream_code===429
-          :[raw.error,raw.choices?.[0]?.error].some(e=>e?.code===429||e?.code==='429');
         if(rateLimited){
           if(attempt>OPENROUTER_MAX_RATE_LIMIT_RETRIES)throw new Error('OpenRouter 429: 최대 2회 재시도 후에도 제한이 지속됩니다.');
-          retryWait=Math.max(30_000*2**(attempt-1),raw._retry_after_ms??0);
           // Bound interactive waiting without retrying earlier than the provider's requested Retry-After.
           if(retryWait>120_000)throw new Error('OpenRouter 429: Retry-After가 120초를 초과하여 재시도를 중단했습니다.');
-          row.retry_wait_ms=retryWait;
           if(options.deferRateLimitRetry)throw new RateLimitPause(retryWait);
           continue;
         }

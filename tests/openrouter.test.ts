@@ -19,6 +19,19 @@ const response=()=>({model:MODELS.questions,provider:'Google',choices:[{finish_r
   usage:{prompt_tokens:100,completion_tokens:30,total_tokens:130,cost:.00125,
     prompt_tokens_details:{cached_tokens:0},completion_tokens_details:{reasoning_tokens:10}}});
 
+test('HTTP and embedded 429 usage is final before checkpoint persistence',async()=>{
+  for(const mode of ['http_once','upstream_once']){
+    const b=makeBudget(),stats=freshMetrics();let persisted:unknown;
+    const s=openRouterSession(key,stats,b,{...transport(mode),deferRateLimitRetry:true,
+      onResponse:()=>{persisted=structuredClone(stats.usage.at(-1));}});
+    try{
+      await assert.rejects(s.generate(request),RateLimitPause);
+      assert.deepEqual(stats.usage.at(-1),persisted,'Saved usage must still match the DB checkpoint after yielding');
+      assert.equal((persisted as any).retry_wait_ms,mode==='http_once'?45000:30000);
+    }finally{await s.close();b.close();}
+  }
+});
+
 test('serverless rate limit checkpoints one attempt, awaits persistence and resumes without a duplicate call',async(context)=>{
   context.mock.method(timers,'setTimeout',async()=>assert.fail('Retry waiting belongs to the next HTTP invocation'));
   const b=makeBudget(),t=transport('http_once'),saved:SavedCall[]=[],order:string[]=[];
