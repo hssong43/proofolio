@@ -1,19 +1,25 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Header } from '../Header';
 import { Stat } from '../Stat';
 import { fetchExample } from '@/lib/client';
-import type { Track } from '@/lib/types';
+import type { ExampleImage, Track } from '@/lib/types';
 
-const tracks = [{ track: 'design', label: '디자인' }, { track: 'marketing', label: '마케팅' }, { track: 'coding', label: '코딩' }] as const;
-type Entry = Awaited<ReturnType<typeof fetchExample>> & { track: Track; label: string };
+const tracks = [
+  { track: 'design', label: '디자이너', candidate: '응시자 1' },
+  { track: 'marketing', label: '마케터', candidate: '응시자 2' },
+  { track: 'coding', label: '개발자', candidate: '응시자 3' },
+] as const;
+type Entry = Awaited<ReturnType<typeof fetchExample>> & { track: Track; label: string; candidate: string };
+type Selection = { track: Track; view: 'portfolio' | 'answers' };
 
-// The public dashboard reads only the curated example API, never users, runs or answers.
+// Candidate identities and answers are samples. Never read real visitors or submissions here.
 export function DemoDashboard() {
-  const [entries, setEntries] = useState<Entry[]>([]), [selected, setSelected] = useState<Track | null>(null);
+  const [entries, setEntries] = useState<Entry[]>([]), [selected, setSelected] = useState<Selection | null>(null);
   const [loading, setLoading] = useState(true), [error, setError] = useState(''), [revision, setRevision] = useState(0);
+  const detailRef = useRef<HTMLElement>(null);
   useEffect(() => {
     let cancelled = false;
     setLoading(true); setError('');
@@ -23,41 +29,83 @@ export function DemoDashboard() {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [revision]);
-  const item = entries.find(entry => entry.track === selected);
+  useEffect(() => {
+    if (selected) { detailRef.current?.focus({ preventScroll: true }); detailRef.current?.scrollIntoView({ block: 'start' }); }
+  }, [selected]);
+  const item = entries.find(entry => entry.track === selected?.track);
   return <div style={{ minHeight: '100vh' }}>
-    <Header stepIndex={-1} steps={[]} right={<Link className="text-button" href="/?demo=1">예제 체험하기</Link>} />
+    <Header stepIndex={-1} steps={[]} right={<Link className="text-button" href="/?demo=1">응시 화면으로</Link>} />
     <main className="dash-main">
       <div className="dash-title-row">
-        <div><h1 className="screen-title">관리자 데모</h1><p className="screen-subtitle">저장된 예제와 생성 질문을 로그인 없이 살펴보세요.</p></div>
+        <div><h1 className="screen-title">응시자 관리</h1><p className="screen-subtitle">응시자별 포트폴리오와 질문·답변을 확인하세요.</p></div>
         <button className="btn-secondary" disabled={loading} onClick={() => setRevision(n => n + 1)}>새로고침</button>
       </div>
-      <p className="notice-box">공개 예제 전용 · 읽기 전용 화면이에요. 실제 방문자·제출 파일·답변은 공개하지 않으며, 수정·삭제·새 AI 분석은 실행하지 않아요.</p>
-      {loading ? <p role="status">예제를 불러오는 중…</p> : error ? <p className="error-box" role="alert">{error} 새로고침으로 다시 시도해주세요.</p> : <>
+      <p className="screen-subtitle">예시 데이터 · 응시자와 답변은 체험용이며, 실제 방문자의 정보는 공개하지 않아요.</p>
+      {loading ? <p role="status">응시 목록을 불러오는 중…</p> : error ? <p className="error-box" role="alert">{error} 새로고침으로 다시 시도해주세요.</p> : <>
         <div className="card stat-grid">
-          <Stat label="예제" value={`${entries.length}개`} />
+          <Stat label="응시자" value={`${entries.length}명`} />
           <Stat label="생성 질문" value={`${entries.reduce((n, entry) => n + entry.result.questions.length, 0)}개`} bordered />
-          <Stat label="실제 방문자 데이터" value="비공개" />
+          <Stat label="예시 답변" value={`${entries.reduce((n, entry) => n + (entry.sampleAnswers?.length ?? 0), 0)}개`} />
         </div>
-        <section className="stat-grid" aria-label="예제 목록">
-          {entries.map(entry => <article className="card history-card" key={entry.track}>
-            <span className="qa-meta">{entry.label}</span><h2>{entry.title}</h2>
-            <p>질문 {entry.result.questions.length}개 · {entry.result.status === 'evidence_ready' ? '생성 완료' : '검토 권장'}</p>
-            <button className="btn-secondary" aria-label={`${entry.label} 예제 질문 보기`} aria-pressed={selected === entry.track} onClick={() => setSelected(entry.track)}>질문 보기</button>
-          </article>)}
+        <section className="card table-wrap" aria-label="응시자 목록">
+          <table className="table applicant-table">
+            <thead><tr><th scope="col">응시자</th><th scope="col">직무</th><th scope="col">상태</th><th scope="col">답변 / 질문</th><th scope="col">포트폴리오</th><th scope="col">질문·답변</th></tr></thead>
+            <tbody>{entries.map(entry => <tr key={entry.track} data-selected={selected?.track === entry.track}>
+              <td><strong>{entry.candidate}</strong><div className="qa-meta">{entry.title}</div></td>
+              <td data-label="직무">{entry.label}</td>
+              <td data-label="상태"><span className="badge" data-status={entry.sampleAnswers?.length === entry.result.questions.length ? 'completed' : 'joined'}>
+                {entry.sampleAnswers?.length === entry.result.questions.length ? '답변 완료' : '답변 대기'}</span></td>
+              <td data-label="답변 / 질문">{entry.sampleAnswers?.length ?? 0} / {entry.result.questions.length}</td>
+              <td><button className="btn-secondary" aria-label={`${entry.candidate} 포트폴리오 보기`} onClick={() => setSelected({ track: entry.track, view: 'portfolio' })}>포트폴리오 보기</button></td>
+              <td><button className="btn-primary" aria-label={`${entry.candidate} 질문·답변 보기`} onClick={() => setSelected({ track: entry.track, view: 'answers' })}>질문·답변 보기</button></td>
+            </tr>)}</tbody>
+          </table>
         </section>
-        {item && <section key={item.track} aria-label={`${item.label} 예제 상세`}>
-          <h2>{item.title} · {item.result.questions.length}개 질문</h2>
-          <p className="notice-box">{item.notice}</p>
-          <p className="screen-subtitle">예제 답변은 저장하지 않아요. 이미지·전체 PDF는 공개 사용 허락 확인 전까지 비공개로 보관해요.</p>
-          <div className="card">{item.result.questions.map((q, i) => <article className="qa-item" key={q.id}>
-            <h3 className="qa-prompt">{i + 1}. {q.prompt}</h3>
-            <p className="qa-meta">{q.projectTitle}{q.pages.length ? ` · ${q.pages.join(', ')}페이지` : ' · 코드 원문 근거'}</p>
-            {q.quotes.map((quote, j) => <blockquote className="quote-box" style={{ margin: '12px 0' }} key={j}>{quote}</blockquote>)}
-            {q.notes.map((note, j) => <p key={j}>{note}</p>)}
-            <details><summary>질문 의도와 확인 사항</summary><p>{q.intent}</p><ul>{q.listenFor.map((text, j) => <li key={j}>{text}</li>)}</ul></details>
-          </article>)}</div>
+        {item && <section key={item.track} ref={detailRef} tabIndex={-1} className="applicant-detail" aria-label={`${item.candidate} 상세`}>
+          <div className="dash-title-row"><div><h2>{item.candidate}</h2><p className="screen-subtitle">{item.label} · {item.title}</p></div>
+            <button className="text-button" onClick={() => setSelected(null)}>상세 닫기</button></div>
+          <div className="history-actions" aria-label="상세 보기 선택">
+            <button className={selected?.view === 'portfolio' ? 'btn-primary' : 'btn-secondary'} aria-pressed={selected?.view === 'portfolio'} onClick={() => setSelected({ track: item.track, view: 'portfolio' })}>포트폴리오 보기</button>
+            <button className={selected?.view === 'answers' ? 'btn-primary' : 'btn-secondary'} aria-pressed={selected?.view === 'answers'} onClick={() => setSelected({ track: item.track, view: 'answers' })}>질문·답변 보기</button>
+          </div>
+          {selected?.view === 'portfolio' ? <div className="portfolio-pages">
+            {item.track === 'coding' ? <>
+              <a className="text-button" href="https://github.com/hssong43/proofolio" target="_blank" rel="noopener noreferrer">GitHub 포트폴리오 열기</a>
+              {item.result.questions.map((q, i) => <details className="source-preview" key={q.id} open={i === 0}>
+                <summary>{q.projectTitle} · 질문 {i + 1} 연결 코드</summary><pre>{q.quotes.join('\n\n')}</pre>
+              </details>)}
+            </> : <>
+              <p className="screen-subtitle">질문에 연결된 원본 포트폴리오 페이지</p>
+              {(item.images ?? []).map(image => <PortfolioImage key={`${revision}:${image.url}`} image={image} candidate={item.candidate} />)}
+              {!item.images?.length && <p className="empty-state">등록된 원본 이미지가 없어요.</p>}
+            </>}
+          </div> : <>
+            <p className="screen-subtitle">예시 답변은 화면 체험용으로 작성했으며 실제 포트폴리오 작성자의 답변이 아니에요.</p>
+            <div className="card">{item.result.questions.map((q, i) => {
+              const answer = item.sampleAnswers?.find(a => a.questionId === q.id)?.answer;
+              return <article className="qa-item" key={q.id}>
+                <h3 className="qa-prompt">{i + 1}. {q.prompt}</h3>
+                <p className="qa-meta">{q.projectTitle}{q.pages.length ? ` · ${q.pages.join(', ')}페이지` : ' · 코드 원문 근거'}</p>
+                {q.quotes.map((quote, j) => <blockquote className="quote-box" style={{ margin: 0 }} key={j}>{quote}</blockquote>)}
+                {q.notes.map((note, j) => <p key={j}>{note}</p>)}
+                <div><p className="qa-meta">예시 답변</p><div className="qa-answer" data-empty={!answer}>{answer ?? '이 질문의 예시 답변은 아직 등록되지 않았어요.'}</div></div>
+                <details><summary>질문 의도와 확인 사항</summary><p>{q.intent}</p><ul>{q.listenFor.map((text, j) => <li key={j}>{text}</li>)}</ul></details>
+              </article>;
+            })}</div>
+          </>}
         </section>}
       </>}
     </main>
   </div>;
+}
+
+function PortfolioImage({ image, candidate }: { image: ExampleImage; candidate: string }) {
+  const [failed, setFailed] = useState(false), [attempt, setAttempt] = useState(0);
+  const url = `${image.url}&retry=${attempt}`;
+  return <figure className="card portfolio-page">
+    <figcaption><strong>{image.page}페이지</strong><a className="text-button" href={url} target="_blank" rel="noopener noreferrer">크게 보기</a></figcaption>
+    {failed ? <div className="empty-state"><p role="alert">이미지를 불러오지 못했어요.</p>
+      <button className="btn-secondary" onClick={() => { setAttempt(n => n + 1); setFailed(false); }}>이미지 다시 불러오기</button></div> :
+      <img src={url} alt={`${candidate} 원본 포트폴리오 ${image.page}페이지`} loading="lazy" decoding="async" onError={() => setFailed(true)} />}
+  </figure>;
 }

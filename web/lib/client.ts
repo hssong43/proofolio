@@ -1,4 +1,4 @@
-import type { AnswerRecord, ClientResult, RunStatus, Track } from "./types";
+import type { AnswerRecord, PortfolioExample, RunStatus, Track } from "./types";
 
 async function parse<T>(res: Response): Promise<T> {
   const body = (await res.json().catch(() => ({}))) as T & { error?: string };
@@ -20,7 +20,7 @@ export async function fetchStatus(runId: string) {
 }
 
 export async function fetchExample(track: Track) {
-  return parse<{ title: string; notice: string; result: ClientResult }>(await fetch(`/api/examples/${track}`, { cache: 'no-store' }));
+  return parse<PortfolioExample>(await fetch(`/api/examples/${track}`, { cache: 'no-store' }));
 }
 export async function startCodeAnalysis(url: string, maxQuestions: number, submissionId?: string) {
   return parse<{runId: string}>(await fetch('/api/analyze/code', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({url,maxQuestions,submissionId}) }));

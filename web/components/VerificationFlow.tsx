@@ -47,7 +47,7 @@ export function VerificationFlow({totalSeconds=40,questionCount=DEFAULT_QUESTION
   const questions: UiQuestion[] = s.result?.questions.map(q=>({id:q.id,prompt:q.prompt,quotes:q.quotes,notes:q.notes,anchors:q.anchors,
     source:`${q.projectTitle}${q.pages.length ? ` · ${q.pages.join(', ')}페이지 근거` : ' · 코드 원문 근거'}`})) ?? [];
   const summary = {chipsLabel:'분석한 프로젝트',chips:s.result?.projects.map(p=>p.title) ?? [],
-    cards:s.result?.projects.map(p=>({label:'프로젝트',name:p.title,desc:p.pages.length ? `${p.pages.length}페이지 · 전체 ${s.result!.pageCount}페이지 중` : '코드 구조 기반 · 실행 검수 없음'})) ?? []};
+    cards:s.result?.projects.map(p=>({label:'프로젝트',name:p.title,desc:p.pages.length ? `${p.pages.length}페이지 · 전체 ${s.result!.pageCount}페이지 중` : '코드 구조 기반'})) ?? []};
   const canAnalyze = role?.track === 'coding' ? /^https:\/\/github\.com\/[^/]+\/[^/]+\/?$/.test(s.link.trim()) : !!s.file?.file && s.tab==='pdf';
 
   const loadResult = useCallback((result: ClientResult, answers: AnswerRecord[]=[], storageError?: string) => {
@@ -166,9 +166,9 @@ export function VerificationFlow({totalSeconds=40,questionCount=DEFAULT_QUESTION
         onFile={file=>file&&update({file:{name:file.name,size:formatFileSize(file.size),file},error:null})}
         onRemoveFile={()=>update({file:null})} onLinkChange={link=>update({link})} onAnalyze={()=>void start()}/>}
       {s.screen==='analyzing'&&<AnalyzingScreen stage={s.stage} summary={summary} demo={demo} error={s.error}
-        onRetry={()=>{if(s.runId)update({error:null});else update({screen:demo?'role':'upload',error:null});}}/>}
+        onRetry={()=>{if(demo)void start();else if(s.runId)update({error:null});else update({screen:'upload',error:null});}}/>}
       {s.screen==='ready'&&<ReadyScreen totalSeconds={totalSeconds} questionCount={total}
-        limitation={{requested:questionCount,status:s.result?.status??'',issues:s.result?.qualityIssues??[],storageError:s.storageError,demo,notice:s.result?.exampleNotice}}
+        storageError={s.storageError} demo={demo}
         onStart={()=>update({screen:'question',startedAt:Date.now(),questionStartedAt:Date.now()})}/>}
       {s.screen==='question'&&<QuestionScreen index={s.questionIndex} questionCount={total} question={questions[s.questionIndex]}
         answer={s.answer} secondsLeft={s.secondsLeft} totalSeconds={totalSeconds} chipsLabel={summary.chipsLabel} chips={summary.chips}

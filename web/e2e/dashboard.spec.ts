@@ -13,6 +13,8 @@ test('dashboard: real-contract test creation, applicant list and canonical quest
     run:{runId,state:'complete',track:'design',result,answers:result.questions.map(q=>({questionId:q.id,answer:'저장된 합성 답변 '+q.id,seconds:3}))}}}));
   await page.goto('/dashboard');await expect(page).toHaveTitle('Proofolio');
   await expect(page.getByRole('heading',{name:'채용 테스트',exact:true})).toBeVisible();
+  await expect(page.getByText(/근거가 부족|검토|검수|자동 평가|자동 채점|합불/)).toHaveCount(0);
+  await expect(page.getByText('응시 정보는 30일 보관하며, 원본 PDF·코드는 공유하지 않아요.',{exact:true})).toBeVisible();
   await page.getByLabel('제목',{exact:true}).fill(testRecord.title);
   await expect(page.getByLabel('목표 질문 수')).toHaveValue('10');
   await page.getByRole('button',{name:'테스트 열기',exact:true}).click();
@@ -22,7 +24,9 @@ test('dashboard: real-contract test creation, applicant list and canonical quest
   await page.screenshot({path:testInfo.outputPath('dashboard.png'),fullPage:true});
   await row.getByRole('link',{name:'보기',exact:true}).click();
   await expect(page.getByRole('heading',{name:testRecord.title,exact:true})).toBeVisible();
-  await expect(page.getByText('자동 평가',{exact:true})).toBeVisible();
+  await expect(page.getByText(/자동 평가|미지원|검토|검수/)).toHaveCount(0);
+  await expect(page.locator('.card.form-grid').getByText('제출 완료',{exact:true})).toBeVisible();
+  await page.screenshot({path:testInfo.outputPath('applicants.png'),fullPage:true});
   await page.getByRole('link',{name:'질문·답변 보기'}).click();
   await expect(page.locator('.qa-item')).toHaveCount(6);
   await expect(page.locator('.qa-answer').first()).toHaveText('저장된 합성 답변 q1');

@@ -66,13 +66,13 @@ export function AccountApp({ resumeRunId, recovery, authError, loginRequested, r
     <div className="account-bar">
       <span>{contest ? '대회 체험 · 로그인 없이 시작해요' : loading ? '계정 확인 중' : member ? member.email : '로그인 없이 예제를 체험해보세요'}</span>
       <div>
-        {contest && <Link className="text-button" href="/dashboard">관리자 데모</Link>}
+        {contest && <Link className="text-button" href="/dashboard">관리자 패널</Link>}
         {!contest && <><Link className="text-button" href="/dashboard">채용 대시보드</Link>
         <Link className="text-button" href="/test">코드로 응시</Link></>}
         <button className="text-button" onClick={() => { window.history.replaceState(null,'','/?demo=1'); setDemo(true); setRunId(undefined); setHistory(null); setRevision(n => n + 1); }}>예제 체험</button>
         {(contest ? visitorReady : member) ? <>
           <button className="text-button" onClick={() => { window.history.replaceState(null,'','/'); setDemo(false); setRunId(undefined); setHistory(null); setRevision(n => n + 1); }}>새 분석</button>
-          <button className="text-button" onClick={() => void showHistory()}>{contest ? '이 브라우저의 기록' : '내 기록'}</button>
+          <button className="text-button" onClick={() => void showHistory()}>내 기록</button>
           {!contest && <button className="text-button" onClick={() => void auth({ action: 'logout' }).then(() => {
             Object.keys(localStorage).filter(k => k.startsWith('proofolio:draft:')).forEach(k => localStorage.removeItem(k)); location.assign('/');
           }).catch(e => setMessage(e.message))}>로그아웃</button>}

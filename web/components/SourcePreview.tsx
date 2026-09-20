@@ -5,7 +5,7 @@ import type { ClientQuestion, SourceAsset } from '@/lib/types';
 export function SourcePreview({runId,anchors,assets,demo}: {runId?:string;anchors?:ClientQuestion['anchors'];assets?:SourceAsset[];demo?:boolean}) {
   const [view,setView]=useState<{url:string;kind:string;text?:string;page:number}|null>(null);
   const [error,setError]=useState(''),[busy,setBusy]=useState(false);
-  if(!runId) return demo ? <p className="screen-subtitle">예제 원본 파일은 공개 재배포하지 않아요. 인용문과 페이지 안내로 확인해주세요.</p> : null;
+  if(!runId) return demo ? <p className="screen-subtitle">예제 포트폴리오는 <a href="/dashboard">관리자 패널</a>에서 확인할 수 있어요.</p> : null;
   const ids=[...new Set((anchors??[]).map(a=>a.assetId))];
   const linked=assets?.filter(a=>ids.includes(a.id)||a.id==='pdf')??[];
   if(!linked.length)return <p className="screen-subtitle">연결된 원문 미리보기가 없어요.</p>;

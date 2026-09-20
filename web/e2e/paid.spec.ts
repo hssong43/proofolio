@@ -80,8 +80,7 @@ test("two PDFs: member login -> real upload -> source-linked questions -> immuta
         const raw = json(join(root, "output/web/runs", webRunId!, "result.json")), client = toClientResult(raw);
         expect(client.maxQuestions).toBe(10);expect(client.questions.length).toBeGreaterThan(0);
         await expect(page.getByRole("heading", { name: `질문 ${client.questions.length}개, 각 120초예요` })).toBeVisible();
-        if (client.status === "needs_review" || client.questions.length < 6)
-          await expect(page.getByText(`목표 6~10개 / 생성 ${client.questions.length}개 · ${client.questions.length<6?'부분 결과':'검토 권장'}`, { exact: true })).toBeVisible();
+        await expect(page.getByText(/목표 6~10개 \/ 생성|검토 권장|선정한 핵심 포인트/)).toHaveCount(0);
         await page.screenshot({ path: testInfo.outputPath(doc.id + "-ready.png"), fullPage: true, animations: "disabled" });
         await page.getByRole("button", { name: "준비 완료", exact: true }).click();
         const answers: AnswerRecord[] = [];

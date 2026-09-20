@@ -1,14 +1,25 @@
 import { NextResponse } from 'next/server';
 import { example } from '@/lib/server/database';
 import { contestSettings } from '@/lib/server/contest';
+import { exampleAnswers } from '@/lib/server/example-answers';
 export const dynamic = 'force-dynamic';
 export async function GET(_request: Request, context: { params: Promise<{ slug: string }> }) {
   const contest=contestSettings();
   if(contest.enabled&&contest.closed)return NextResponse.json({error:'대회 체험이 종료됐어요.'},{status:410,headers:{'Cache-Control':'no-store'}});
   try {
     const item = await example((await context.params).slug);
-    // Only curated question text is public. Source PDFs, asset paths, metrics and owners remain private.
+    // Only curated questions, authored samples and linked page images are public.
+    // Storage paths, full PDFs and visitor data are never returned.
     const { sourceAssets: _assets, ...result } = item.result;
-    return NextResponse.json({ title: item.title, notice: item.notice, result }, { headers: { 'Cache-Control': 'no-store' } });
-  } catch { return NextResponse.json({ error: '예제가 준비되지 않았어요. 잠시 후 다시 시도해주세요.' }, { status: 503 }); }
+    const images = [...new Set(result.questions.flatMap(q => q.pages))].sort((a,b) => a-b)
+      .map(page => ({ page, url: `/api/examples/${item.slug}/image?page=${page}` }));
+    return NextResponse.json({ title: item.title, notice: item.notice, result, images, sampleAnswers: exampleAnswers(item.slug, result.questions) },
+      { headers: { 'Cache-Control': 'no-store' } });
+  } catch (error) {
+    const configurationError = error instanceof Error && error.message === 'Supabase URL과 서버 전용 키를 설정해주세요.';
+    return NextResponse.json({
+      error: configurationError ? '예제 서버 연결 설정이 필요해요. 운영자가 배포 환경의 Supabase 설정을 확인해야 해요.' : '저장된 예제를 불러오지 못했어요. 잠시 후 다시 시도해주세요.',
+      code: configurationError ? 'EXAMPLE_CONFIGURATION_ERROR' : 'EXAMPLE_LOAD_FAILED',
+    }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+  }
 }
