@@ -61,6 +61,7 @@ export async function preparePdfUpload(metadata: ReturnType<typeof uploadMetadat
     const { data, error } = await storageClient().storage.from(PRIVATE_BUCKET)
       .createSignedUploadUrl(assetPrefix(user.id, status.runId) + 'portfolio.pdf', { upsert: false });
     if (error || !data) throw new AnswerError('PDF 업로드 주소를 만들지 못했어요.', 503);
+    if (Date.now() - Date.parse(status.startedAt) > 5 * 60000) throw new AnswerError('업로드 준비 시간이 초과됐어요.', 503);
     return { runId: status.runId, uploadUrl: data.signedUrl };
   } catch (e) {
     status.state = 'failed'; status.error = 'PDF 업로드 준비에 실패했어요.'; status.finishedAt = new Date().toISOString();

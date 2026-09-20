@@ -19,8 +19,9 @@ export async function cleanupExpiredRuns() {
     const bucket=storageClient().storage.from(PRIVATE_BUCKET);
     for(const run of runs){
       if(protectedIds.has(run.id))continue;
-      // A just-closed contest can still have an active writer. The runner has a two-hour hard stop.
-      if(isActiveRun(run.id)||(['queued','running'].includes(run.state)&&Date.parse(run.started_at)>Date.now()-2*60*60*1000-60000))continue;
+      // A signed upload URL stays valid for two hours (issued within five minutes of admission).
+      // Even a failed/deleted run must stay tracked until it can no longer recreate a removed object.
+      if(isActiveRun(run.id)||Date.parse(run.started_at)>Date.now()-3*60*60*1000)continue;
       const prefix=assetPrefix(run.user_id,run.id);
       const {data,error}=await bucket.list(prefix.slice(0,-1),{limit:1000});
       if(error||!data||data.length===1000||data.some(f=>!f.id||f.name.includes('/')))throw new Error('만료 파일 목록을 확인하지 못했어요.');
