@@ -10,15 +10,16 @@ export type Request = <T>(kind:string,schema:z.ZodType<T>,args:Omit<ModelRequest
   check?:(data:T)=>void)=>Promise<T>;
 // Shared by the PDF pipeline and evidence replay: identical routing, validation and one format retry.
 export function modelRequest(generate:Generate,stats:Metrics,options:{model:string;skimModel?:string;reviewModel?:string;
-  questionModel?:string;questionMaxOutputTokens?:number;signal?:AbortSignal;
+  questionModel?:string;scoringModel?:string;questionMaxOutputTokens?:number;signal?:AbortSignal;
   onRequest?:(request:ModelRequest,attempt:number)=>void}):Request {
   return async(kind,schema,initial,check)=>{
     const model=['DocumentMap','PageIndex'].includes(kind)?(options.skimModel??options.model):
-      kind==='QuestionSet'?(options.questionModel??options.model):['CropReadings','Reviews','QuestionReviews'].includes(kind)?(options.reviewModel??options.model):options.model;
+      kind==='QuestionSet'?(options.questionModel??options.model):kind==='AnswerScoring'?(options.scoringModel??options.questionModel??options.model):
+      ['CropReadings','Reviews','QuestionReviews'].includes(kind)?(options.reviewModel??options.model):options.model;
     let args=initial;
     for(let attempt=1;attempt<=2;attempt++){
       options.signal?.throwIfAborted();
-      const request:ModelRequest={kind,schema,model,thinkingLevel:['VisualInventory','CropReadings','DesignExtraction','MarketingExtraction','Reviews','QuestionReviews','QuestionSet'].includes(kind)?'MEDIUM':'LOW',
+      const request:ModelRequest={kind,schema,model,thinkingLevel:['VisualInventory','CropReadings','DesignExtraction','MarketingExtraction','Reviews','QuestionReviews','QuestionSet','AnswerScoring'].includes(kind)?'MEDIUM':'LOW',
         ...(['gemini-3.1-pro-preview','google/gemini-3.1-pro-preview'].includes(model)?{maxOutputTokens:32768}:{}),...args,
         ...(kind==='QuestionSet'&&options.questionMaxOutputTokens!==undefined?{maxOutputTokens:options.questionMaxOutputTokens}:{})};
       options.onRequest?.(request,attempt);

@@ -37,8 +37,9 @@ export function buildOpenRouterPayload(request:ModelRequest,providers?:string[],
     if(request.model!==expected||request.pdf||request.pdf_uri||request.kind==='QuestionSet'&&request.images?.length)
       throw new Error('시험 경로는 Astra 이미지 분석, Sonnet 근거 JSON 질문, Opus 연결 이미지 검수만 허용합니다.');
   }else if(!Object.values(OPENROUTER_MODELS).includes(request.model as any))throw new Error('시험 모델에는 명시적 시험 경로가 필요합니다.');
-  if(!profile&&opus&&(request.kind!=='QuestionSet'||request.pdf||request.pdf_uri||request.images?.length))
-    throw new Error('OpenRouter Opus에는 질문 생성용 검증 근거 JSON만 전달합니다.');
+  // Opus receives text-only JSON: verified evidence for questions, or question/answer text for scoring.
+  if(!profile&&opus&&(!['QuestionSet','AnswerScoring'].includes(request.kind)||request.pdf||request.pdf_uri||request.images?.length))
+    throw new Error('OpenRouter Opus에는 질문 생성용 검증 근거 JSON 또는 답변 채점용 텍스트만 전달합니다.');
   if(request.pdf_uri)throw new Error('OpenRouter에는 로컬 PDF 바이트만 전달하세요. 외부 파일 URI는 사용하지 않습니다.');
   if(!request.prompt.trim()||!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(request.kind))throw new Error('모델 지시/스키마 이름 오류.');
   const max=request.maxOutputTokens??MAX_OUTPUT_TOKENS;
