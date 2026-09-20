@@ -1,0 +1,14 @@
+{
+  "approval_id": "user-mvp-additional-usd10-20260920-v017",
+  "user_response": "지금 시점 기준 $10 써봐. 최대한 개선을 많이해서 이번에 mvp 완성 목표",
+  "additional_spending_limit_usd": 10,
+  "ledger": "output/openrouter-budget.jsonl",
+  "ledger_sha256_before": "ba3c7bbee0a2f4c827b5795d91369d043ccb36209f8c596cb0fa4d53d8863d88",
+  "ledger_lines_before": 245,
+  "prior_actual_spent_usd": 3.37881625,
+  "prior_unknown_cost_hold_usd": 1.634304,
+  "held_request_actual_cost_usd": null,
+  "approved_combined_ceiling_usd": 15.01312025,
+  "documents": ["d-shuu", "m-damyul"],
+  "scope": "Improve and retest the existing MVP with the same PDFs and models. Append an explicit additional-USD approval; preserve the old ledger header, all past spending, and unknown-cost holds. No new ledger, hold release, account/billing changes, or automatic commit/push. Any new unknown usage blocks further spending."
+}

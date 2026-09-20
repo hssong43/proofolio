@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, type ChangeEvent, type KeyboardEvent } from "react";
 import { ANSWER_MAX_LENGTH, type UiQuestion } from "@/lib/data";
+import type { SourceAsset } from '@/lib/types';
+import { SourcePreview } from '../SourcePreview';
 
 const RING_RADIUS = 72;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
@@ -17,11 +19,13 @@ type Props = {
   totalSeconds: number;
   chipsLabel: string;
   chips: string[];
+  runId?: string; assets?: SourceAsset[]; demo?: boolean;
+  saveState: 'idle' | 'saving' | 'saved' | 'failed'; saveError: string | null;
   onAnswerChange: (value: string) => void;
   onSubmit: () => void;
 };
 
-export function QuestionScreen({ index, questionCount, question, answer, secondsLeft, totalSeconds, chipsLabel, chips, onAnswerChange, onSubmit }: Props) {
+export function QuestionScreen({ index, questionCount, question, answer, secondsLeft, totalSeconds, chipsLabel, chips, onAnswerChange, onSubmit, runId, assets, demo, saveState, saveError }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isLast = index >= questionCount - 1;
   const warn = secondsLeft <= WARN_AT;
@@ -81,6 +85,7 @@ export function QuestionScreen({ index, questionCount, question, answer, seconds
             ))}
             <h3 style={{ margin: 0, fontSize: 24, fontWeight: 600, lineHeight: 1.4, letterSpacing: "-.01em", textWrap: "pretty", whiteSpace: "pre-wrap" }}>{question.prompt}</h3>
             <p style={{ margin: 0, fontSize: 14, color: "#71717A" }}>{question.source}</p>
+            <SourcePreview key={question.id} runId={runId} anchors={question.anchors} assets={assets} demo={demo}/>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <textarea
@@ -90,6 +95,7 @@ export function QuestionScreen({ index, questionCount, question, answer, seconds
               onChange={onChange}
               onKeyDown={onKeyDown}
               maxLength={ANSWER_MAX_LENGTH}
+              readOnly={saveState==='saving'||saveState==='failed'}
               rows={1}
               placeholder="핵심 근거부터 짧게 적어주세요. Enter로 제출돼요"
               aria-label="답변"
@@ -98,9 +104,12 @@ export function QuestionScreen({ index, questionCount, question, answer, seconds
               {answer.length} / {ANSWER_MAX_LENGTH}
             </div>
           </div>
+          {saveError&&<div className="error-box" role="alert">{saveError} 입력한 답변은 유지돼요.</div>}
+          {saveState==='saving'&&<p role="status">저장 중 · 서버 응답을 기다려요</p>}
+          {saveState==='saved'&&<p role="status">이전 답변 저장 완료</p>}
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <button type="button" className="btn-primary focus-ring" onClick={onSubmit}>
-              {isLast ? "제출하고 완료" : "제출하고 다음"}
+            <button type="button" className="btn-primary focus-ring" disabled={saveState==='saving'} onClick={onSubmit}>
+              {saveState==='failed'?'답변 저장 재시도':saveState==='saving'?'저장 중…':isLast ? "제출하고 완료" : "제출하고 다음"}
             </button>
           </div>
         </div>

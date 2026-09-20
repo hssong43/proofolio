@@ -1,4 +1,4 @@
-import type { AnswerRecord, RunStatus, Track } from "./types";
+import type { AnswerRecord, ClientResult, RunStatus, Track } from "./types";
 
 async function parse<T>(res: Response): Promise<T> {
   const body = (await res.json().catch(() => ({}))) as T & { error?: string };
@@ -18,6 +18,23 @@ export async function fetchStatus(runId: string) {
   return parse<RunStatus>(await fetch(`/api/analyze/${runId}`, { cache: "no-store" }));
 }
 
+export async function fetchExample(track: Track) {
+  return parse<{ title: string; notice: string; result: ClientResult }>(await fetch(`/api/examples/${track}`, { cache: 'no-store' }));
+}
+export async function startCodeAnalysis(url: string, maxQuestions: number) {
+  return parse<{runId: string}>(await fetch('/api/analyze/code', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({url,maxQuestions}) }));
+}
+export async function submitAnswer(runId: string, answer: AnswerRecord) {
+  const result = await parse<{ok: boolean; saved: string; answers: AnswerRecord[]}>(await fetch(`/api/analyze/${runId}/answers`, {
+    method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(answer) }));
+  const saved = result.answers?.find(a => a.questionId === answer.questionId);
+  if (!result.ok || result.saved !== answer.questionId || saved?.answer !== answer.answer || saved.seconds !== answer.seconds)
+    throw new Error('저장 응답을 확인하지 못했어요. 같은 답변으로 다시 시도해주세요.');
+  return result.answers;
+}
+
 export async function submitAnswers(runId: string, answers: AnswerRecord[]) {
-  return parse<{ ok: true }>(await fetch(`/api/analyze/${runId}/answers`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ answers }) }));
+  const result = await parse<{ ok: boolean; saved: number; storage: "local" | "supabase" }>(await fetch(`/api/analyze/${runId}/answers`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ answers }) }));
+  if (result.ok !== true || result.saved !== answers.length) throw new Error("저장 응답의 답변 개수를 확인할 수 없어요.");
+  return result;
 }

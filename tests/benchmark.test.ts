@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {existsSync,readFileSync} from 'node:fs';
-import {Corpus,Gold,codeHash,tokenTotals,trackThreshold,validateGold} from '../src/benchmark.ts';
+import {Corpus,Gold,codeHash,responseUsage,tokenTotals,trackThreshold,validateGold} from '../src/benchmark.ts';
 import {selectPages} from '../src/pipeline.ts';
 import {questionErrors} from '../src/questions.ts';
 import type {ResolvedEvidence} from '../src/schema.ts';
@@ -10,6 +10,14 @@ import {VISUAL_PROMPT,QUESTION_PROMPT,QUESTION_REVIEW_PROMPT,EXTRACTION_RULES,RE
 test('benchmark excludes duplicate authors, incomplete tracks and incomplete source notes',()=>{
   assert.equal(Corpus.safeParse([]).success,false);assert.equal(Gold.safeParse({id:'fake',reviewer:'human expert'}).success,false);
   assert.match(codeHash(),/^[a-f0-9]{64}$/);
+});
+test('benchmark counts actual HTTP retries from archived attempts, including failed and zero-cost responses',()=>{
+  const raw={_request_model:'google/gemini-3.8-flash',usage:{prompt_tokens:10,completion_tokens:5,total_tokens:15,cost:.01}};
+  const rows=[{...raw,_application_http_attempt:1,error:{code:429},usage:{prompt_tokens:0,completion_tokens:0,total_tokens:0,cost:0}},
+    {...raw,_application_http_attempt:2},{...raw,_application_http_attempt:3},raw];
+  const result=responseUsage(rows,raw._request_model);
+  assert.equal(result.application_http_retries,2);assert.equal(result.cost_usd,.03);assert.equal(result.tokens.total,45);
+  assert.equal(responseUsage([raw],raw._request_model).application_http_retries,0);
 });
 test('benchmark counts thought tokens and permits two failures but never unchecked final premises',()=>{
   assert.deepEqual(tokenTotals([{promptTokenCount:20,candidatesTokenCount:5,thoughtsTokenCount:7,totalTokenCount:32}]),{input:20,output:5,thinking:7,cached:0,total:32});
@@ -23,7 +31,7 @@ test('benchmark counts thought tokens and permits two failures but never uncheck
 });
 test('numeric questions require an exact source phrase with its subject',()=>{
   const source={question_eligible:true,anchors:[{quote:'한 타입패밀리를 3가지 타입으로 구분'}]} as ResolvedEvidence;
-  const check=(question:string)=>questionErrors({evidence_id:'e',question,intent:'선택 이유 확인',listen_for:['선택 근거']},source,new Set(),new Set());
+  const check=(question:string)=>questionErrors({evidence_id:'e',question,intent:'선택 이유 확인',listen_for:['선택 근거']},source,new Set());
   assert.deepEqual(check('“3가지 타입”의 구분 기준은 무엇인가요?'),[]);
   assert.ok(check('“3개 타입패밀리”의 구분 기준은 무엇인가요?').length);
   assert.ok(check('“3”가지 타입패밀리의 기준은?').length);

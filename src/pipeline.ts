@@ -1,19 +1,46 @@
 import {createHash} from 'node:crypto';
 import {performance} from 'node:perf_hooks';
 import * as z from 'zod';
-import {DocumentMap,PageIndex,DesignExtraction,MarketingExtraction,VisualInventory,Reviews,Track,normalize,DESIGN_FIELDS,MARKETING_FIELDS} from './schema.ts';
-import type {Box,FocusTarget,FocusCoverage,Project,Evidence,Review,ResolvedEvidence} from './schema.ts';
-import {readPdf,slicePdf,openRenderer,renderPage,textSpans,textInBox,alignRangeTypography,quoteTranscriptionIssue,quoteLocationCheck,pageTiles,mergeInventories} from './pdf.ts';
+import {DocumentMap,PageIndex,DesignExtraction,MarketingExtraction,ExtractionPointCheck,VisualInventory,CropReadings,Reviews,Track,normalize,DESIGN_FIELDS,MARKETING_FIELDS} from './schema.ts';
+import type {Box,FocusTarget,FocusCoverage,Project,Evidence,Review,ResolvedEvidence,CropReading} from './schema.ts';
+import {readPdf,slicePdf,openRenderer,renderPage,textSpans,textInBox,alignRangeTypography,numericQuoteIssue,quoteTranscriptionIssue,quoteLocationCheck,textCropTouchesEdge,pageTiles,mergeInventories} from './pdf.ts';
 import type {TextSpan} from './pdf.ts';
 import {Budget,freshMetrics} from './llm.ts';
-import {OPENROUTER_MODELS,openRouterModel,openRouterSession} from './openrouter.ts';
+import {OPENROUTER_MODELS,TRIAL_MODELS,openRouterModel,openRouterSession} from './openrouter.ts';
 import type {Generate,ModelRequest} from './llm.ts';
 import {generateQuestions,questionQuality,modelRequest,DEFAULT_MAX_QUESTIONS} from './questions.ts';
 import type {QuestionCheck} from './questions.ts';
+import type {Request} from './questions.ts';
 import type {QuestionCard} from './schema.ts';
-import {MAP_PROMPT,INDEX_PROMPT,SCAN_TRACK_PROMPT,VISUAL_PROMPT,DESIGN_PROMPT,MARKETING_PROMPT,EXTRACTION_RULES,REVIEW_PROMPT,QUESTION_FOCUS} from './prompts.ts';
+import {MAP_PROMPT,INDEX_PROMPT,SCAN_TRACK_PROMPT,VISUAL_PROMPT,DESIGN_PROMPT,MARKETING_PROMPT,EXTRACTION_RULES,CROP_READING_PROMPT,REVIEW_PROMPT,QUESTION_FOCUS} from './prompts.ts';
 export const sha256=(bytes:Uint8Array|string)=>createHash('sha256').update(bytes).digest('hex');
 export type Point=FocusTarget&{id:string};
+export function validateExtraction(extraction:{evidence:Evidence[];point_checks?:z.infer<typeof ExtractionPointCheck>[]},points:Point[]) {
+  const checks=extraction.point_checks,ids=points.map(p=>p.id);
+  if(!checks||checks.length!==ids.length||new Set(checks.map(c=>c.focus_target_id)).size!==ids.length||checks.some(c=>!ids.includes(c.focus_target_id)))
+    throw new Error('추출 포인트 검사 ID 누락/중복/추가.');
+  for(const c of checks){
+    const expected=extraction.evidence.flatMap((e,i)=>e.focus_target_id===c.focus_target_id?[i+1]:[]);
+    if(new Set(c.evidence_indices).size!==c.evidence_indices.length||JSON.stringify([...c.evidence_indices].sort((a,b)=>a-b))!==JSON.stringify(expected)||
+      (c.status==='extracted')!==(expected.length>0))throw new Error('추출 포인트의 근거 순번/상태 불일치.');
+    const point=points.find(p=>p.id===c.focus_target_id)!;
+    if(expected.length&&point.required_context_pages.some(page=>!expected.some(i=>extraction.evidence[i-1].anchors.some(a=>a.page===page))))
+      throw new Error(`추출 포인트 ${point.id}: required_context_pages=${point.required_context_pages.join(',')}의 관련 앵커 누락. 보이는 필수 맥락을 연결하거나 해당 포인트를 보류하세요.`);
+  }
+}
+export function extractionDetailRegions(points:Point[],inventories:Map<number,VisualInventory>) {
+  const selected:Array<{page:number;region:VisualInventory['regions'][number]}>=[],seen=new Set<string>();
+  for(const point of points){
+    const candidates=(inventories.get(point.anchor_page)?.regions??[]).filter(r=>r.identification==='clear'&&!['text_block','other'].includes(r.kind));
+    const score=(r:typeof candidates[number])=>(point.focus==='measurement'&&['chart','table','analytics_capture'].includes(r.kind)?1e6:0)+
+      (r.box[2]-r.box[0])*(r.box[3]-r.box[1]);
+    // ponytail: bounded area/kind ranking, not semantic retrieval; preserves boxes and never adds pages.
+    for(const region of candidates.sort((a,b)=>score(b)-score(a)||a.key.localeCompare(b.key)).slice(0,2)){
+      const key=`p${point.anchor_page}:${region.key}`;if(seen.has(key))continue;seen.add(key);selected.push({page:point.anchor_page,region});
+    }
+  }
+  return selected;
+}
 export function normalizeMap(map:DocumentMap) {
   // Only remove redundant references. Never invent missing pages or repair cross-project membership.
   for(const project of map.projects)project.pages=[...new Set(project.pages)];
@@ -90,11 +117,72 @@ export function validateReviews(records:Evidence[],reviews:Review[],ids:string[]
   const actual=reviews.map(r=>r.evidence_id);
   if(new Set(actual).size!==actual.length||actual.length!==ids.length||ids.some(id=>!actual.includes(id)))throw new Error('원본 대조 ID 누락/중복/추가.');
   records.forEach((record,index)=>{const review=reviews.find(r=>r.evidence_id===ids[index])!,support=review.document_support,indices=support.anchor_indices;
+    const checked=review.anchor_checks.map(c=>c.anchor_index);
+    if(new Set(checked).size!==checked.length||checked.some(i=>i<1||i>record.anchors.length))throw new Error('대조 anchor 검사 순번 오류.');
     if(new Set(indices).size!==indices.length||indices.some(i=>i>record.anchors.length))throw new Error('대조 anchor 순번 오류.');
     if(support.status==='conflicting'&&new Set(indices.map(i=>JSON.stringify(record.anchors[i-1]))).size<2)throw new Error('불일치에는 서로 다른 두 근거가 필요합니다.');
     if(support.status==='documented'&&!indices.some(i=>record.anchors[i-1].purpose!=='claim'))throw new Error('주장 외 자료 또는 조건 근거가 필요합니다.');
     if(review.status!=='supported'&&support.status!=='not_assessed')throw new Error('미확인 출처는 대조 완료로 표시할 수 없습니다.');
   });
+}
+export async function verifyEvidenceCrops(records:Evidence[],ids:string[],images:Array<[string,Uint8Array]>,request:Request,
+  readings=new Map<string,CropReading>()) {
+  const expected=[...new Set(records.flatMap(r=>r.anchors.map(a=>`p${a.page}:${a.region_key}`)))];
+  const missing=expected.filter(id=>!readings.has(id));
+  if(missing.length){
+    if(images.filter(([id])=>missing.includes(id)).length!==missing.length)throw new Error('독립 판독 크롭 누락/중복.');
+    const result=await request('CropReadings',CropReadings,{images:images.filter(([id])=>missing.includes(id)),
+      maxOutputTokens:8192,prompt:CROP_READING_PROMPT+'\n반환 region_id: '+JSON.stringify(missing)},data=>{
+      const actual=data.regions.map(r=>r.region_id);
+      if(new Set(actual).size!==actual.length||actual.length!==missing.length||missing.some(id=>!actual.includes(id)))
+        throw new Error('독립 판독 영역 ID 누락/중복/추가.');
+    });
+    for(const row of result.regions)readings.set(row.region_id,row);
+  }
+  // Match only literal words/symbols with layout whitespace variation. Keep the original reading's line/cell boundaries.
+  // Align the review input, not stored evidence or raw extraction; content/units/order are never repaired.
+  const escapeLiteral=(RegExp as typeof RegExp & {escape(value:string):string}).escape; // Node 24 native; web TS 5.9 lacks its declaration.
+  const reviewRecords=records.map(record=>{
+    const r=structuredClone(record);
+    r.anchors.forEach((a,i)=>{
+      if(!a.quote)return;
+      const before=a.quote,text=readings.get(`p${a.page}:${a.region_key}`)?.text?.normalize('NFC');
+      const literal=text?.match(new RegExp(normalize(before).split(' ').map(escapeLiteral).join('\\s+'),'u'))?.[0];
+      if(!literal)return;
+      a.quote=literal;if(r.statement===before)r.statement=literal;
+      for(const d of r.details)if(d.value===before&&d.anchor_indices.includes(i+1))d.value=literal;
+    });return r;
+  });
+  const checked=await request('Reviews',Reviews,{prompt:REVIEW_PROMPT+
+    '\n독립 판독 데이터: '+JSON.stringify(expected.map(id=>readings.get(id)))+
+    '\n근거 후보 데이터:\n'+JSON.stringify(reviewRecords.map((r,i)=>({evidence_id:ids[i],...r,
+      anchors:r.anchors.map((a,j)=>({...a,anchor_index:j+1,text_literal_match:a.quote===null?null:
+        normalize(readings.get(`p${a.page}:${a.region_key}`)?.text??'').includes(normalize(a.quote))}))})))},data=>{
+      for(const review of data.reviews){
+        const record=records[ids.indexOf(review.evidence_id)],support=review.document_support;
+        // Presence is not corroboration. Downgrade only this overclaim; malformed references still fail validation.
+        if(record&&review.status==='supported'&&support.status==='documented'&&support.anchor_indices.length&&
+          new Set(support.anchor_indices).size===support.anchor_indices.length&&support.anchor_indices.every(i=>record.anchors[i-1]?.purpose==='claim'))
+          review.document_support={status:'needs_explanation',reason:'claim_only_support_downgraded: 주장 원문만 확인했으며 별도 뒷받침 자료는 연결되지 않았습니다.',anchor_indices:support.anchor_indices};
+      }
+      validateReviews(records,data.reviews,ids);
+    });
+  for(const [i,record] of records.entries()){
+    const review=checked.reviews.find(r=>r.evidence_id===ids[i])!;
+    for(const [j,a] of record.anchors.entries()){
+      const check=review.anchor_checks.find(c=>c.anchor_index===j+1),reading=readings.get(`p${a.page}:${a.region_key}`)!;
+      if(check?.status!=='supported')continue;
+      const match=a.quote?normalize(check.reading_excerpt??'')===normalize(a.quote)&&reading.text!==null&&reading.readability!=='unreadable'&&
+        normalize(reading.text).includes(normalize(a.quote)):
+        !!check.reading_excerpt&&reading.observations.includes(check.reading_excerpt)&&!/\p{N}/u.test(check.reading_excerpt);
+      if(!match){check.status='uncertain';check.reason='blind_crop_reading_not_matched';}
+    }
+    if(review.anchor_checks.length!==record.anchors.length||review.anchor_checks.some(c=>c.status!=='supported')){
+      review.status=review.anchor_checks.some(c=>c.status==='unsupported')?'unsupported':'uncertain';
+      review.document_support={status:'not_assessed',reason:'독립 크롭 판독과 모든 앵커를 연결하지 못했습니다.',anchor_indices:[]};
+    }
+  }
+  return {reviews:checked.reviews,readings};
 }
 export function localEvidenceChecks(record:Evidence):string[] {
   const issues:string[]=[],quotes=record.anchors.flatMap(a=>a.quote?[normalize(a.quote)]:[]);
@@ -109,20 +197,56 @@ export function localEvidenceChecks(record:Evidence):string[] {
       issues.push(`detail_not_verbatim:${d.field}`);
   }
   if('metric' in record&&record.metric){
-    for(const [field,value] of Object.entries(record.metric))if(field!=='result_type'&&value!==null&&!isQuoted(value))issues.push(`metric_not_verbatim:${field}`);
-    const claim=record.anchors.filter(a=>a.purpose==='claim').map(a=>a.quote??'').join(' ');
+    for(const [field,value] of Object.entries(record.metric)){
+      const indices=record.metric_sources?.[field as keyof typeof record.metric],box=[0,0,1000,1000];
+      if(!indices||new Set(indices).size!==indices.length||(value!==null)!==(indices.length>0)||indices.some(i=>!record.anchors[i-1]?.quote)){
+        issues.push(`metric_source_invalid:${field}`);continue;
+      }
+      if(field!=='result_type'&&value!==null&&!indices.some(i=>{
+        const quote=record.anchors[i-1].quote!;
+        // A dashboard may put a complete count on its own line, immediately above its metric label.
+        // This exception is not for excerpts: signs, units and count nouns must still survive full-anchor review.
+        const lines=quote.split(/\r?\n/).map(normalize),name=normalize(record.metric!.name);
+        const separateCount=field==='reported_value'&&/^[+\-−]?\d[\d,.]*$/.test(value)&&lines.some((line,j)=>
+          line===value&&lines[j+1]===name&&/[\p{L}]/u.test(name)&&
+          !/^[+\-−~<>≤≥=$€£₩%‰×/]+$/.test(lines[j-1]??''));
+        return normalize(quote).includes(normalize(value))&&(separateCount||!numericQuoteIssue(value,box,[{box,text:quote}]));
+      }))issues.push(`metric_not_verbatim:${field}`);
+    }
+    const claim=(record.metric_sources?.result_type??[]).map(i=>record.anchors[i-1]?.quote??'').join(' ');
     if(record.metric.result_type==='reported_actual'&&/(?:목표|가설|\btarget\b|\bgoal\b|\bprojected\b)/i.test(claim)
       &&!/(?:달성|실적|\bachieved\b|\bactual\b)/i.test(claim))issues.push('target_misclassified_as_actual');
     if(record.metric.result_type!=='simulation'&&/(?:가상|시뮬레이션|\bsimulated\b|\bfictional\b)/i.test(claim))issues.push('simulation_misclassified');
+    // A breakdown dimension names groups, not the population against which a percentage was calculated.
+    if(record.metric.denominator&&/^(?:상위\s*)?(?:거주\s*)?(?:도시|지역|국가|연령|성별)(?:별|\s*분포)?$|^top\s+(?:cities|countries|locations)$/i.test(normalize(record.metric.denominator)))
+      issues.push('metric_denominator_is_dimension');
   }
   return issues;
 }
 export function atomicArtifacts(record:Evidence):Evidence[] {
-  // A visual-only artifact list is not a single claim. Keep each observed object independently rejectable.
-  // Do not split comparisons, explicit context, mixed text/visual claims, or cross-page relationships.
-  if(record.category!=='artifact'||record.basis!=='visual_observation'||record.anchors.length<2||
-    new Set(record.anchors.map(a=>a.page)).size!==1||record.anchors.some(a=>a.kind!=='visual'||a.purpose!=='artifact'))return [record];
-  return record.anchors.map(anchor=>({...record,statement:anchor.visual_description!,anchors:[anchor],
+  // A literal claim's presence and a neighbouring artifact's support are different questions.
+  // Separate them BEFORE any source review; keep every anchor and required text context, never repair a failed candidate.
+  const claims=record.anchors.filter(a=>a.purpose==='claim'),attachments=record.anchors.filter(a=>a.purpose==='artifact');
+  if(record.basis==='portfolio_claim'&&claims.length===1&&claims[0].kind==='text'&&attachments.length&&
+    !['metric','experiment','research','validation','alternative','iteration'].includes(record.category)&&
+    attachments.every(a=>a.page===claims[0].page)&&record.anchors.filter(a=>a.purpose==='context').every(a=>a.kind==='text')){
+    const retained=[record.anchors.indexOf(claims[0]),...record.anchors.flatMap((a,i)=>a.purpose==='context'?[i]:[])],primary=structuredClone(record);
+    primary.anchors=retained.map(i=>({...record.anchors[i]}));
+    primary.details=record.details.map(d=>d.anchor_indices.every(i=>retained.includes(i-1))?
+      {...d,anchor_indices:d.anchor_indices.map(i=>retained.indexOf(i-1)+1)}:{...d,value:null,anchor_indices:[]});
+    const marketing='metric' in record,category=marketing?'creative':'artifact',fields=marketing?MARKETING_FIELDS.creative:DESIGN_FIELDS.artifact;
+    const children=attachments.map(a=>({...record,category,basis:a.kind==='text'?'portfolio_claim':'visual_observation',
+      statement:(a.quote??a.visual_description)!,anchors:[a,...record.anchors.filter(c=>c.purpose==='context')].map(c=>({...c})),
+      details:fields.map(field=>({field,value:null,anchor_indices:[]}))})) as Evidence[];
+    return [primary,...children];
+  }
+  // Split independent same-page artifacts BEFORE review, retaining every text context anchor on every child.
+  // Never split comparisons, claims, visual context, or artifacts spanning multiple pages.
+  const artifacts=record.anchors.filter(a=>a.kind==='visual'&&a.purpose==='artifact');
+  const context=record.anchors.filter(a=>a.kind==='text'&&a.purpose==='context');
+  if(record.category!=='artifact'||record.basis!=='visual_observation'||artifacts.length<2||
+    new Set(artifacts.map(a=>a.page)).size!==1||artifacts.length+context.length!==record.anchors.length)return [record];
+  return artifacts.map(anchor=>({...record,statement:anchor.visual_description!,anchors:[anchor,...context].map(a=>({...a})),
     // Parent-level summaries/counts cannot describe a child automatically. Preserve the raw response, mark unknown.
     details:record.details.map(d=>({...d,value:null,anchor_indices:[]}))}));
 }
@@ -140,9 +264,9 @@ export type AnalyzeOptions={track:Track;apiKey?:string;model:string;skimModel?:s
 export async function analyzePdf(bytes:Uint8Array,options:AnalyzeOptions) {
   Track.parse(options.track);const scope=options.scope??'focused',pageBudget=options.pageBudget??5,maxQuestions=options.maxQuestions??DEFAULT_MAX_QUESTIONS;
   if(!['focused','full'].includes(scope)||!Number.isInteger(pageBudget)||pageBudget<1||pageBudget>60)throw new Error('분석 범위/페이지 예산 오류.');
-  if(!Number.isInteger(maxQuestions)||maxQuestions<1||maxQuestions>DEFAULT_MAX_QUESTIONS)throw new Error('최대 질문 수는 1~5입니다.');
+  if(!Number.isInteger(maxQuestions)||maxQuestions<1||maxQuestions>DEFAULT_MAX_QUESTIONS)throw new Error(`최대 질문 수는 1~${DEFAULT_MAX_QUESTIONS}입니다.`);
   const questionModel=options.questionModel??(options.generate?options.model:OPENROUTER_MODELS.questions);
-  const opus=questionModel===OPENROUTER_MODELS.questions;
+  const opus=questionModel===OPENROUTER_MODELS.questions||questionModel===TRIAL_MODELS.questions;
   if(options.provider!==undefined&&options.provider!=='openrouter')throw new Error('OpenRouter만 지원합니다.');
   if(!options.generate||options.provider==='openrouter'){
     for(const model of [options.model,options.skimModel??options.model,options.reviewModel??options.model,questionModel])openRouterModel(model);
@@ -202,7 +326,8 @@ export async function analyzePdf(bytes:Uint8Array,options:AnalyzeOptions) {
     }
     const map=await request('DocumentMap',DocumentMap,scan,m=>validateMap(normalizeMap(m),pdf.getPageCount(),pageIndex));
     emit('document_map',map);const plan=selectPages(map,scope,pageBudget);emit('analysis_plan',plan);
-    const digest=sha256(bytes),evidence:ResolvedEvidence[]=[],rejected:Array<{project_key:string;candidate_index:number;reason:string}>=[];
+    const digest=sha256(bytes),evidence:ResolvedEvidence[]=[],rejected:Array<{project_key:string;candidate_index:number;reason:string}>=[],
+      extractionChecks:Array<{project_key:string;point_checks:z.infer<typeof ExtractionPointCheck>[];detail_regions:string[]}>=[];
     for(const original of map.projects){
       if(!plan.selected_project_keys.includes(original.key))continue;
       const project={...original,pages:original.pages.filter(p=>plan.selected_pages.includes(p))};if(!project.pages.length)continue;
@@ -210,10 +335,10 @@ export async function analyzePdf(bytes:Uint8Array,options:AnalyzeOptions) {
       const images:Array<{page:number;parts:Array<{box:number[];png:Buffer}>}>=[];
       for(const page of project.pages)if(!inventories.has(page)){
         const view=(await renderer.getPage(page)).getViewport({scale:1}),parts=[];
-        for(const box of pageTiles(view.width,view.height))parts.push({box,png:await pngFor(page,box,2200)});
+        for(const box of pageTiles(view.width,view.height))parts.push({box,png:await pngFor(page,box,3000)});
         images.push({page,parts});spans.set(page,await textSpans(renderer,page));}
       await concurrent(images,async({page,parts})=>{const tiles=await concurrent(parts,async part=>({box:part.box,
-        inventory:await request('VisualInventory',VisualInventory,{maxOutputTokens:8192,images:[[String(page),part.png]],
+        inventory:await request('VisualInventory',VisualInventory,{maxOutputTokens:16384,thinkingLevel:'HIGH',images:[[String(page),part.png]],
           prompt:VISUAL_PROMPT+'\n이미지가 페이지 일부일 수도 있다. box는 첨부 이미지 전체 기준으로 반환한다. 경계에서 잘린 객체는 uncertain/partial로 기록한다.'},
           inv=>{if(inv.regions.length>20||inv.links.length>20)throw new Error('타일별 최대 20개 영역/관계.');})}),2);
         const inv=VisualInventory.parse(mergeInventories(tiles));
@@ -230,22 +355,27 @@ export async function analyzePdf(bytes:Uint8Array,options:AnalyzeOptions) {
       const detailImages:Array<[string,Uint8Array]>=[];
       for(const {page,parts} of images)if(parts.length>1)for(const part of parts)
         detailImages.push([`local page=${project.pages.indexOf(page)+1}; original page=${page}; tile=${part.box.join(',')}`,part.png]);
+      const detailRegions=extractionDetailRegions(plan.selected_points.filter(p=>p.project_key===project.key),inventories);
+      for(const {page,region}of detailRegions)detailImages.push([
+        `local page=${project.pages.indexOf(page)+1}; region_key=${region.key}; original page=${page}; exact existing box`,await pngFor(page,region.box)]);
       emit('stage',{stage:'extract',project_key:project.key});
       const domain=options.track==='design'?DESIGN_PROMPT:MARKETING_PROMPT;
-      const extraction=await request<{evidence:Evidence[]}>(options.track==='design'?'DesignExtraction':'MarketingExtraction',
-        options.track==='design'?DesignExtraction:MarketingExtraction,{pdf:projectPdf,images:detailImages,prompt:domain+EXTRACTION_RULES+
+      const extraction=await request<{evidence:Evidence[];point_checks?:z.infer<typeof ExtractionPointCheck>[]}>(options.track==='design'?'DesignExtraction':'MarketingExtraction',
+        (options.track==='design'?DesignExtraction:MarketingExtraction).extend({point_checks:z.array(ExtractionPointCheck).max(72)}),{pdf:projectPdf,images:detailImages,prompt:domain+EXTRACTION_RULES+
           '\n대상 프로젝트 데이터: '+JSON.stringify(context)+'\n첨부 분리 PDF의 로컬 페이지 번호를 쓴다. 미선택 페이지는 보지 못했다.'+
           (scope==='full'?' full 모드에서는 후보 외 근거의 focus_target_id=null을 허용한다.':'')+
-          '\n시각 영역 데이터: '+JSON.stringify(inventoryContext)+'\n필수 details: '+JSON.stringify(options.track==='design'?DESIGN_FIELDS:MARKETING_FIELDS)});
+          '\n시각 영역 데이터: '+JSON.stringify(inventoryContext)+'\n필수 details: '+JSON.stringify(options.track==='design'?DESIGN_FIELDS:MARKETING_FIELDS)},data=>validateExtraction(data,points));
+      const extractionCheck={project_key:project.key,point_checks:extraction.point_checks!,detail_regions:detailRegions.map(r=>`p${r.page}:${r.region.key}`)};
+      extractionChecks.push(extractionCheck);emit('extraction_checks',extractionCheck);
       const records:Evidence[]=[],checksByRecord:string[][]=[];
       for(const [i,parent] of extraction.evidence.entries()){
       const pieces=atomicArtifacts(parent);
       if(pieces.length>1)emit('evidence_split',{project_key:project.key,candidate_index:i+1,anchor_count:pieces.length,
-        reason:'independent_visual_artifacts; parent_details_not_inherited'});
+        reason:'independent_evidence_atoms; context_preserved; cross_atom_details_not_inherited'});
       for(const [anchorIndex,record] of pieces.entries())try{
         if(records.length>=16)throw new Error('evidence_limit');
         validateAnchors(record,project,inventories,points,scope);
-        const checks:string[]=pieces.length>1?[`atomic_visual_anchor:${i+1}:${anchorIndex+1}`]:[];
+        const checks:string[]=pieces.length>1?[`atomic_evidence:${i+1}:${anchorIndex+1}`]:[];
         for(const [index,a] of record.anchors.entries())if(a.quote){
           const before=a.quote,page=project.pages[a.page-1],box=inventories.get(page)!.regions.find(r=>r.key===a.region_key)!.box;
           a.quote=alignRangeTypography(before,box,spans.get(page)??[]);
@@ -261,6 +391,7 @@ export async function analyzePdf(bytes:Uint8Array,options:AnalyzeOptions) {
         const failures=localEvidenceChecks(record);
         if(failures.length)throw new Error(failures.join('; '));
         for(const a of record.anchors)if(a.quote){const page=project.pages[a.page-1],region=inventories.get(page)!.regions.find(r=>r.key===a.region_key)!;
+          if(region.kind==='text_block'&&await textCropTouchesEdge(await pngFor(page,region.box)))throw new Error('potential_text_crop_clipping');
           const check=quoteLocationCheck(a.quote,region.box,spans.get(page)??[]);checks.push(`text_layer:${check}`);
           if(check==='outside_region')throw new Error('quote_outside_region');}
         for(const a of record.anchors)if(a.quote){const page=project.pages[a.page-1],box=inventories.get(page)!.regions.find(r=>r.key===a.region_key)!.box;
@@ -268,31 +399,40 @@ export async function analyzePdf(bytes:Uint8Array,options:AnalyzeOptions) {
         records.push(record);checksByRecord.push(checks);
       }catch(e){const row={project_key:project.key,candidate_index:i+1,...(pieces.length>1?{anchor_index:anchorIndex+1}:{}),reason:(e as Error).message};rejected.push(row);emit('evidence_rejected',row);}
       }
-      if(!records.length)continue;
-      const ids=records.map((_,i)=>`${digest.slice(0,12)}:${options.track}:${project.key}:e${i+1}`),reviews:Review[]=[];
+      if(!records.length){emit('extraction_empty',{project_key:project.key,pages:project.pages,
+        selected_point_ids:points.map(p=>p.id),reason:extraction.evidence.length?'all_candidates_rejected':'model_returned_no_evidence'});continue;}
+      const ids=records.map((_,i)=>`${digest.slice(0,12)}:${options.track}:${project.key}:e${i+1}`),reviews:Review[]=[],readings=new Map<string,CropReading>();
       for(let start=0;start<records.length;start+=4){
         const batch=records.slice(start,start+4),batchIds=ids.slice(start,start+4),images:Array<[string,Uint8Array]>=[];
         const references=new Set<string>();
         for(const record of batch)for(const a of record.anchors)references.add(`${a.page}:${a.region_key}`);
         for(const key of references){const [local,regionKey]=key.split(':'),page=project.pages[Number(local)-1],region=inventories.get(page)!.regions.find(r=>r.key===regionKey)!;
-          images.push([`page=${local}; region_key=${regionKey}`,await pngFor(page,region.box)]);}
+          images.push([`p${local}:${regionKey}`,await pngFor(page,region.box)]);}
         emit('stage',{stage:'review',project_key:project.key,batch:start/4+1});
-        const checked=await request('Reviews',Reviews,{pdf:projectPdf,images,prompt:REVIEW_PROMPT+'\n프로젝트 데이터: '+JSON.stringify(context)+
-          '\n근거 후보 데이터:\n'+JSON.stringify(batch.map((r,i)=>({evidence_id:batchIds[i],...r,anchors:r.anchors.map((a,j)=>({...a,anchor_index:j+1,
-            ...{box:inventories.get(project.pages[a.page-1])!.regions.find(r=>r.key===a.region_key)!.box}}))})))},
-          data=>validateReviews(batch,data.reviews,batchIds));reviews.push(...checked.reviews);
+        const checked=await verifyEvidenceCrops(batch,batchIds,images,request,readings);reviews.push(...checked.reviews);
       }
       validateReviews(records,reviews,ids);
       const resolved=records.map((record,i):ResolvedEvidence=>{
         const review=reviews.find(r=>r.evidence_id===ids[i])!;let identified=true;
-        const anchors=record.anchors.map(a=>{const page=project.pages[a.page-1],region=inventories.get(page)!.regions.find(r=>r.key===a.region_key)!;
-          identified&&=region.identification==='clear'&&region.readability!=='unreadable'&&map.pages.find(p=>p.page===page)!.readability!=='unreadable';
-          return {...a,page,region_id:`p${page}:${region.key}`,box:region.box,source_role:region.source_role};});
-        const eligible=identified&&review.status==='supported';
-        return {...record,id:ids[i],project_key:project.key,anchors,source_check:{status:review.status,reason:review.reason,method:'gemini_pdf_and_crop_review'},
-          document_support:review.document_support,verification_scope:'presence_in_pdf_only',
+        const anchors=record.anchors.map((a,j)=>{const page=project.pages[a.page-1],region=inventories.get(page)!.regions.find(r=>r.key===a.region_key)!;
+          identified&&=region.identification==='clear'&&(a.kind==='visual'||
+            (region.readability!=='unreadable'&&map.pages.find(p=>p.page===page)!.readability!=='unreadable'));
+          const check=review.anchor_checks.find(c=>c.anchor_index===j+1),reading=readings.get(`p${a.page}:${a.region_key}`)!;
+          return {...a,...(a.kind==='visual'&&check?.status==='supported'?{visual_description:check.reading_excerpt!}:{}),
+            page,region_id:`p${page}:${region.key}`,box:region.box,source_role:region.source_role,
+            crop_reading:{...reading,region_id:`p${page}:${region.key}`}};});
+        const anchorFailures=record.anchors.flatMap((_,j)=>{
+          const c=review.anchor_checks.find(c=>c.anchor_index===j+1);
+          return c?.status==='supported'?[]:[`anchor_check:${j+1}:${c?.status??'missing'}`];
+        });
+        const status=review.status!=='supported'?review.status:anchorFailures.length?
+          (review.anchor_checks.some(c=>c.status==='unsupported')?'unsupported':'uncertain'):review.status;
+        const eligible=identified&&status==='supported';
+        return {...record,...(record.basis==='visual_observation'&&eligible?{statement:anchors.find(a=>a.kind==='visual')!.visual_description!}:{}),
+          id:ids[i],project_key:project.key,anchors,source_check:{status,reason:review.reason,method:'blind_crop_reading_then_source_comparison',anchor_checks:review.anchor_checks},
+          document_support:status==='supported'?review.document_support:{status:'not_assessed',reason:'연결 앵커 검사를 통과하지 못했습니다.',anchor_indices:[]},verification_scope:'presence_in_pdf_only',
           analysis_scope:{reviewed_project_pages:project.pages,unreviewed_project_pages:context.unseen_project_pages,partial:context.unseen_project_pages.length>0},
-          question_eligible:eligible,question_focus:eligible?QUESTION_FOCUS[options.track+':'+record.category]:null,unknown_fields:record.details.filter(d=>d.value===null).map(d=>d.field),local_checks:checksByRecord[i]};
+          question_eligible:eligible,question_focus:eligible?QUESTION_FOCUS[options.track+':'+record.category]:null,unknown_fields:record.details.filter(d=>d.value===null).map(d=>d.field),local_checks:[...checksByRecord[i],...anchorFailures]};
       });evidence.push(...resolved);emit('evidence_ready',{project_key:project.key,evidence:resolved});
     }
     let questions:QuestionCard[]=[],question_checks:QuestionCheck[]=[],focusCoverage:FocusCoverage[]=[];
@@ -306,9 +446,10 @@ export async function analyzePdf(bytes:Uint8Array,options:AnalyzeOptions) {
           await pngFor(a.page,a.box)]);return images;
       }});questions=generated.cards;question_checks=generated.checks;focusCoverage=generated.focusCoverage;emit('questions_ready',{questions,question_checks});}
     const quality=questionQuality(questions,plan.selected_points.map(p=>p.id),focusCoverage);
-    const result={schema_version:'0.13',created_at:new Date().toISOString(),track:options.track,model:options.model,max_questions:maxQuestions,skim_model:options.skimModel??options.model,review_model:options.reviewModel??options.model,
+    const result={schema_version:'0.17',created_at:new Date().toISOString(),track:options.track,model:options.model,max_questions:maxQuestions,
+      question_target:{requested:maxQuestions,generated:questions.length,shortfall:Math.max(0,maxQuestions-questions.length)},skim_model:options.skimModel??options.model,review_model:options.reviewModel??options.model,
       vision_provider:'openrouter',question_model:questionModel,question_provider:'openrouter',question_input:opus?'verified_evidence_only':'verified_evidence_and_images',
-      document:{sha256:digest,page_count:pdf.getPageCount()},document_map:map,analysis_plan:plan,
+      document:{sha256:digest,page_count:pdf.getPageCount()},document_map:map,analysis_plan:plan,extraction_checks:extractionChecks,
       status:options.inspectOnly?'visual_inspection_only':!questions.length?'insufficient_evidence':quality.status==='ready'?'evidence_ready':'needs_review',quality,evidence,rejected_candidates:rejected,
       question_evidence_ids:evidence.filter(e=>e.question_eligible).map(e=>e.id),questions,question_checks,
       visual_inventory:[...inventories].sort(([a],[b])=>a-b).map(([page,inv])=>({page,...inv,regions:inv.regions.map(r=>({id:`p${page}:${r.key}`,...r}))})),metrics:stats};

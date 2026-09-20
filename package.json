@@ -1,6 +1,6 @@
 {
   "name": "portfolio-evidence",
-  "version": "0.14.0",
+  "version": "0.17.5",
   "private": true,
   "type": "module",
   "engines": { "node": ">=24 <25" },
@@ -11,10 +11,14 @@
     "check:web": "npm --prefix web run check",
     "build:web": "npm --prefix web run build",
     "test:e2e": "npm --prefix web run test:e2e",
+    "test:e2e:paid": "npm --prefix web run test:e2e:paid",
     "check:openrouter": "node src/check-openrouter.ts",
     "analyze": "node src/cli.ts",
     "analyze:openrouter": "node src/cli.ts --provider openrouter",
-    "benchmark": "node src/benchmark.ts"
+    "benchmark": "node src/benchmark.ts",
+    "test:quality:paid": "node benchmark/replay-quality.ts",
+    "seed:examples": "node supabase/seed-examples.ts",
+    "analyze:code": "node src/coding-cli.ts"
   },
   "dependencies": {
     "@napi-rs/canvas": "1.0.9",

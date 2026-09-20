@@ -1,4 +1,5 @@
 import * as z from 'zod';
+import {DEFAULT_MAX_QUESTIONS} from './constants.ts';
 
 export const Text = z.string().trim().min(1).max(1200);
 export const PageNumber = z.number().int().min(1);
@@ -56,7 +57,7 @@ export const Detail = z.strictObject({field: Text, value: Text.nullable(), ancho
   .refine(d => new Set(d.anchor_indices).size === d.anchor_indices.length, 'Duplicate source indices.');
 const BaseEvidence = z.strictObject({focus_target_id: Text.nullable(), statement: Text,
   basis: z.enum(['portfolio_claim','visual_observation']), anchors: z.array(Anchor).min(1).max(6),
-  details: z.array(Detail).min(1).max(8)});
+  details: z.array(Detail).length(4)});
 
 export const DESIGN_FIELDS = {
   problem: ['situation','affected_user','problem_signal','success_criterion'],
@@ -85,6 +86,8 @@ export const MARKETING_FIELDS = {
 export const Metric = z.strictObject({name: Text, reported_value: Text,
   result_type: z.enum(['reported_actual','target','simulation','unclear']), baseline: Text.nullable(),
   period: Text.nullable(), denominator: Text.nullable(), data_source: Text.nullable(), attribution_method: Text.nullable()});
+export const MetricSources = z.strictObject(Object.fromEntries(Object.keys(Metric.shape).map(field=>
+  [field,z.array(PageNumber).max(6)])) as Record<keyof z.infer<typeof Metric>,z.ZodArray<typeof PageNumber>>);
 export const normalize = (value: string) => value.normalize('NFC').replace(/\s+/g, ' ').trim();
 function detailsMatch(e: z.infer<typeof BaseEvidence>, names: readonly string[]) {
   return e.details.length === names.length && new Set(e.details.map(d => d.field)).size === names.length
@@ -97,30 +100,50 @@ export const DesignEvidence = BaseEvidence.extend({category: z.enum(Object.keys(
   .refine(e => e.category !== 'artifact' || e.details.every(d => !['stated_stage','stated_usage'].includes(d.field)
     || d.value === null || d.anchor_indices.some(i => e.anchors[i-1]?.quote &&
       normalize(e.anchors[i-1].quote!).includes(normalize(d.value!)))), 'Stated artifact stage/usage must quote explicit text.');
-export const MarketingEvidence = BaseEvidence.extend({category: z.enum(Object.keys(MARKETING_FIELDS) as [keyof typeof MARKETING_FIELDS, ...Array<keyof typeof MARKETING_FIELDS>]), metric: Metric.nullable()})
+export const MarketingEvidence = BaseEvidence.extend({category: z.enum(Object.keys(MARKETING_FIELDS) as [keyof typeof MARKETING_FIELDS, ...Array<keyof typeof MARKETING_FIELDS>]), metric: Metric.nullable(), metric_sources:MetricSources.nullable()})
   .refine(e => detailsMatch(e, MARKETING_FIELDS[e.category]), 'Detail fields must exactly match category and existing anchors.')
   .refine(e => (e.category === 'metric') === (e.metric !== null), 'Only metric evidence requires a metric object.')
+  .superRefine((e,ctx) => {
+    if((e.metric!==null)!==(e.metric_sources!==null))ctx.addIssue({code:'custom',path:['metric_sources'],
+      message:'Metric and metric_sources must both be null or both be objects.'});
+    if(e.metric&&e.metric_sources)for(const [key,value] of Object.entries(e.metric)){
+      const indices=e.metric_sources[key as keyof z.infer<typeof Metric>];
+      if((value!==null)!==(indices.length>0)||new Set(indices).size!==indices.length||indices.some(i=>i>e.anchors.length))
+        ctx.addIssue({code:'custom',path:['metric_sources',key],message:'Each stated metric field needs its own existing source indices; null fields have none.'});
+    }
+  })
   .refine(e => !['metric','experiment','contribution'].includes(e.category) || e.basis === 'portfolio_claim',
     'Metrics, experiments and contribution remain portfolio claims.');
-export const DesignExtraction = z.strictObject({evidence: z.array(DesignEvidence).max(16)});
-export const MarketingExtraction = z.strictObject({evidence: z.array(MarketingEvidence).max(16)});
+export const ExtractionPointCheck=z.strictObject({focus_target_id:Text,status:z.enum(['extracted','unreadable','no_relevant_source']),
+  evidence_indices:z.array(PageNumber).max(16),reason:Text});
+// Optional only for reading historical extraction responses; new requests require complete point checks.
+export const DesignExtraction = z.strictObject({evidence: z.array(DesignEvidence).max(16),point_checks:z.array(ExtractionPointCheck).max(72).optional()});
+export const MarketingExtraction = z.strictObject({evidence: z.array(MarketingEvidence).max(16),point_checks:z.array(ExtractionPointCheck).max(72).optional()});
 export type Evidence = z.infer<typeof DesignEvidence> | z.infer<typeof MarketingEvidence>;
 export const SupportAssessment = z.strictObject({status: z.enum(['documented','needs_explanation','conflicting','not_assessed']),
   reason: Text, anchor_indices: z.array(PageNumber).max(6)});
+export const CropReading=z.strictObject({region_id:z.string().regex(/^p[1-9][0-9]*:r[1-9][0-9]*$/),
+  text:z.string().trim().min(1).max(6000).nullable(),observations:z.array(Text).max(8),
+  readability:z.enum(['readable','partial','unreadable']),limitations:z.array(Text).max(6)});
+export type CropReading=z.infer<typeof CropReading>;
+export const CropReadings=z.strictObject({regions:z.array(CropReading).min(1).max(24)});
+export const AnchorCheck=z.strictObject({anchor_index:PageNumber,status:z.enum(['supported','uncertain','unsupported']),reason:Text,
+  reading_excerpt:Text.nullable().optional()});
 export const Review = z.strictObject({evidence_id: Text, status: z.enum(['supported','uncertain','unsupported']),
-  reason: Text, document_support: SupportAssessment});
+  reason: Text, anchor_checks:z.array(AnchorCheck).max(6), document_support: SupportAssessment});
 export const Reviews = z.strictObject({reviews: z.array(Review).max(16)});
 export type Review = z.infer<typeof Review>;
-export type ResolvedAnchor = Anchor & {region_id: string; box: Box; source_role: Region['source_role']};
-export type ResolvedEvidence = Omit<Evidence,'anchors'> & {
-  id: string; project_key: string; anchors: ResolvedAnchor[]; source_check: {status: Review['status']; reason: string; method: string};
+export type ResolvedAnchor = Anchor & {region_id: string; box: Box; source_role: Region['source_role'];
+  crop_reading?:CropReading};
+export type ResolvedEvidence = (Omit<z.infer<typeof DesignEvidence>,'anchors'> | Omit<z.infer<typeof MarketingEvidence>,'anchors'>) & {
+  id: string; project_key: string; anchors: ResolvedAnchor[]; source_check: {status: Review['status']; reason: string; method: string; anchor_checks?:z.infer<typeof AnchorCheck>[]};
   document_support: z.infer<typeof SupportAssessment>; verification_scope: 'presence_in_pdf_only';
   analysis_scope: {reviewed_project_pages: number[]; unreviewed_project_pages: number[]; partial: boolean};
   question_eligible: boolean; question_focus: string | null; unknown_fields: string[]; local_checks: string[];
 };
 export const InterviewQuestion = z.strictObject({evidence_id: Text, question: Text, intent: Text,
   listen_for: z.array(Text).min(1).max(3)});
-export const QuestionSet = z.strictObject({questions: z.array(InterviewQuestion).max(5)});
+export const QuestionSet = z.strictObject({questions: z.array(InterviewQuestion).max(DEFAULT_MAX_QUESTIONS)});
 export const QuestionPlan = z.strictObject({evidence_id:Text,
   anchor_indices:z.array(PageNumber).min(1).max(6),
   angle:z.enum(['problem','decision','process','measurement','ownership']),
@@ -128,26 +151,34 @@ export const QuestionPlan = z.strictObject({evidence_id:Text,
 }).refine(q=>new Set(q.anchor_indices).size===q.anchor_indices.length,'Duplicate question anchors.');
 export const QuestionDrafts=z.strictObject({questions:z.array(QuestionPlan.safeExtend({
   question:Text.max(500),intent:Text.max(200),listen_for:z.array(Text.max(200)).min(1).max(3),
-})).max(5)});
+})).max(DEFAULT_MAX_QUESTIONS)});
 export type QuestionPlan=z.infer<typeof QuestionPlan>;
 export type QuestionDraft=Question & QuestionPlan & {answer_target:string};
 export const CoverageSource=z.strictObject({region_id:z.string().regex(/^p[1-9][0-9]*:r[1-9][0-9]*$/),quote:Text.nullable()});
 export const FocusCoverage=z.strictObject({focus_target_id:Text,
   checks:z.array(z.strictObject({aspect:Text,source_requirements:z.array(CoverageSource).max(8)
-    .refine(rows=>new Set(rows.map(r=>JSON.stringify(r))).size===rows.length,'Duplicate coverage sources.'),question_ids:z.array(Text).max(5)
+    .refine(rows=>new Set(rows.map(r=>JSON.stringify(r))).size===rows.length,'Duplicate coverage sources.'),question_ids:z.array(Text).max(DEFAULT_MAX_QUESTIONS)
     .refine(ids=>new Set(ids).size===ids.length,'Duplicate coverage question IDs.')})).min(1).max(8)});
 export type FocusCoverage=z.infer<typeof FocusCoverage>;
+export const QuestionFieldCheck=z.strictObject({field:z.enum(['question','intent','listen_for']),index:PageNumber.nullable(),
+  status:z.enum(['supported','uncertain','unsupported']),reason:Text,
+  field_text:Text.optional(),experience_check:z.strictObject({basis:z.enum(['observed','conditional','documented','unsupported']),
+    condition:Text.nullable(),anchor_index:PageNumber.nullable(),source_excerpt:Text.nullable()}).optional(),
+  premise_checks:z.array(z.strictObject({premise:Text,anchor_index:PageNumber.nullable(),source_excerpt:Text.nullable()})).max(6)});
+export type QuestionFieldCheck=z.infer<typeof QuestionFieldCheck>;
 export const GroundedQuestionReviews=z.strictObject({reviews:z.array(z.strictObject({
   question_id:Text,status:z.enum(['supported','uncertain','unsupported']),reason:Text,
+  field_checks:z.array(QuestionFieldCheck).max(5),
   region_support:z.boolean(),no_added_premise:z.boolean(),distinct_answer:z.boolean(),
   addresses_focus:z.boolean(),substantive:z.boolean(),
-})).max(5),focus_coverage:z.array(FocusCoverage).max(72)});
+})).max(DEFAULT_MAX_QUESTIONS),focus_coverage:z.array(FocusCoverage).max(72)});
 export const QuestionReviews = z.strictObject({reviews: z.array(z.strictObject({question_id: Text,
-  status: z.enum(['supported','uncertain','unsupported']), reason: Text})).max(5)});
+  status: z.enum(['supported','uncertain','unsupported']), reason: Text})).max(DEFAULT_MAX_QUESTIONS)});
 export type Question = z.infer<typeof InterviewQuestion>;
 export type QuestionCard = Question & {id: string; project_key: string; anchors: ResolvedAnchor[];
   focus_target_id: string | null; document_support: z.infer<typeof SupportAssessment>;
   angle?:QuestionDraft['angle'];aspect?:QuestionPlan['aspect'];answer_target?:string;
+  field_checks?:QuestionFieldCheck[];
   focus_check?:{matches:boolean;method:string;reason:string};
   source_excerpt?:Array<{region_id:string;quote:string|null;observation:string|null}>};
 
@@ -162,6 +193,8 @@ export function responseSchema(schema: z.ZodType,closedObjects=false): Record<st
     const result: Record<string, unknown> = {};
     for (const [key, item] of Object.entries(obj)) {
       if (key === 'properties') result[key] = Object.fromEntries(Object.entries(item as object).map(([k,v]) => [k,shape(v)]));
+      // Keep the working provider shape: adding all native bounds triggered a Vertex 400 in web-04.
+      // Exact lengths/ranges remain in local Zod and prompts; this is not a weaker acceptance rule.
       else if (['type','required','items','enum','anyOf'].includes(key)) result[key] = shape(item);
       else if (key === 'const') result.enum = [item];
     }

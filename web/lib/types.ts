@@ -1,10 +1,12 @@
-export type Track = "design" | "marketing";
+export type Track = "design" | "marketing" | "coding";
+
+export type SourceAsset = { id: string; page: number; box?: [number, number, number, number]; kind: "page" | "crop" | "pdf" | "code"; path?: string };
 
 export type RunState = "queued" | "running" | "complete" | "failed";
 
 export type ClientQuestion = {
   id: string;
-  /** 질문 본문(마지막 줄). */
+  /** 인용을 분리한 전체 질문 본문(다중행 보존). */
   prompt: string;
   /** 검증된 원문 인용. */
   quotes: string[];
@@ -15,6 +17,7 @@ export type ClientQuestion = {
   intent: string;
   listenFor: string[];
   answerTarget: string;
+  anchors?: Array<{ page: number; box?: [number, number, number, number]; assetId: string }>;
 };
 
 export type ClientProject = { key: string; title: string; pages: number[] };
@@ -28,6 +31,8 @@ export type ClientResult = {
   questions: ClientQuestion[];
   estimatedCostUsd: number;
   maxQuestions: number;
+  sourceAssets?: SourceAsset[];
+  exampleNotice?: string;
 };
 
 export type RunStatus = {
@@ -42,6 +47,9 @@ export type RunStatus = {
   startedAt: string;
   finishedAt?: string;
   result?: ClientResult;
+  storage?: "local" | "supabase";
+  storageError?: string;
+  answers?: AnswerRecord[];
 };
 
 export type AnswerRecord = { questionId: string; answer: string; seconds: number };

@@ -385,3 +385,22 @@ button {
   font-size: 14px;
   line-height: 1.5;
 }
+/* Member controls follow the existing restrained black/white UI. */
+.account-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 32px; border-bottom:1px solid #e4e4e7; font-size:13px; background:#fafafa; }
+.account-bar > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.account-bar > div,.history-actions { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+.text-button { background:none; border:0; color:#3f3f46; cursor:pointer; padding:6px 0; text-decoration:underline; text-underline-offset:4px; font:inherit; }
+.account-message { max-width:1040px; margin:16px auto; padding:0 24px; line-height:1.6; }
+.account-dialog { width:min(460px,calc(100% - 32px)); border:1px solid #e4e4e7; border-radius:16px; padding:28px; color:#18181b; }
+.account-dialog::backdrop { background:rgb(24 24 27 / .35); }
+.account-dialog form,.account-dialog label { display:flex; flex-direction:column; gap:12px; }
+.account-dialog form { gap:20px; }
+.dialog-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.dialog-heading h2 { margin:0; font-size:23px; letter-spacing:-.03em; }
+.history-card { padding:24px; display:flex; flex-direction:column; gap:16px; }
+.history-card h2 { margin:0; font-size:18px; overflow-wrap:anywhere; }
+.history-card p { color:#71717a; font-size:13px; }
+.source-preview { padding:16px; border:1px solid #e4e4e7; border-radius:8px; }
+.source-preview img { max-width:100%; height:auto; }
+.source-preview pre { overflow:auto; max-height:440px; font-size:12px; white-space:pre-wrap; overflow-wrap:anywhere; }
+@media (max-width:600px) { .account-bar { flex-direction:column; align-items:flex-start; padding:12px 20px; } .account-bar > span { max-width:100%; } }

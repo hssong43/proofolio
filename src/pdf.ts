@@ -1,5 +1,5 @@
 import {PDFDocument, ParseSpeeds} from 'pdf-lib';
-import {createCanvas, DOMMatrix, ImageData, Path2D} from '@napi-rs/canvas';
+import {createCanvas, loadImage, DOMMatrix, ImageData, Path2D} from '@napi-rs/canvas';
 import {mkdir, writeFile} from 'node:fs/promises';
 import {dirname, join} from 'node:path';
 import {createRequire} from 'node:module';
@@ -97,6 +97,17 @@ export async function renderPng(bytes: Uint8Array, page=1, box?: Box) {
   try { return (await renderPage(renderer,page,box)).toBuffer('image/png'); }
   finally { await renderer.loadingTask.destroy(); }
 }
+export async function textCropTouchesEdge(png:Uint8Array) {
+  const image=await loadImage(Buffer.from(png)),canvas=createCanvas(image.width,image.height),ctx=canvas.getContext('2d');
+  ctx.drawImage(image,0,0);const {data}=ctx.getImageData(0,0,canvas.width,canvas.height),w=canvas.width,h=canvas.height;
+  const different=(pixel:number,threshold:number)=>[0,1,2].some(c=>Math.abs(data[pixel*4+c]-data[c])>threshold);
+  // ponytail: conservative flat-background text heuristic, not OCR; patterned backgrounds still need visual review.
+  // Decorative edge ink may also defer a crop. Never enlarge or repair a failed region automatically.
+  if([w-1,w*(h-1),w*h-1].some(p=>different(p,12)))return false;
+  const edges=[Array.from({length:w},(_,x)=>x),Array.from({length:w},(_,x)=>w*(h-1)+x),
+    Array.from({length:h},(_,y)=>y*w),Array.from({length:h},(_,y)=>y*w+w-1)];
+  return edges.some(edge=>edge.filter(p=>different(p,48)).length>=3);
+}
 export type TextSpan = {text: string; box: Box};
 export async function textSpans(document: Renderer, pageNumber: number): Promise<TextSpan[]> {
   const page = await document.getPage(pageNumber);
@@ -131,7 +142,7 @@ function numericBoundaryClipped(quote:string,source:string):boolean {
     const end=chars[at+key.length-1],before=text.slice(0,chars[at].index),after=text.slice(end.index+end[0].length);
     // ponytail: conservative numeric-edge check; ambiguous trailing words require a longer quote or image review.
     clipped=(/^\p{N}/u.test(key)&&/[\p{N}+\-‐‑‒–—−~<>≤≥=$€£₩]\s*$/u.test(before))||
-      (/\p{N}$/u.test(key)&&/^\s*(?:[\p{L}\p{N}%‰×/°]|[.,]\p{N})/u.test(after))||
+      (/\p{N}$/u.test(key)&&/^\s*(?:[\p{L}\p{N}%‰×/°]|[.,]\p{N}|[-‐‑‒–—−~]\s*\p{N})/u.test(after))||
       (/%$/u.test(key)&&/^\s*p(?![a-z])/iu.test(after));
     if(!clipped)return false;
   }

@@ -19,7 +19,7 @@ export function RoleScreen({ role, demo, onSelect, onNext }: Props) {
     <div className="screen">
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <h2 className="screen-title">어떤 직무로 검증받을까요?</h2>
-        <p className="screen-subtitle">직무에 맞춰 질문이 달라져요</p>
+        <p className="screen-subtitle">{demo ? '기존 실제 생성 결과로 체험해요 · 업로드와 로그인 불필요' : '직무에 맞춰 질문 6~10개를 만들어요 · 근거에 따라 더 적을 수 있어요'}</p>
       </div>
       <div className="card" style={{ padding: 32, display: "flex", flexDirection: "column", gap: 32 }}>
         <div className="role-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 16 }}>

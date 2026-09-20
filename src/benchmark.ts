@@ -22,7 +22,7 @@ function vertexUsage(raw:unknown) {
   if(!count(input)||!count(total))throw new BudgetError('Stored Opus token totals invalid.');
   return {promptTokenCount:input,candidatesTokenCount:u.output_tokens,totalTokenCount:total,cachedContentTokenCount:cached};
 }
-import {OPENROUTER_MODELS,openRouterUsage,validateOpenRouterKey} from './openrouter.ts';
+import {OPENROUTER_MODELS,openRouterUsage,unconfirmedPartialTokens,validateOpenRouterKey} from './openrouter.ts';
 
 const Source=z.object({id:z.string().regex(/^[a-z][a-z0-9-]+$/),author:z.string().min(1),track:Track,language:z.enum(['ko','en']),
   subtype:z.string(),source_url:z.url(),pdf_url:z.url().optional(),pdf_match:z.string().optional(),source_basis:z.string(),public_conditions:z.string()}).strict();
@@ -82,7 +82,7 @@ export function validateGold(corpus:z.infer<typeof Corpus>){
       ||[...g.projects.flatMap(p=>p.pages),...g.points.flatMap(p=>[...p.pages,...p.required_context_pages])].some(p=>!g.reviewed_pages.includes(p)))throw new Error('Incomplete or mismatched source gold: '+s.id);
     return g;});
 }
-async function run(phase:string,runId:string,ids:string[],models:{model:string;skimModel:string;reviewModel:string;questionModel:string;limit:number;ledger:string}){
+export async function run(phase:string,runId:string,ids:string[],models:{model:string;skimModel:string;reviewModel:string;questionModel:string;limit:number;ledger:string}){
   if(phase!=='pilot'||!/^[a-z0-9-]+$/.test(runId))throw new Error('Only the current pilot and a unique safe run ID are supported.');
   const corpus=Corpus.parse(json('benchmark/corpus.json')),gold=validateGold(corpus),hash=codeHash();
   if(new Set(ids).size!==ids.length||ids.some(id=>!corpus.some(s=>s.id===id)))throw new Error('Unknown/duplicate document ID.');
@@ -133,17 +133,23 @@ export function responseUsage(raws:Array<Record<string,any>>,fallbackModel:strin
   const rows=raws.map(raw=>{
     const model=raw._request_model??fallbackModel,provider=raw._request_provider==='openrouter'||Object.values(OPENROUTER_MODELS).includes(model)?'openrouter':model===OPUS_MODEL?'vertex':'gemini';
     try{const routed=provider==='openrouter'?openRouterUsage(raw.usage):null;
-      const usage=routed?{promptTokenCount:routed.promptTokenCount,candidatesTokenCount:routed.candidatesTokenCount,totalTokenCount:routed.totalTokenCount,
+      let usage=routed?{promptTokenCount:routed.promptTokenCount,candidatesTokenCount:routed.candidatesTokenCount,totalTokenCount:routed.totalTokenCount,
         thoughtsTokenCount:routed.thinking_tokens,cachedContentTokenCount:routed.cached_tokens}:provider==='vertex'?{...vertexUsage(raw.usage),thoughtsTokenCount:null}:raw.usageMetadata;
       const cost=routed?routed.cost_usd:usageCost(model,provider==='vertex'?vertexUsage(raw.usage):usage);
-      return {model,provider,stage:raw._request_stage??null,usage,cost_usd:cost,output_includes_thinking:provider!=='gemini'};
+      const partialError=routed!==null&&unconfirmedPartialTokens(raw);
+      // Partial text plus zero native counters does not prove zero tokens. Keep API cost but never estimate missing tokens.
+      if(partialError)usage={promptTokenCount:null,candidatesTokenCount:null,totalTokenCount:null,thoughtsTokenCount:null,cachedContentTokenCount:null};
+      return {model,provider,stage:raw._request_stage??null,usage,cost_usd:cost,output_includes_thinking:provider!=='gemini',
+        ...(partialError?{token_usage_status:'unconfirmed_partial_error'}:{})};
     }catch{return {model,provider,stage:raw._request_stage??null,usage:{cachedContentTokenCount:null},cost_usd:null,output_includes_thinking:provider!=='gemini'};}
   });
   const summarize=(items:typeof rows,pending:boolean)=>({
     tokens:pending?{input:null,output:null,thinking:null,cached:null,total:null}:tokenTotals(items.map(r=>r.usage)),
     recorded_tokens:tokenTotals(items.map(r=>r.usage)),unresolved_call:pending,unknown_usage_responses:items.filter(r=>r.cost_usd===null).length,
     known_cost_usd:items.reduce((n,r)=>n+(r.cost_usd??0),0),cost_usd:pending||items.some(r=>r.cost_usd===null)?null:items.reduce((n,r)=>n+r.cost_usd!,0)});
-  return {...summarize(rows,unresolvedProviders.length>0),providers:Object.fromEntries([...new Set([...rows.map(r=>r.provider),...unresolvedProviders])]
+  return {...summarize(rows,unresolvedProviders.length>0),
+    application_http_retries:raws.filter(r=>Number.isSafeInteger(r._application_http_attempt)&&r._application_http_attempt>1).length,
+    providers:Object.fromEntries([...new Set([...rows.map(r=>r.provider),...unresolvedProviders])]
     .map(p=>[p,{...summarize(rows.filter(r=>r.provider===p),unresolvedProviders.includes(p)),output_includes_thinking:p!=='gemini'}])),rows};
 }
 export function pilotPass(result:{questions:unknown[];quality?:{status:string}},audit:z.infer<typeof Audit>|null){
@@ -168,7 +174,8 @@ export function report(runId:string){
     const accounting=responseUsage(raws,runInfo.model,unresolved),totals=accounting.tokens,unknownUsage=accounting.unknown_usage_responses;
     const costUnknown=accounting.cost_usd===null;
     const costs={known_cost_usd:accounting.known_cost_usd,cost_usd:costUnknown?null:accounting.cost_usd,
-      cost_may_be_unknown:costUnknown,providers:accounting.providers,provider_retries:null,application_http_retries:0};
+      cost_may_be_unknown:costUnknown,providers:accounting.providers,provider_retries:null,
+      application_http_retries:accounting.application_http_retries};
     if(!existsSync(path)){
       return {id:s.id,track:s.track,status:failure?.status??'unattempted',error:failure?.error??null,total_ms:failure?.elapsed_ms??null,
         questions:0,grounded_unique:null,reviewed:false,pass:false,pilot_pass:false,tokens:totals,...costs,unknown_usage_responses:unknownUsage,

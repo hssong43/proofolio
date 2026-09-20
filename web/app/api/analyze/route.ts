@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { DEFAULT_MAX_QUESTIONS, startRun, sameOrigin } from "@/lib/server/runner";
 import type { Track } from "@/lib/types";
+import { requireUser } from "@/lib/server/auth";
+import { ensureMember } from "@/lib/server/database";
+import { AnswerError } from "@/lib/server/runner";
+import { MIN_TARGET_QUESTIONS } from "../../../../src/constants.ts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,13 +25,15 @@ export async function POST(request: Request) {
   if (file.size === 0 || file.size > MAX_PDF_BYTES) return NextResponse.json({ error: "PDF는 50MB 이하여야 해요." }, { status: 400 });
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (bytes.length < 5 || !bytes.subarray(0, 5).every((b, i) => b === "%PDF-".charCodeAt(i))) return NextResponse.json({ error: "PDF 파일만 올릴 수 있어요." }, { status: 400 });
-  if (!Number.isInteger(maxQuestionsRaw) || maxQuestionsRaw < 1 || maxQuestionsRaw > DEFAULT_MAX_QUESTIONS)
-    return NextResponse.json({ error: "질문 수는 1~5개예요." }, { status: 400 });
+  if (!Number.isInteger(maxQuestionsRaw) || maxQuestionsRaw < MIN_TARGET_QUESTIONS || maxQuestionsRaw > DEFAULT_MAX_QUESTIONS)
+    return NextResponse.json({ error: `질문 수는 ${MIN_TARGET_QUESTIONS}~${DEFAULT_MAX_QUESTIONS}개예요.` }, { status: 400 });
   const maxQuestions = maxQuestionsRaw;
   try {
-    const status = await startRun({ bytes, fileName: file.name, track: track as Track, maxQuestions });
+    const user = await requireUser();
+    await ensureMember(user.id, user.authId);
+    const status = await startRun({ bytes, fileName: file.name, track: track as Track, maxQuestions, userId: user.id, member: true });
     return NextResponse.json({ runId: status.runId });
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    return NextResponse.json({ error: (e as Error).message }, { status: e instanceof AnswerError ? e.status : 500 });
   }
 }
