@@ -28,6 +28,18 @@ Playwright는 `.next-e2e`에 빌드한 후 `127.0.0.1:3101`에 전용 서버를 
 - CLI·웹·벤치마크 공유 원장: `output/openrouter-budget.jsonl`. 새 웹 전용 원장으로 예산을 초기화하지 않는다.
 - 모델·검증 방식·최신 유료 검증 결과는 [루트 README](../README.md)를 따른다.
 
+## Vercel Git 자동 빌드
+
+Vercel 프로젝트의 Root Directory는 `web`, 루트 바깥 소스 포함 옵션은 켠 상태로 유지한다.
+`web/vercel.json`이 설치 명령을 `npm ci --prefix .. && npm ci`로 지정하므로,
+루트 분석 코어와 웹의 두 lockfile을 모두 설치한 뒤 `npm run build`를 실행한다.
+`web/package.json`에서도 Node.js 24를 지정한다. 웹 패키지만 설치하면 상위 `src/`의
+`zod`, `pdf-lib`, `@napi-rs/canvas`, `pdfjs-dist`를 찾지 못해 빌드가 실패한다.
+
+이 설정은 **빌드 의존성 누락 수정**이다. 현재 분석 실행은 로컬 자식 프로세스·영속 디스크·비용 원장에
+의존하므로, Vercel에서 실제 PDF 분석까지 운영하려면 별도 실행 구조가 필요하다.
+빌드 통과를 유료 분석·메일·DB 연동의 배포 검증 완료로 해석하지 않는다.
+
 ## 화면과 제한
 
 회원: 이메일 로그인 → 직무 선택 → PDF/공개 GitHub 입력 → 분석 → 실제 생성 수 확인 → 문항별 답변 저장 → 내 기록.

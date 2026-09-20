@@ -177,6 +177,7 @@ PROOFOLIO_MAX_COST_USD=0 npm --prefix web run start -- --port 3100
 - 공용 로더 우선순위: 프로세스 환경 → 루트 `.env` → `.env.openrouter`. **코딩 CLI는 현재 별도 env 객체로 파일을 읽는다**(`src/coding-cli.ts`); 환경변수만 주입하는 배포에서는 해당 경로를 확인해야 한다.
 - 기본 dev 포트는3000이므로 Auth callback 설정과 맞춘다. 현재 로컬 시연은 `http://127.0.0.1:3100/?demo=1`. `?run=UUID`는 본인 기록 복구, `?questions=6..10`, `?seconds=10..120`도 지원한다. `fast=1`은 더 이상 가짜 분석을 실행하지 않는다.
 - 같은 `.next`로 빌드하는 동안 실행 중인 미리보기 서버를 건드리지 않는다. 재빌드가 필요하면 해당 서버만 정지하고 다시 예산0으로 시작한다.
+- Vercel Git 자동 빌드는 Root Directory `web` + 루트 바깥 소스 포함을 전제로 `web/vercel.json`에서 루트/웹을 모두 `npm ci`한다. 웹도 Node.js 24를 지정한다. 의존성 설치 수정일 뿐, 로컬 자식 프로세스·영속 원장을 서버리스에 이식한 것은 아니다. 자세한 설정은 `web/README.md`를 따른다.
 
 무과금 웹 검사:
 
