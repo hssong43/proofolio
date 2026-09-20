@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {scoreSubmission,scoresFor,scoringModel,toScore} from '../web/lib/server/scoring.ts';
-import {listSubmissions,rescoreSubmission} from '../web/lib/server/recruiting.ts';
+import {completeSubmission,listSubmissions,rescoreSubmission} from '../web/lib/server/recruiting.ts';
 import {AnswerScoring} from '../src/scoring.ts';
 
 const owner='a'.repeat(64),candidate='b'.repeat(64),other='c'.repeat(64);
@@ -11,7 +11,8 @@ const questions=[{id:'q1',prompt:'기여 범위는?',quotes:[],notes:[],pages:[1
   {id:'q2',prompt:'측정 조건은?',quotes:[],notes:[],pages:[1],projectTitle:'p',intent:'측정 조건 확인',listenFor:['기간','비교 기준'],answerTarget:'y'}];
 
 function stub(options:{scoreRow?:Record<string,unknown>|null;onRpc:(name:string,body:any)=>unknown}) {
-  const original=globalThis.fetch,keys=['SUPABASE_URL','SUPABASE_SECRET_KEY','SUPABASE_SERVICE_ROLE_KEY','PROOFOLIO_MAX_COST_USD','OPENROUTER_SCORING_MODEL'] as const,before=keys.map(k=>process.env[k]);
+  const original=globalThis.fetch,keys=['SUPABASE_URL','SUPABASE_SECRET_KEY','SUPABASE_SERVICE_ROLE_KEY','PROOFOLIO_MAX_COST_USD','OPENROUTER_SCORING_MODEL','VERCEL','PROOFOLIO_EXECUTION'] as const,before=keys.map(k=>process.env[k]);
+  process.env.VERCEL='';process.env.PROOFOLIO_EXECUTION='';
   process.env.SUPABASE_URL='https://example.supabase.co';process.env.SUPABASE_SECRET_KEY='sb_secret_synthetic';process.env.SUPABASE_SERVICE_ROLE_KEY='';
   const calls:Array<{path:string;body:any}>=[];
   globalThis.fetch=async(input,init)=>{
@@ -62,4 +63,21 @@ test('scoreSubmission without an approved budget records a failure instead of ca
   }finally{done.restore();}
   assert.equal(scoringModel({}),'anthropic/claude-opus-5');
   assert.throws(()=>scoringModel({OPENROUTER_SCORING_MODEL:'openrouter/auto'}),/지원하지 않는/);
+});
+
+test('serverless scoring is blocked before a model call and cannot fail an already saved submission',async()=>{
+  for(const key of ['VERCEL','PROOFOLIO_EXECUTION'] as const){
+    const saved:any[]=[];const s=stub({onRpc:(name,body)=>{
+      if(name==='proofolio_complete_submission')return submissionId;
+      assert.equal(name,'proofolio_save_submission_score');saved.push(body.p_score);return submissionId;
+    }});
+    try{
+      process.env[key]=key==='VERCEL'?'1':'steps';
+      await completeSubmission(submissionId,candidate,{runId});
+      assert.deepEqual(saved.map(x=>x.state),['failed']);
+      assert.match(saved[0].error,/단계형 실행/);
+      assert.ok(s.calls.every(c=>!c.path.includes('proofolio_execution')));
+      assert.equal((await rescoreSubmission(testId,submissionId,owner)).state,'failed');
+    }finally{s.restore();}
+  }
 });

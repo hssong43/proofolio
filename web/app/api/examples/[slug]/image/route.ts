@@ -8,7 +8,7 @@ const headers = { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options'
 
 export async function GET(request: Request, context: { params: Promise<{ slug: string }> }) {
   const contest = contestSettings();
-  if (contest.enabled && contest.closed) return NextResponse.json({ error: '대회 체험이 종료됐어요.' }, { status: 410, headers });
+  if (contest.enabled && contest.closed) return NextResponse.json({ error: '프리뷰가 종료됐어요.' }, { status: 410, headers });
   const { slug } = await context.params, value = new URL(request.url).searchParams.get('page') ?? '';
   if (!['design', 'marketing'].includes(slug) || !/^[1-9]\d?$/.test(value))
     return NextResponse.json({ error: '예제 이미지를 찾을 수 없어요.' }, { status: 404, headers });

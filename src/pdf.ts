@@ -2,13 +2,14 @@ import {PDFDocument, ParseSpeeds} from 'pdf-lib';
 import {createCanvas, loadImage, DOMMatrix, ImageData, Path2D} from '@napi-rs/canvas';
 import {mkdir, writeFile} from 'node:fs/promises';
 import {dirname, join} from 'node:path';
-import {createRequire} from 'node:module';
 import type {Box, VisualInventory} from './schema.ts';
 import {Box as BoxSchema, normalize} from './schema.ts';
 import { MAX_PDF_BYTES } from './constants.ts';
 export { MAX_PDF_BYTES } from './constants.ts';
-const require = createRequire(import.meta.url);
-const pdfjsRoot = dirname(require.resolve('pdfjs-dist/package.json'));
+// Runtime resolution: Webpack's static require.resolve returns a numeric module ID, not a file path.
+// Both supported launch directories (repo root and web/) resolve the root-installed PDF.js package.
+const packageRequire = process.getBuiltinModule('module').createRequire(join(process.cwd(), 'package.json'));
+const pdfjsRoot = dirname(packageRequire.resolve('pdfjs-dist/package.json'));
 Object.assign(globalThis, {DOMMatrix, ImageData, Path2D});
 const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
@@ -25,7 +26,8 @@ export async function readPdf(bytes: Uint8Array) {
 export async function slicePdf(document: PDFDocument, pages: number[]) {
   if (!pages.length || new Set(pages).size !== pages.length || pages.some(p => !Number.isInteger(p) || p < 1 || p > document.getPageCount()))
     throw new Error('분리할 페이지 목록이 잘못되었습니다.');
-  const result = await PDFDocument.create();
+  // Stable bytes let a resumed run reuse exactly the same model request, across processes/dates.
+  const result = await PDFDocument.create({ updateMetadata: false });
   for (const page of await result.copyPages(document, pages.map(p => p-1))) result.addPage(page);
   const bytes = await result.save();
   if (bytes.length > MAX_PDF_BYTES) throw new Error('분리 PDF가 50 MB를 초과했습니다.');

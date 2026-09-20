@@ -1,4 +1,4 @@
-import type { AnswerRecord, PortfolioExample, RunStatus, Track } from "./types.ts";
+import type { AnswerRecord, PortfolioExample, RunStatus, SubmissionScore, Track } from "./types.ts";
 import { MAX_PDF_BYTES } from '../../src/constants.ts';
 
 async function parse<T>(res: Response): Promise<T> {
@@ -32,6 +32,10 @@ export async function fetchStatus(runId: string) {
   return parse<RunStatus>(await fetch(`/api/analyze/${runId}`, { cache: "no-store" }));
 }
 
+export async function advanceAnalysis(runId: string) {
+  return parse<RunStatus>(await fetch(`/api/analyze/${runId}/step`, { method: 'POST', cache: 'no-store' }));
+}
+
 export async function fetchExample(track: Track) {
   return parse<PortfolioExample>(await fetch(`/api/examples/${track}`, { cache: 'no-store' }));
 }
@@ -60,5 +64,5 @@ export async function recruitingRequest<T>(url: string, body?: unknown, method=b
 
 /** 담당자가 완료된 제출을 다시 채점한다. 결과는 상세 조회로 확인한다. */
 export function rescoreSubmission(testId: string, submissionId: string) {
-  return recruitingRequest<{ ok: true; state: 'running' }>('/api/admin/tests/' + testId + '/submissions/' + submissionId + '/score', {});
+  return recruitingRequest<{ ok: true; state: SubmissionScore['state'] }>('/api/admin/tests/' + testId + '/submissions/' + submissionId + '/score', {});
 }

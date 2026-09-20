@@ -6,7 +6,7 @@ import { contestSettings } from './contest';
 
 export async function recruitingRoute(request: Request, action: (userId: string) => Promise<unknown>) {
   try {
-    if(contestSettings().enabled)throw new AnswerError('대회 체험에서는 채용 기능을 공개하지 않아요.',404);
+    if(contestSettings().enabled)throw new AnswerError('프리뷰에서는 채용 기능을 공개하지 않아요.',404);
     if(request.method!=='GET'&&!sameOrigin(request))throw new AnswerError('같은 사이트에서만 요청할 수 있어요.',403);
     const user=await requireUser();
     await ensureMember(user.id,user.authId);

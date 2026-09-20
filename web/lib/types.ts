@@ -40,6 +40,7 @@ export type RunStatus = {
   track: Track;
   fileName: string;
   state: RunState;
+  execution?: 'local' | 'steps';
   /** 0 읽는 중, 1 추출 중, 2 질문 생성 중, 3 완료 */
   stage: number;
   lastEvent?: string;

@@ -8,7 +8,7 @@ const headers = { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options'
 
 export async function GET(_request: Request, context: { params: Promise<{ slug: string }> }) {
   const contest = contestSettings();
-  if (contest.enabled && contest.closed) return NextResponse.json({ error: '대회 체험이 종료됐어요.' }, { status: 410, headers });
+  if (contest.enabled && contest.closed) return NextResponse.json({ error: '프리뷰가 종료됐어요.' }, { status: 410, headers });
   try {
     const path = await exampleAssetPath((await context.params).slug, 'pdf');
     if (!path) return NextResponse.json({ error: '예제 포트폴리오를 찾을 수 없어요.' }, { status: 404, headers });

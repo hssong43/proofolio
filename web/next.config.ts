@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
   distDir: process.env.PROOFOLIO_E2E === '1' ? '.next-e2e' : '.next',
   serverExternalPackages: ["@napi-rs/canvas", "pdfjs-dist"],
   outputFileTracingRoot: fileURLToPath(new URL("..", import.meta.url)),
+  outputFileTracingIncludes: {
+    '/api/analyze/*/step': ['../node_modules/pdfjs-dist/{cmaps,standard_fonts,wasm,legacy/build}/**/*', '../node_modules/@napi-rs/canvas*/**/*'],
+  },
 };
 
 export default nextConfig;

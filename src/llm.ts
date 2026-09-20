@@ -27,6 +27,13 @@ export function schemaErrorSummary(error:z.ZodError,schema:z.ZodType) {
   }).join('; ');
 }
 export class BudgetError extends Error {}
+// The CLI ledger is synchronous; serverless execution uses an atomic Postgres ledger.
+export type CostBudget = {
+  provider: 'openrouter' | undefined; blocked: boolean;
+  reserveUsd(model: string, usd: number): string | Promise<string>;
+  settleUsd(id: string, usd: number): number | Promise<number>;
+  block(reason: string): void | Promise<void>;
+};
 export class HttpResponseError extends Error {
   readonly status:number;
   readonly request_id:string|null;

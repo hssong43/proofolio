@@ -50,6 +50,7 @@ export function uploadMetadata(value: unknown) {
 
 export async function preparePdfUpload(metadata: ReturnType<typeof uploadMetadata>, user: UploadUser) {
   if (storageMode() !== 'supabase') throw new AnswerError('직접 업로드에는 비공개 Storage 연결이 필요해요.', 503);
+  if (process.env.VERCEL || process.env.PROOFOLIO_EXECUTION === 'steps') await (await import('./steps.ts')).requireStepBudget();
   const status: StoredRun = { runId: randomUUID(), userId: user.id, fileName: metadata.fileName, track: metadata.track,
     pdfSha256: metadata.sha256, requestedQuestions: metadata.maxQuestions, state: 'running', stage: 0,
     startedAt: new Date().toISOString(), storage: 'supabase' };

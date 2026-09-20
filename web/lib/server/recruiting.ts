@@ -135,8 +135,8 @@ export async function completeSubmission(id: string, userId: string, body: Recor
   validId(id);validMember(userId);const runId=canonicalRunId(body);
   const saved=await rpc('proofolio_complete_submission',{p_submission_id:id,p_user_id:userId,p_run_id:runId});
   if(saved!==id)throw new AnswerError('제출 완료 응답을 확인하지 못했어요. 제출 확인만 재시도해주세요.',503);
-  // Scoring runs after the response; its result is read from the scores table, never from this request.
-  void scoreSubmission({submissionId:id,userId,runId}).catch(()=>{});
+  // Persist the scoring outcome before responding; a scoring failure never undoes the submitted answers.
+  await scoreSubmission({submissionId:id,userId,runId});
 }
 /** 담당자가 실패/미채점 제출을 다시 채점한다. 진행 중이면 409. */
 export async function rescoreSubmission(testId: string, submissionId: string, ownerId: string) {
@@ -148,8 +148,8 @@ export async function rescoreSubmission(testId: string, submissionId: string, ow
   if(!row.completed_at||!row.run_id)throw new AnswerError('제출이 완료된 뒤에 채점할 수 있어요.',409);
   const current=(await scoresFor([row.id])).get(row.id);
   if(isScoring(row.id)||current?.state==='running')throw new AnswerError('이미 채점이 진행 중이에요.',409);
-  void scoreSubmission({submissionId:row.id,userId:row.user_id,runId:row.run_id},{force:true}).catch(()=>{});
-  return {ok:true as const,state:'running' as const};
+  const state=await scoreSubmission({submissionId:row.id,userId:row.user_id,runId:row.run_id},{force:true});
+  return {ok:true as const,state};
 }
 export async function deleteTest(id: string, userId: string) {
   await ownedTest(id,userId);

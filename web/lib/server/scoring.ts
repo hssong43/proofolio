@@ -56,6 +56,9 @@ export async function scoreSubmission(job: ScoringJob, options: { generate?: Gen
     const env = process.env;
     loadRuntimeEnv(ROOT, env);
     const model = scoringModel(env);
+    // ponytail: file-ledger scoring is local-only; add DB-backed claims/budget before enabling serverless scoring.
+    if (!options.generate && (env.VERCEL || env.PROOFOLIO_EXECUTION === 'steps'))
+      throw new Error('현재 단계형 실행에는 AI 채점이 연결되지 않았어요. 제출한 답변은 저장되어 있어요.');
     await saveScore(job.submissionId, job.userId, { state: 'running', model });
     const [run, answers] = await Promise.all([databaseRun(job.runId), databaseAnswers(job.runId)]);
     if (!run || run.userId !== job.userId || !run.result) throw new Error('채점할 실행 결과를 찾을 수 없어요.');

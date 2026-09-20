@@ -1,4 +1,4 @@
--- After 001/002/003/004; synthetic data always rolls back.
+-- After 001 through 007; synthetic data always rolls back.
 begin;
 do $$
 declare
@@ -13,8 +13,8 @@ begin
   set local role service_role;
   insert into public.proofolio_tests(id,owner_id,code,title,role,starts_at,ends_at)
     values(tid,owner_id,'ZZZ235','SYNTHETIC-SCORES','designer',now()-interval '1 hour',now()+interval '1 hour');
-  insert into public.proofolio_runs(id,user_id,track,file_name,state,started_at,result)
-    values(rid,member_id,'design','x.pdf','complete',now(),'{"questions":[{"id":"q1","prompt":"p"}]}'::jsonb);
+  insert into public.proofolio_runs(id,user_id,track,file_name,pdf_sha256,requested_question_count,state,started_at,result)
+    values(rid,member_id,'design','x.pdf',repeat('a',64),1,'complete',now(),'{"questions":[{"id":"q1","prompt":"p"}]}'::jsonb);
   insert into public.proofolio_submissions(id,test_id,user_id,candidate_name,birth_date,phone,run_id)
     values(sid,tid,member_id,'응시자','2000-01-01','01000000000',rid);
   begin
@@ -36,7 +36,7 @@ begin
   if summary.scored_count<>1 or summary.average_score<>78 or summary.completed_count<>1 then raise exception 'Summary aggregates wrong'; end if;
   perform public.proofolio_save_submission_score(sid,member_id,'{"state":"failed","error":"boom"}'::jsonb);
   if (select state from public.proofolio_submission_scores where submission_id=sid)<>'failed' then raise exception 'Upsert failed'; end if;
-  delete from public.proofolio_tests where id=tid;
+  perform public.proofolio_delete_test(tid,owner_id);
   if exists (select 1 from public.proofolio_submission_scores where submission_id=sid) then raise exception 'Cascade missing'; end if;
 end $$;
 rollback;

@@ -1,4 +1,4 @@
--- 004: AI answer scores for recruiting submissions. Additive; apply after 003.
+-- 007: AI answer scores for recruiting submissions. Additive; apply after 006.
 begin;
 
 create table public.proofolio_submission_scores (

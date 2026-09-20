@@ -1,7 +1,7 @@
 import * as z from 'zod';
 import timers from 'node:timers/promises';
-import {Budget,BudgetError,HttpResponseError,MAX_OUTPUT_TOKENS,SchemaValidationError,schemaErrorSummary,priceFor,requestJson,retryAfterMs} from './llm.ts';
-import type {Generate,Metrics,ModelRequest} from './llm.ts';
+import {BudgetError,HttpResponseError,MAX_OUTPUT_TOKENS,SchemaValidationError,schemaErrorSummary,priceFor,requestJson,retryAfterMs} from './llm.ts';
+import type {CostBudget,Generate,Metrics,ModelRequest} from './llm.ts';
 import {responseSchema} from './schema.ts';
 import {SYSTEM} from './prompts.ts';
 
@@ -13,6 +13,10 @@ export const OPENROUTER_UPSTREAM='google-vertex/global';
 // Burst mitigation, not a claimed provider quota: upstream 429 has occurred during serial scans.
 export const OPENROUTER_REQUEST_INTERVAL_MS=16_000;
 export const OPENROUTER_MAX_RATE_LIMIT_RETRIES=2;
+export class RateLimitPause extends Error {
+  readonly retryAfterMs:number;
+  constructor(retryAfterMs:number) { super('OpenRouter 429: 저장한 단계에서 대기 후 이어갑니다.'); this.retryAfterMs=retryAfterMs; }
+}
 // Explicit model IDs only. Production defaults remain unchanged.
 export function openRouterModel(model:string) {
   if(model===TRIAL_MODELS.vision)return {context:1_050_000,rates:{input:20,output:75,cached:2}};
@@ -118,11 +122,15 @@ export function parseOpenRouterResponse(raw:Record<string,any>,schema:z.ZodType)
   if(!parsed.success)throw new SchemaValidationError(schemaErrorSummary(parsed.error,schema));
   return parsed.data;
 }
-export function openRouterSession(apiKey:string,stats:Metrics,budget:Budget|undefined,options:{fetcher?:typeof fetch;
-  signal?:AbortSignal;requestIntervalMs?:number;profile?:Profile;onResponse?:(kind:string,raw:unknown,model:string)=>void}={}) {
+export function openRouterSession(apiKey:string,stats:Metrics,budget:CostBudget|undefined,options:{fetcher?:typeof fetch;
+  signal?:AbortSignal;requestIntervalMs?:number;profile?:Profile;initialAttempt?:number;deferRateLimitRetry?:boolean;
+  onResponse?:(kind:string,raw:unknown,model:string)=>unknown}={}) {
   validateOpenRouterKey(apiKey);
   const interval=options.requestIntervalMs??OPENROUTER_REQUEST_INTERVAL_MS;
   if(!Number.isFinite(interval)||interval<0)throw new Error('요청 간격이 유효하지 않습니다.');
+  const initialAttempt=options.initialAttempt??1;
+  if(!Number.isInteger(initialAttempt)||initialAttempt<1||initialAttempt>OPENROUTER_MAX_RATE_LIMIT_RETRIES+1)
+    throw new Error('요청 재시도 순번 오류.');
   const headers={Authorization:'Bearer '+apiKey,'Content-Type':'application/json','X-Title':'proofolio'};
   const json=async(path:string,init:RequestInit={}):Promise<Record<string,any>>=>{
     const timeout=AbortSignal.timeout(300_000),[raw,responseHeaders]=await requestJson(OPENROUTER_URL+path,
@@ -181,7 +189,7 @@ export function openRouterSession(apiKey:string,stats:Metrics,budget:Budget|unde
       buildOpenRouterPayload(request,undefined,options.profile);
       const {context,rates}=openRouterModel(request.model);
       let retryWait=0;
-      for(let attempt=1;attempt<=OPENROUTER_MAX_RATE_LIMIT_RETRIES+1;attempt++){
+      for(let attempt=initialAttempt;attempt<=OPENROUTER_MAX_RATE_LIMIT_RETRIES+1;attempt++){
         if(retryWait)await timers.setTimeout(retryWait,undefined,{signal:options.signal});
         if(!budget||budget.blocked||budget.provider!=='openrouter')throw new BudgetError('OpenRouter에는 별도로 승인한 전용 예산 원장이 필요합니다.');
         options.signal?.throwIfAborted();
@@ -198,8 +206,8 @@ export function openRouterSession(apiKey:string,stats:Metrics,budget:Budget|unde
           throw new BudgetError('OpenRouter 키 잔여 한도가 보수적 최대 비용 예약에 부족합니다.');
         if(nextRequestAt>performance.now())await timers.setTimeout(nextRequestAt-performance.now(),undefined,{signal:options.signal});
         options.signal?.throwIfAborted();
-        const id=budget.reserveUsd(request.model,ceiling);
-        if(attempt>1)stats.model_calls++;
+        const id=await budget.reserveUsd(request.model,ceiling);
+        if(attempt>initialAttempt)stats.model_calls++;
         nextRequestAt=performance.now()+interval;
         let raw:Record<string,any>,failure:unknown;
         try{raw=await json('/chat/completions',{method:'POST',body:JSON.stringify(payload)});}
@@ -225,9 +233,9 @@ export function openRouterSession(apiKey:string,stats:Metrics,budget:Budget|unde
           output_tokens_include_thinking:true,provider_retries:null};
         stats.usage.push(row);
         try{
-          let usage;try{usage=openRouterUsage(raw.usage);}catch(e){budget.block(failure?'openrouter_generation_usage_unknown':'openrouter_usage_unavailable');throw failure??e;}
+          let usage;try{usage=openRouterUsage(raw.usage);}catch(e){await budget.block(failure?'openrouter_generation_usage_unknown':'openrouter_usage_unavailable');throw failure??e;}
           Object.assign(row,usage,{thinking_tokens_status:usage.thinking_tokens===null?'unconfirmed':'reported',cost_source:'api_usage_cost'});
-          const cost=budget.settleUsd(id,usage.cost_usd);
+          const cost=await budget.settleUsd(id,usage.cost_usd);
           stats.estimated_cost_usd+=cost;
           if(unconfirmedPartialTokens(raw))Object.assign(row,{promptTokenCount:null,candidatesTokenCount:null,totalTokenCount:null,
             thinking_tokens:null,cached_tokens:null,token_usage_status:'unconfirmed_partial_error',thinking_tokens_status:'unconfirmed'});
@@ -236,7 +244,7 @@ export function openRouterSession(apiKey:string,stats:Metrics,budget:Budget|unde
             const value=row[key] as number|null;
             stats[metric]=stats[metric]===null||value===null?null:stats[metric]+value;
           }
-        }finally{options.onResponse?.(request.kind,raw,request.model);}
+        }finally{await options.onResponse?.(request.kind,raw,request.model);}
         // Retry only explicit 429 after measured usage/cost is settled. Unknown cost keeps the budget blocked.
         const rateLimited=failure instanceof HttpResponseError
           ?failure.status===429||failure.diagnostics.upstream_code===429
@@ -247,6 +255,7 @@ export function openRouterSession(apiKey:string,stats:Metrics,budget:Budget|unde
           // Bound interactive waiting without retrying earlier than the provider's requested Retry-After.
           if(retryWait>120_000)throw new Error('OpenRouter 429: Retry-After가 120초를 초과하여 재시도를 중단했습니다.');
           row.retry_wait_ms=retryWait;
+          if(options.deferRateLimitRetry)throw new RateLimitPause(retryWait);
           continue;
         }
         if(failure)throw failure;

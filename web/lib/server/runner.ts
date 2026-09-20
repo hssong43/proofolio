@@ -46,6 +46,7 @@ export async function readStatus(runId: string): Promise<StoredRun | null> {
   if (storageMode() === 'supabase') {
     const remote = await databaseRun(runId);
     if (!remote || remote.state === 'complete' || remote.state === 'failed') return remote;
+    if (remote.execution === 'steps' && Date.now() - Date.parse(remote.startedAt) < 2 * 60 * 60 * 1000) return remote;
     try {
       const local = JSON.parse(await readFile(path.join(runDir(runId), 'status.json'), 'utf8')) as StoredRun;
       if (local.userId === remote.userId && (local.state === 'complete' || local.state === 'failed')) {
@@ -119,7 +120,7 @@ export async function saveAnswers(runId: string, input: unknown) {
 }
 
 /** 코어의 stage/complete 이벤트를 화면 진행 단계로 바꾼다. */
-function stageOf(event: { type: string; data?: unknown }, current: number) {
+export function stageOf(event: { type: string; data?: unknown }, current: number) {
   if (event.type === "complete") return 3;
   if (event.type !== "stage") return current;
   const stage = (event.data as { stage?: string } | undefined)?.stage;
@@ -227,7 +228,9 @@ export async function admitRun(status: StoredRun, input: { member?: boolean; gue
 
 export async function startRun(input: { bytes: Uint8Array; fileName: string; track: Track; maxQuestions?: number; userId?: string; member?: boolean; guestExpiresAt?: string; preparedRun?: StoredRun }) {
   loadRuntimeEnv(ROOT);
-  if (process.env.VERCEL) throw new AnswerError('파일 전송 경로는 준비됐지만, 현재 Vercel 배포에는 장시간 분석 실행 환경이 연결되지 않았어요. 예제 체험을 이용해주세요.', 503);
+  if (!['design', 'marketing', 'coding'].includes(input.track) || !Number.isInteger(input.maxQuestions ?? DEFAULT_MAX_QUESTIONS) ||
+    (input.maxQuestions ?? DEFAULT_MAX_QUESTIONS) < 1 || (input.maxQuestions ?? DEFAULT_MAX_QUESTIONS) > DEFAULT_MAX_QUESTIONS)
+    throw new AnswerError('직무와 질문 수를 확인해주세요.', 400);
   if (input.guestExpiresAt && storageMode() !== 'supabase') throw new AnswerError('체험 데이터 저장 서버를 준비 중이에요.', 503);
   const digest = createHash("sha256").update(input.bytes).digest("hex");
   const prepared = input.preparedRun;
@@ -235,13 +238,28 @@ export async function startRun(input: { bytes: Uint8Array; fileName: string; tra
     prepared.track !== input.track || prepared.fileName !== input.fileName || prepared.pdfSha256 !== digest ||
     prepared.requestedQuestions !== input.maxQuestions)) throw new AnswerError('업로드한 파일과 실행 정보가 일치하지 않아요.', 400);
   const runId = prepared?.runId ?? randomUUID();
-  const args = analysisArgs(runId, input.track, input.maxQuestions);
-  const dir = runDir(runId);
-  const pdfPath = path.join(dir, input.track==='coding' ? 'code.json' : "portfolio.pdf");
-
   const status: StoredRun = prepared ?? { runId, track: input.track, fileName: input.fileName, state: "queued", stage: 0, startedAt: new Date().toISOString(),
     userId: input.userId, pdfSha256: digest,
     requestedQuestions: input.maxQuestions ?? DEFAULT_MAX_QUESTIONS, storage: storageMode() };
+  if (process.env.VERCEL || process.env.PROOFOLIO_EXECUTION === 'steps') {
+    const { initializeSteps, requireStepBudget } = await import('./steps.ts');
+    if (prepared) return initializeSteps(status);
+    await requireStepBudget();
+    status.state = 'running';
+    await admitRun(status, input);
+    try {
+      const { uploadAsset, assetPrefix } = await import('./assets.ts');
+      await uploadAsset(assetPrefix(status.userId!, runId) + (input.track === 'coding' ? 'code.json' : 'portfolio.pdf'),
+        input.bytes, input.track === 'coding' ? 'application/json' : 'application/pdf');
+      return await initializeSteps(status);
+    } catch (e) {
+      status.state = 'failed'; status.finishedAt = new Date().toISOString(); status.error = '단계 실행을 준비하지 못했어요.';
+      await syncRun(status); throw e;
+    }
+  }
+  const args = analysisArgs(runId, input.track, input.maxQuestions);
+  const dir = runDir(runId);
+  const pdfPath = path.join(dir, input.track==='coding' ? 'code.json' : "portfolio.pdf");
   status.state = "running";
   // Fail before starting a paid child when database configuration/migration is missing.
   let admitted=!!prepared;
