@@ -7,8 +7,10 @@ import {Box as BoxSchema, normalize} from './schema.ts';
 import { MAX_PDF_BYTES } from './constants.ts';
 export { MAX_PDF_BYTES } from './constants.ts';
 // Runtime resolution: Webpack's static require.resolve returns a numeric module ID, not a file path.
-// Both supported launch directories (repo root and web/) resolve the root-installed PDF.js package.
-const packageRequire = process.getBuiltinModule('module').createRequire(join(process.cwd(), 'package.json'));
+// Vercel resolves from cwd; unbundled CLI callers may use an unrelated working directory.
+let packageRequire = process.getBuiltinModule('module').createRequire(join(process.cwd(), 'package.json'));
+try { packageRequire.resolve('pdfjs-dist/package.json'); }
+catch { packageRequire = process.getBuiltinModule('module').createRequire(import.meta.url); }
 const pdfjsRoot = dirname(packageRequire.resolve('pdfjs-dist/package.json'));
 Object.assign(globalThis, {DOMMatrix, ImageData, Path2D});
 const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
