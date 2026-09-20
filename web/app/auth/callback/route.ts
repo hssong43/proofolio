@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { authClient, appOrigin } from "@/lib/server/auth";
+import { contestSettings } from '@/lib/server/contest';
 
 export const runtime = "nodejs";
 export async function GET(request: Request) {
+  if(contestSettings().enabled)return NextResponse.redirect(new URL('/',request.url));
   const url = new URL(request.url), origin = appOrigin(request), code = url.searchParams.get("code");
   try {
     if (code) {

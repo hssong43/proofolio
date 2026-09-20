@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { requireUser } from '@/lib/server/auth';
+import { runUser } from '@/lib/server/access';
 import { ownedStatus, AnswerError } from '@/lib/server/runner';
 import { signedAsset } from '@/lib/server/assets';
 export const dynamic = 'force-dynamic';
 export async function GET(request: Request, context: { params: Promise<{ runId: string }> }) {
   try {
-    const user = await requireUser(), { runId } = await context.params, run = await ownedStatus(runId, user.id);
+    const user = await runUser(request), { runId } = await context.params, run = await ownedStatus(runId, user.id);
     const id = new URL(request.url).searchParams.get('asset');
     const asset = run.result?.sourceAssets?.find(a => a.id === id);
     if (!asset) return NextResponse.json({ error: '원문을 찾을 수 없어요.' }, { status: 404 });

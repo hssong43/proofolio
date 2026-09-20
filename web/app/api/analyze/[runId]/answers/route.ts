@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { saveAnswers, saveAnswer, sameOrigin, AnswerError, ownedStatus } from "@/lib/server/runner";
-import { requireUser } from "@/lib/server/auth";
+import { runUser } from "@/lib/server/access";
 import type { AnswerRecord } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -15,7 +15,7 @@ export async function POST(request: Request, context: { params: Promise<{ runId:
   const body = (await request.json().catch(() => null)) as { answers?: AnswerRecord[] } | null;
   if (!body || !Array.isArray(body.answers)) return NextResponse.json({ error: "answers 배열이 필요해요." }, { status: 400 });
   try {
-    const status = await ownedStatus(runId, (await requireUser()).id);
+    const status = await ownedStatus(runId, (await runUser(request)).id);
     const saved = await saveAnswers(runId, body.answers);
     return NextResponse.json({ ok: true, saved, storage: status.storage ?? "local" });
   } catch (e) {
@@ -29,7 +29,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ runId
     const text = await request.text();
     if (text.length > 4096) return NextResponse.json({ error: '답변이 너무 길어요.' }, { status: 413 });
     const answer = JSON.parse(text) as AnswerRecord;
-    const { runId } = await context.params, user = await requireUser();
+    const { runId } = await context.params, user = await runUser(request);
     const answers = await saveAnswer(runId, user.id, answer);
     return NextResponse.json({ ok: true, saved: answer.questionId, answers, storage: 'supabase' });
   } catch (e) {
