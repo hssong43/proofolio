@@ -5,8 +5,8 @@ import {dirname, join} from 'node:path';
 import {createRequire} from 'node:module';
 import type {Box, VisualInventory} from './schema.ts';
 import {Box as BoxSchema, normalize} from './schema.ts';
-
-export const MAX_PDF_BYTES = 50_000_000;
+import { MAX_PDF_BYTES } from './constants.ts';
+export { MAX_PDF_BYTES } from './constants.ts';
 const require = createRequire(import.meta.url);
 const pdfjsRoot = dirname(require.resolve('pdfjs-dist/package.json'));
 Object.assign(globalThis, {DOMMatrix, ImageData, Path2D});

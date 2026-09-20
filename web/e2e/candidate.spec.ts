@@ -1,6 +1,7 @@
 import {test,expect} from '@playwright/test';
 import type {AnswerRecord} from '../lib/types';
 import {runId,submissionId,publicTest,result,submission} from './recruiting-fixtures';
+import { mockPdfUpload } from './upload-fixture';
 
 test('candidate: main analysis, canonical answers, reload, failed finalization and retry without re-analysis',async({page,context},testInfo)=>{
   const answers:AnswerRecord[]=[],entry={test:publicTest,submission:{...submission}};
@@ -22,9 +23,9 @@ test('candidate: main analysis, canonical answers, reload, failed finalization a
     expect(answers).toHaveLength(6);
     return finalizations===1?r.fulfill({status:503,json:{error:'합성 제출 확인 실패'}}):r.fulfill({json:{ok:true,submissionId}});
   });
+  await mockPdfUpload(context, runId, { track: 'design', maxQuestions: 10, submissionId });
   await context.route('**/api/analyze',r=>{
-    uploads++;expect(r.request().postData()).toContain(submissionId);
-    expect(r.request().postData()).toContain('name="maxQuestions"\r\n\r\n10');
+    uploads++;expect(r.request().postDataJSON()).toEqual({runId});
     return r.fulfill({json:{runId}});
   });
   await context.route('**/api/analyze/'+runId,r=>r.fulfill({json:{runId,track:'design',state:++polls===1?'running':'complete',stage:1,result,answers}}));

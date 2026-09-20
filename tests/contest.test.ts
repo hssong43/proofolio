@@ -69,7 +69,7 @@ test('closed contest retention expires guests only, protects examples and active
     process.env.SUPABASE_SECRET_KEY='sb_secret_synthetic';process.env.SUPABASE_SERVICE_ROLE_KEY='';process.env.PROOFOLIO_CONTEST_CLOSED='1';
     globalThis.fetch=async(input,init)=>{
       const url=new URL(String(input));
-      if(url.pathname.endsWith('/proofolio_runs'))return Response.json([id,protectedId,activeId].map(run=>({id:run,user_id:'a'.repeat(64),state:run===activeId?'running':'complete',started_at:new Date().toISOString()})));
+      if(url.pathname.endsWith('/proofolio_runs'))return Response.json([id,protectedId,activeId].map(run=>({id:run,user_id:'a'.repeat(64),state:run===activeId?'failed':'complete',started_at:new Date(Date.now()-(run===activeId?0:86400000)).toISOString()})));
       if(url.pathname.endsWith('/proofolio_examples'))return Response.json([{source_run_id:protectedId}]);
       if(url.pathname.includes('/storage/')){assert.equal(JSON.parse(init!.body as string).prefix,`${'a'.repeat(64)}/${id}`);calls.push('list');return Response.json([]);}
       const rpc=url.pathname.split('/').at(-1)!;calls.push(rpc);
