@@ -5,7 +5,8 @@ import { Header } from '../Header';
 import { Stat } from '../Stat';
 import { CreateTestForm } from './CreateTestForm';
 import { StatusBadge } from './StatusBadge';
-import { recruitingRequest } from '@/lib/client';
+import { recruitingRequest, rescoreSubmission } from '@/lib/client';
+import { QuestionScore, ScoreSummary, scoreLabel } from './ScorePanel';
 import { ROLES } from '@/lib/data';
 import { formatDateTime } from '@/lib/period';
 import { formatPhone } from '@/lib/candidate';
@@ -16,7 +17,7 @@ export function RecruitingDashboard({testId,submissionId}:{testId?:string;submis
   const [tests,setTests]=useState<TestSummary[]>([]),[listing,setListing]=useState<Listing|null>(null);
   const [detail,setDetail]=useState<SubmissionDetail|null>(null),[error,setError]=useState('');
   const [loading,setLoading]=useState(true),[revision,setRevision]=useState(0);
-  const [deleting,setDeleting]=useState(false);
+  const [deleting,setDeleting]=useState(false),[rescoring,setRescoring]=useState(false);
   const path=testId?'/tests/'+testId+(submissionId?'/submissions/'+submissionId:''):'/dashboard';
   useEffect(()=>{
     let cancelled=false;if(revision===0)setLoading(true);setError('');
@@ -28,8 +29,22 @@ export function RecruitingDashboard({testId,submissionId}:{testId?:string;submis
     void request.catch(e=>{if(!cancelled)setError(e.message);}).finally(()=>{if(!cancelled)setLoading(false);});
     return ()=>{cancelled=true;};
   },[testId,submissionId,revision]);
+  // 채점 진행 중이면 5초마다 다시 읽는다.
+  useEffect(()=>{
+    const running=detail?.submission.score?.state==='running'||listing?.submissions.some(s=>s.score?.state==='running');
+    if(!running)return;
+    const id=window.setTimeout(()=>setRevision(n=>n+1),5000);
+    return ()=>window.clearTimeout(id);
+  },[detail,listing]);
   const roleLabel=(id:string)=>ROLES.find(r=>r.id===id)?.label??id;
   const refresh=()=>setRevision(n=>n+1);
+  const rescore=async()=>{
+    if(!testId||!submissionId)return;
+    setRescoring(true);setError('');
+    try {await rescoreSubmission(testId,submissionId);refresh();}
+    catch(e){setError((e as Error).message);}
+    finally{setRescoring(false);}
+  };
   const remove=async()=>{
     if(!testId||!confirm('이 테스트와 응시자 정보를 삭제할까요? 응시자 본인의 분석·답변 기록은 유지돼요.'))return;
     setDeleting(true);
@@ -45,7 +60,7 @@ export function RecruitingDashboard({testId,submissionId}:{testId?:string;submis
       <div className="dash-title-row"><div><h1 className="screen-title">{submissionId?'응시 결과':testId?'응시 현황':'채용 테스트'}</h1>
         <p className="screen-subtitle">내가 만든 테스트와 동의한 응시자의 질문·답변만 확인할 수 있어요.</p></div>
         <button className="btn-secondary" onClick={refresh} disabled={loading}>새로고침</button></div>
-      <p className="notice-box">응시 정보는 30일 보관하며, 원본 PDF·코드는 공유하지 않아요.</p>
+      <p className="notice-box">응시 정보는 30일 보관하며, 원본 PDF·코드는 공유하지 않아요. AI 채점 점수는 답변이 질문 의도·확인 사항을 다뤘는지에 대한 참고 지표이며 합불 판정이 아니에요.</p>
       {loading?<p role="status">불러오는 중…</p>:error?<div className="error-box" role="alert">{error}{' '}
         <Link href={'/login?next='+encodeURIComponent(path)}>이메일 로그인</Link></div>:submissionId&&detail?<>
         <section className="card" style={{padding:24}}>
@@ -54,6 +69,7 @@ export function RecruitingDashboard({testId,submissionId}:{testId?:string;submis
           <StatusBadge status={detail.submission.state}/>
           <p>{detail.submission.completedAt?'제출 '+formatDateTime(detail.submission.completedAt):'아직 제출을 완료하지 않았어요.'}</p>
         </section>
+        {detail.submission.completedAt&&<ScoreSummary score={detail.submission.score} busy={rescoring} onRescore={()=>void rescore()}/>}
         {detail.run?.result?<section className="card">
           {detail.run.result.questions.map((q,i)=>{
             const a=detail.run!.answers?.find(a=>a.questionId===q.id);
@@ -62,6 +78,7 @@ export function RecruitingDashboard({testId,submissionId}:{testId?:string;submis
               <div className="qa-answer" data-empty={!a?.answer}>{a?.answer||'(미답변)'}</div>
               <div className="qa-meta">{a?'답변 시간 '+a.seconds+'초':'저장된 답변 없음'}</div>
               <details><summary>질문 의도와 확인 사항</summary><p>{q.intent}</p><ul>{q.listenFor.map((v,j)=><li key={j}>{v}</li>)}</ul></details>
+              <QuestionScore question={q} score={detail.submission.score}/>
             </article>;
           })}
         </section>:<p className="empty-state">{detail.run?'분석이 아직 완료되지 않았어요.':'연결된 분석이 없거나 삭제·만료되어 표시할 수 없어요.'}</p>}
@@ -71,12 +88,15 @@ export function RecruitingDashboard({testId,submissionId}:{testId?:string;submis
           <p>{formatDateTime(listing.test.startsAt)} ~ {formatDateTime(listing.test.endsAt)}</p>
           <StatusBadge status={listing.test.status}/>
         </section>
-        <div className="card form-grid" style={{padding:8}}><Stat label="응시자" value={String(listing.test.submissionCount)}/>
-          <Stat label="제출 완료" value={String(listing.test.completedCount)}/></div>
+        <div className="card stat-grid" style={{padding:8}}><Stat label="응시자" value={String(listing.test.submissionCount)}/>
+          <Stat label="제출 완료" value={String(listing.test.completedCount)} bordered/>
+          <Stat label="평균 점수" value={listing.test.averageScore===null?'-':listing.test.averageScore+'점'}/></div>
+        <p className="field-hint">평균은 채점 완료 {listing.test.scoredCount}건 기준이에요.</p>
         <div className="card table-wrap">{listing.submissions.length?<table className="table">
-          <thead><tr><th>이름</th><th>생년월일</th><th>연락처</th><th>상태</th><th>참여 시각</th><th>결과</th></tr></thead>
+          <thead><tr><th>이름</th><th>생년월일</th><th>연락처</th><th>상태</th><th>참여 시각</th><th>점수</th><th>결과</th></tr></thead>
           <tbody>{listing.submissions.map(s=><tr key={s.id}><td>{s.candidate.name}</td><td>{s.candidate.birthDate}</td>
             <td>{formatPhone(s.candidate.phone)}</td><td><StatusBadge status={s.state}/></td><td>{formatDateTime(s.joinedAt)}</td>
+            <td className="score-cell">{s.score?.state==='running'?<StatusBadge status="scoring"/>:s.score?.state==='failed'?<StatusBadge status="failed"/>:scoreLabel(s.score)}</td>
             <td><Link className="table-link" href={'/tests/'+testId+'/submissions/'+s.id}>질문·답변 보기</Link></td></tr>)}</tbody>
         </table>:<p className="empty-state">아직 응시자가 없어요.</p>}</div>
         <p className="field-hint">최근 응시자 최대 500명 표시</p>
@@ -84,10 +104,11 @@ export function RecruitingDashboard({testId,submissionId}:{testId?:string;submis
       </>:<>
         <CreateTestForm onCreated={refresh}/>
         <div className="card table-wrap">{tests.length?<table className="table">
-          <thead><tr><th>제목</th><th>직무</th><th>코드</th><th>기간</th><th>상태</th><th>제출</th><th>결과</th></tr></thead>
+          <thead><tr><th>제목</th><th>직무</th><th>코드</th><th>기간</th><th>상태</th><th>제출</th><th>평균 점수</th><th>결과</th></tr></thead>
           <tbody>{tests.map(t=><tr key={t.id}><td>{t.title}</td><td>{roleLabel(t.role)}</td><td className="code-pill">{t.code}</td>
             <td>{formatDateTime(t.startsAt)} ~ {formatDateTime(t.endsAt)}</td><td><StatusBadge status={t.status}/></td>
-            <td>{t.completedCount} / {t.submissionCount}</td><td><Link className="table-link" href={'/tests/'+t.id}>보기</Link></td></tr>)}</tbody>
+            <td>{`${t.completedCount} / ${t.submissionCount}`}</td><td className="score-cell">{t.averageScore===null?'-':`${t.averageScore}점`}<span className="field-hint"> ({t.scoredCount}건)</span></td>
+            <td><Link className="table-link" href={'/tests/'+t.id}>보기</Link></td></tr>)}</tbody>
         </table>:<p className="empty-state">아직 연 테스트가 없어요. 위에서 첫 테스트를 열어보세요.</p>}</div>
         <p className="field-hint">최근 테스트 최대 100개 표시</p>
       </>}

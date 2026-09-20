@@ -66,10 +66,21 @@ export type TestRecord = {
   id: string; code: string; title: string; role: import('./data.ts').RoleId;
   startsAt: string; endsAt: string; createdAt: string; totalSeconds: number; questionCount: number;
 };
-export type TestSummary = TestRecord & { status: TestStatus; submissionCount: number; completedCount: number };
+export type TestSummary = TestRecord & { status: TestStatus; submissionCount: number; completedCount: number; scoredCount: number; averageScore: number | null };
+export type ScoreState = 'pending' | 'running' | 'complete' | 'failed';
+export type ScoreCoverage = { item: string; covered: boolean; evidence: string };
+export type ScoreItem = {
+  questionId: string; score: number; coverageScore: number; bonus: number; relevance: 'none' | 'partial' | 'full';
+  coverage: ScoreCoverage[]; missing: string[]; depth: number; logic: number; creativity: number; comment: string;
+};
+/** AI 답변 채점 결과. 참고 지표이며 합불 판정이 아니다. */
+export type SubmissionScore = {
+  state: ScoreState; model: string | null; overallScore: number | null; items: ScoreItem[];
+  error: string | null; scoredAt: string | null; costUsd: number | null;
+};
 export type PublicTest = Omit<TestRecord, 'id' | 'code' | 'createdAt'> & { testId: string; roleLabel: string };
 export type Submission = {
   id: string; testId: string; candidate: Candidate; joinedAt: string; completedAt: string | null;
-  state: 'joined' | 'completed'; runId: string | null;
+  state: 'joined' | 'completed'; runId: string | null; score?: SubmissionScore | null;
 };
 export type SubmissionDetail = { submission: Submission; test: TestRecord; run: RunStatus | null };

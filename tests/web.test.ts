@@ -39,6 +39,7 @@ test('web and CLI share OpenRouter, the same ledger, explicit spending and the t
     assert.throws(()=>executionBudget(ROOT,{...env,PROOFOLIO_BUDGET_LEDGER:ledger}));
   const example:NodeJS.ProcessEnv={};loadEnv(resolve('.env.example'),example);
   assert.throws(()=>executionBudget(ROOT,example));assert.equal(example.GEMINI_API_KEY,undefined);
+  assert.equal(example.PROOFOLIO_EXECUTION,'');assert.equal(example.OPENROUTER_SCORING_MODEL,'anthropic/claude-opus-5');
 });
 test('removed direct providers fail before reading a PDF, creating a run or contacting a model',async()=>{
   for(const provider of ['gemini','vertex']){
