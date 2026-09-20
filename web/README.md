@@ -3,6 +3,26 @@
 머지된 PR #1의 Next.js 화면을 현재 TypeScript/OpenRouter 코어에 연결한다.
 Gemini 직접 API 및 GCP/ADC 경로는 사용하지 않는다.
 
+## 화면 구성
+
+| 경로 | 대상 | 설명 |
+|---|---|---|
+| `/` | 채용 담당자 | 대시보드. `PROOFOLIO_ADMIN_PASSWORD`로 로그인(`/login`). 기간을 정해 테스트를 열면 6자리 코드가 발급된다. |
+| `/tests/[testId]` | 채용 담당자 | 테스트별 응시자 목록. `/tests/[testId]/submissions/[id]`에서 질문·인용·답변을 본다. |
+| `/test` | 응시자 | 코드 입력 → 이름·생년월일·전화번호 → 직무 선택 → 업로드 → 분석 → 질문 → 완료. 로그인 불필요. |
+| `/demo` | 개발 | 이전 단일 흐름. `?demo=1&fast=1`로 목데이터 시연, 없으면 실제 분석 API 사용. |
+
+**mock 단계**: 테스트의 `mode`는 `demo`로 고정되어 분석은 직무별 목데이터를 쓴다. 저장은 `output/web/store/`(또는 `PROOFOLIO_STORE_DIR`)의 JSON 파일이다.
+
+```
+store/tests/<testId>.json            테스트(코드, 기간, 모드)
+store/codes/<CODE>.json              코드 → testId (wx 생성으로 유일성 보장)
+store/submissions/<testId>/<id>.json 응시자 정보, 본 질문 스냅샷, 답변, 소요 시간
+```
+
+담당자 세션은 비밀번호에서 파생한 HMAC 토큰을 담은 httpOnly 쿠키(12시간)다. 응시자는 참여 시 발급되는 쿠키로만 자기 제출에 답변을 저장할 수 있다.
+로그인·저장소 모두 로컬 MVP 수준이며 인터넷 공개용이 아니다.
+
 ## 실행
 
 루트에서 `npm ci`, `npm ci --prefix web` 후 [.env.example](../.env.example)을 참고해 루트 `.env`를 설정한다.

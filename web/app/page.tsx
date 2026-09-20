@@ -39,7 +39,7 @@ export default async function DashboardPage() {
                       <td><span className="code-pill">{t.code}</span></td>
                       <td style={{ whiteSpace: "nowrap" }}>{formatDateTime(t.startsAt)} ~ {formatDateTime(t.endsAt)}</td>
                       <td><StatusBadge status={t.status} /></td>
-                      <td style={{ fontVariantNumeric: "tabular-nums" }}>{t.completedCount} / {t.submissionCount}</td>
+                      <td style={{ fontVariantNumeric: "tabular-nums" }}>{`${t.completedCount} / ${t.submissionCount}`}</td>
                       <td style={{ textAlign: "right" }}><Link href={`/tests/${t.id}`} className="table-link">보기</Link></td>
                     </tr>
                   ))}

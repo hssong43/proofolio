@@ -26,7 +26,7 @@ export function CodeScreen({ submitting, error, onSubmit }: Props) {
             className="text-input code-input focus-ring"
             value={code}
             onChange={(e) => setCode(normalizeCode(e.target.value))}
-            maxLength={6}
+            maxLength={12}
             autoCapitalize="characters"
             autoComplete="off"
             spellCheck={false}
