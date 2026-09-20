@@ -20,14 +20,14 @@ test('coverage items are intent first, then listen_for, and the score follows th
   assert.deepEqual(computeScore({relevance:'full',coverage:all,depth:0,logic:0,creativity:0}),{score:80,coverageScore:80,bonus:0,missing:[]});
   assert.equal(computeScore({relevance:'full',coverage:all,depth:3,logic:4,creativity:3}).score,100);
   assert.equal(computeScore({relevance:'full',coverage:all,depth:1,logic:2,creativity:1}).bonus,8);
-  const oneMissing=computeScore({relevance:'partial',coverage:cov(questions[0],[true,true,false]),depth:0,logic:0,creativity:0});
-  assert.equal(oneMissing.score,73);assert.deepEqual(oneMissing.missing,['협업자와 나눈 역할']);
+  const oneMissing=computeScore({relevance:'partial',coverage:cov(questions[0],[true,true,false]),depth:3,logic:4,creativity:3});
+  assert.equal(oneMissing.score,73);assert.equal(oneMissing.bonus,0); // 누락이 있으면 가산 없음assert.deepEqual(oneMissing.missing,['협업자와 나눈 역할']);
   const twoMissing=computeScore({relevance:'partial',coverage:cov(questions[0],[true,false,false]),depth:0,logic:0,creativity:0});
   assert.equal(twoMissing.score,67);
   // 답변이 있으면 항목을 전혀 다루지 못해도 60점 하한, 등급으로 최대 80까지
   assert.equal(computeScore({relevance:'partial',coverage:cov(questions[0],[false,false,false]),depth:0,logic:0,creativity:0}).score,60);
   assert.equal(computeScore({relevance:'none',coverage:cov(questions[0],[false,false,false]),depth:0,logic:0,creativity:0}).score,60);
-  assert.equal(computeScore({relevance:'partial',coverage:cov(questions[0],[false,false,false]),depth:3,logic:4,creativity:3}).score,80);
+  assert.equal(computeScore({relevance:'partial',coverage:cov(questions[0],[false,false,false]),depth:3,logic:4,creativity:3}).score,60);
   // 빈 답변만 0점 (코드가 원문으로 판단)
   assert.equal(computeScore({relevance:'none',coverage:cov(questions[0],[false,false,false]),depth:3,logic:4,creativity:3},false).score,0);
 });
@@ -58,8 +58,8 @@ test('scoreAnswers builds the prompt from cards, skips the model for empty answe
   assert.equal(prompts.length,2);assert.match(prompts[1],/question_id/);
   assert.match(prompts[0],/질문 데이터: \[\{"question_id":"q1"/);assert.match(prompts[0],/답변 데이터: /);assert.match(prompts[0],/coverage_items/);
   assert.match(prompts[0],/점수를 직접 매기지 않고/);assert.match(prompts[0],/합격 여부/);
-  assert.equal(result.items[0].score,73+Math.round(20*5/10));assert.deepEqual(result.items[0].missing,['협업자와 나눈 역할']);
-  assert.equal(result.items[1].score,0);assert.equal(result.overallScore,Math.round((83+0)/2));
+  assert.equal(result.items[0].score,73);assert.equal(result.items[0].bonus,0);assert.deepEqual(result.items[0].missing,['협업자와 나눈 역할']);
+  assert.equal(result.items[1].score,0);assert.equal(result.overallScore,Math.round((73+0)/2));
   await assert.rejects(scoreAnswers({questions,answers:[{questionId:'q1',answer:'a'}]},modelRequest(async()=>({items:[]}),freshMetrics(),{model:'x'})),SchemaValidationError);
   assert.deepEqual(AnswerScoring.safeParse(good).success,true);
   assert.equal(scoringPrompt(questions,[{questionId:'q1',answer:'x'.repeat(600)}]).includes('x'.repeat(501)),false);

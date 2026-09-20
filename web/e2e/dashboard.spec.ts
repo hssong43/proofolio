@@ -25,22 +25,22 @@ test('dashboard: real-contract test creation, applicant list and canonical quest
   await page.getByRole('button',{name:'테스트 열기',exact:true}).click();
   const row=page.locator('tbody tr',{hasText:testRecord.title});await expect(row).toContainText('ABC234');
   await expect(row).toContainText('1 / 1');
-  await expect(row.locator('.score-cell')).toContainText('74점');
+  await expect(row.locator('.score-cell')).toContainText('62점');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:testInfo.outputPath('dashboard.png'),fullPage:true});
   await row.getByRole('link',{name:'보기',exact:true}).click();
   await expect(page.getByRole('heading',{name:testRecord.title,exact:true})).toBeVisible();
   await expect(page.getByText(/미지원|검토|검수/)).toHaveCount(0);
   await expect(page.locator('.card.stat-grid').getByText('제출 완료',{exact:true})).toBeVisible();
-  await expect(page.locator('.card.stat-grid').getByText('74점',{exact:true})).toBeVisible();
-  await expect(page.locator('tbody tr .score-cell').first()).toHaveText('74점');
+  await expect(page.locator('.card.stat-grid').getByText('62점',{exact:true})).toBeVisible();
+  await expect(page.locator('tbody tr .score-cell').first()).toHaveText('62점');
   await page.screenshot({path:testInfo.outputPath('applicants.png'),fullPage:true});
   await page.getByRole('link',{name:'질문·답변 보기'}).click();
   await expect(page.locator('.qa-item')).toHaveCount(6);
   await expect(page.locator('.qa-item blockquote, .qa-item pre')).toHaveCount(0);
   await expect(page.locator('.qa-answer').first()).toHaveText('저장된 합성 답변 q1');
   // AI 채점: 종합 점수, 문항별 점수·포함/누락·코멘트
-  await expect(page.locator('.result-panel .result-score')).toContainText('74');
+  await expect(page.locator('.result-panel .result-score')).toContainText('62');
   await expect(page.locator('.result-panel')).toContainText('anthropic/claude-opus-5');
   await expect(page.locator('.qa-eval')).toHaveCount(6);
   await expect(page.locator('.qa-eval .score-pill').first()).toHaveText('100점');
@@ -55,7 +55,7 @@ test('dashboard: real-contract test creation, applicant list and canonical quest
   // 재채점 요청 → 진행 중 배지 → 폴링 후 완료
   await page.getByRole('button',{name:'다시 채점',exact:true}).click();
   await expect(page.locator('.result-panel .badge[data-status="scoring"]')).toBeVisible();
-  await expect(page.locator('.result-panel .result-score')).toContainText('74',{timeout:15_000});
+  await expect(page.locator('.result-panel .result-score')).toContainText('62',{timeout:15_000});
   expect(rescores).toBe(1);
   await expect(page.locator('nextjs-portal [data-nextjs-dialog-overlay]')).toHaveCount(0);expect(problems).toEqual([]);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

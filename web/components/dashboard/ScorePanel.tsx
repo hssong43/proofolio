@@ -17,7 +17,7 @@ export function ScoreSummary({score,busy,onRescore}:{score:SubmissionScore|null|
         <strong>AI 채점 종합 점수</strong>
         <span>{!score?'아직 채점되지 않았어요.':score.state==='complete'?`${score.model??'모델'} · ${score.scoredAt?formatDateTime(score.scoredAt):''}`:
           score.state==='failed'?'채점 실패: '+(score.error??'원인 미상'):'채점 중이에요. 잠시 후 새로고침해주세요.'}</span>
-        <span className="field-hint">질문 의도·확인 사항 포함 여부(80점 기준, 누락 시 60점까지 감점)와 분량·논리·창의성 가산(최대 100점)으로 계산한 참고 지표예요. 합불 판정이 아니에요.</span>
+        <span className="field-hint">질문 의도·확인 사항을 모두 다루면 80점, 누락이 있으면 60점까지 감점, 모두 다룬 경우에만 분량·논리·창의성으로 100점까지 가산하는 참고 지표예요. 합불 판정이 아니에요.</span>
       </div>
     </div>
     <div className="result-actions">

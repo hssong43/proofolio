@@ -29,8 +29,8 @@ export function coverageItems(q:{intent:string;listenFor:string[]}):string[] {
 }
 
 /**
- * 규칙: 의도와 확인 사항을 모두 다루면 80점 기준. 누락은 비례 감점하되 60점 아래로 내려가지 않는다.
- * 분량·논리·창의성 등급으로 최대 20점을 더해 100점까지. 답변이 있으면 무조건 60점 이상, 빈 답변만 0점.
+ * 규칙: 의도와 확인 사항을 모두 다루면 80점 기준. 누락이 있으면 비례 감점하되 60점 아래로 내려가지 않고 가산은 없다.
+ * 모두 다룬 경우에만 분량·논리·창의성 등급으로 최대 20점을 더해 100점까지. 답변이 있으면 최저 60점, 빈 답변만 0점.
  * 모델은 등급과 포함 여부만 내고 점수는 여기서만 계산한다. answered는 코드가 답변 원문으로 판단한다.
  */
 export function computeScore(j:Pick<ScoringJudgment,'relevance'|'coverage'|'depth'|'logic'|'creativity'>,answered=true) {
@@ -38,7 +38,7 @@ export function computeScore(j:Pick<ScoringJudgment,'relevance'|'coverage'|'dept
   if(!answered)return {score:0,coverageScore:0,bonus:0,missing};
   const total=Math.max(1,j.coverage.length);
   const coverageScore=Math.max(SCORING_FLOOR,SCORING_BASELINE-(SCORING_BASELINE-SCORING_FLOOR)*missing.length/total);
-  const bonus=Math.min(SCORING_BONUS_MAX,Math.round(SCORING_BONUS_MAX*(j.depth+j.logic+j.creativity)/(DEPTH_MAX+LOGIC_MAX+CREATIVITY_MAX)));
+  const bonus=missing.length?0:Math.min(SCORING_BONUS_MAX,Math.round(SCORING_BONUS_MAX*(j.depth+j.logic+j.creativity)/(DEPTH_MAX+LOGIC_MAX+CREATIVITY_MAX)));
   return {score:Math.min(100,Math.round(coverageScore+bonus)),coverageScore:Math.round(coverageScore),bonus,missing};
 }
 
