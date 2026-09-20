@@ -1,11 +1,12 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createWriteStream, existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { AnswerRecord, ClientQuestion, ClientResult, RunStatus, Track } from "../types.ts";
 import { loadRuntimeEnv, executionBudget } from "../../../src/env.ts";
+import { writeJsonAtomic } from "./json-file.ts";
 
 /** 분석 코어(루트 저장소) 위치. 기본은 web/의 상위 폴더. */
 export const ROOT = path.resolve(process.env.PROOFOLIO_ROOT ?? (existsSync(path.join(process.cwd(), "src", "cli.ts")) ? process.cwd() : path.join(process.cwd(), "..")));
@@ -30,9 +31,7 @@ const runDir = (runId: string) => {
 };
 
 async function writeStatus(status: RunStatus) {
-  const target = path.join(runDir(status.runId), "status.json"), temporary = target + "." + randomUUID() + ".tmp";
-  await writeFile(temporary, JSON.stringify(status, null, 2), { flag: "wx", mode: 0o600 });
-  await rename(temporary, target);
+  await writeJsonAtomic(path.join(runDir(status.runId), "status.json"), status);
 }
 
 export async function readStatus(runId: string): Promise<RunStatus | null> {

@@ -1,6 +1,6 @@
-export type RoleId = "designer" | "dev" | "mkt";
+import type { RoleId, Track, UiQuestion } from "./types.ts";
 
-import type { Track } from "./types";
+export type { RoleId, UiQuestion } from "./types.ts";
 
 /** 분석 코어가 지원하는 직무만 track이 있다. 없는 직무는 화면에서 선택 불가. */
 export type Role = { id: RoleId; label: string; track: Track | null };
@@ -8,15 +8,6 @@ export type Role = { id: RoleId; label: string; track: Track | null };
 export type Project = { name: string; desc: string };
 
 export type Question = { text: string; project: string };
-
-/** 화면에서 쓰는 질문 형태. 데모(목데이터)와 실제 분석 결과를 같은 모양으로 맞춘다. */
-export type UiQuestion = {
-  id: string;
-  prompt: string;
-  quotes: string[];
-  notes: string[];
-  source: string;
-};
 
 export function demoQuestions(data: RoleData): UiQuestion[] {
   return data.questions.map((q, i) => ({ id: `demo-q${i + 1}`, prompt: q.text, quotes: [], notes: [], source: `포트폴리오의 ${q.project} 프로젝트 기반` }));
@@ -35,6 +26,8 @@ export const ROLES: Role[] = [
 ];
 
 export const STEP_LABELS = ["직무 선택", "업로드", "분석", "준비", "질문"] as const;
+
+export const CANDIDATE_STEP_LABELS = ["코드 입력", "정보 입력", ...STEP_LABELS] as const;
 
 export const STAGE_LABELS = ["포트폴리오 읽는 중", "직무 핵심 내용 추출 중", "질문 만드는 중"] as const;
 

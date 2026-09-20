@@ -45,3 +45,63 @@ export type RunStatus = {
 };
 
 export type AnswerRecord = { questionId: string; answer: string; seconds: number };
+
+/* ---------- 채용 테스트 / 응시자 (mock 단계) ---------- */
+
+export type RoleId = "designer" | "dev" | "mkt";
+
+/** 화면에서 쓰는 질문 형태. 데모(목데이터)와 실제 분석 결과를 같은 모양으로 맞춘다. */
+export type UiQuestion = {
+  id: string;
+  prompt: string;
+  quotes: string[];
+  notes: string[];
+  source: string;
+};
+
+export type TestStatus = "upcoming" | "open" | "closed";
+export type AnalysisMode = "demo" | "live";
+
+export type TestRecord = {
+  id: string;
+  code: string;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  createdAt: string;
+  totalSeconds: number;
+  questionCount: number;
+  /** demo: 목데이터 분석, live: 실제 분석 코어(추후). */
+  mode: AnalysisMode;
+};
+
+export type TestSummary = TestRecord & { status: TestStatus; submissionCount: number; completedCount: number };
+
+export type Candidate = { name: string; birthDate: string; phone: string };
+
+export type SubmissionState = "joined" | "completed";
+
+export type Submission = {
+  id: string;
+  testId: string;
+  candidate: Candidate;
+  state: SubmissionState;
+  joinedAt: string;
+  completedAt?: string;
+  role?: RoleId;
+  roleLabel?: string;
+  /** 응시자가 실제로 본 질문 스냅샷. */
+  questions?: UiQuestion[];
+  answers?: AnswerRecord[];
+  elapsedSeconds?: number;
+  runId?: string | null;
+};
+
+export type CompletionPayload = {
+  role: RoleId;
+  roleLabel: string;
+  questions: UiQuestion[];
+  answers: AnswerRecord[];
+  elapsedSeconds: number;
+  runId: string | null;
+};
