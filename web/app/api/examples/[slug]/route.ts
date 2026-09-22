@@ -10,10 +10,7 @@ export async function GET(_request: Request, context: { params: Promise<{ slug: 
     const item = await example((await context.params).slug);
     // Only curated examples are public; storage paths and visitor data stay out of this response.
     const { sourceAssets: _assets, ...result } = item.result;
-    const images = [...new Set(result.questions.flatMap(q => q.pages))].sort((a,b) => a-b)
-      .map(page => ({ page, url: `/api/examples/${item.slug}/image?page=${page}` }));
-    const portfolioUrl = item.slug === 'coding' ? null : `/api/examples/${item.slug}/portfolio`;
-    return NextResponse.json({ title: item.title, notice: item.notice, result, images, portfolioUrl,
+    return NextResponse.json({ title: item.title, notice: item.notice, result, images: [], portfolioUrl: null,
       sampleAnswers: exampleAnswers(item.slug, result.questions), sampleScores: exampleScores(item.slug, result.questions) },
       { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {

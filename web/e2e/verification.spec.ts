@@ -76,13 +76,13 @@ test(`${track} ${count}: generated count, per-question ACK, save retry without a
   await page.screenshot({path:testInfo.outputPath('saved.png'),fullPage:true,animations:'disabled'});
 });
 
-test('guest demo reads stored seven questions without upload, model call or answer write',async({page,context})=>{
+test('guest demo withholds old media links and keeps seven questions without paid calls or answer writes',async({page,context})=>{
   await context.route('**/api/auth',r=>r.fulfill({json:{user:null,configured:true}}));
   const result=fixture(7);
   await context.route('**/api/examples/design',r=>r.fulfill({json:{title:'기존 결과',notice:'검토 권장 항목이 남아 있어요.',result,
     images:result.questions.map(q=>({page:q.pages[0],url:`/api/examples/design/image?page=${q.pages[0]}`})),portfolioUrl:'/api/examples/design/portfolio'}}));
-  await context.route('**/api/examples/design/image?**',r=>r.fulfill({contentType:'image/png',body:png}));
   const unexpected:string[]=[];await context.route('**/api/analyze**',r=>{unexpected.push(r.request().url());return r.abort();});
+  await context.route('**/api/examples/design/**',r=>{unexpected.push(r.request().url());return r.abort();});
   await page.goto('/?demo=1&questions=6');await page.getByRole('button',{name:'디자이너',exact:true}).click();await page.getByRole('button',{name:'다음',exact:true}).click();
   await expect(page.getByRole('heading',{name:'질문 7개, 각 40초예요'})).toBeVisible();
   await expect.poll(()=>page.evaluate(()=>scrollY)).toBe(0);
@@ -91,15 +91,15 @@ test('guest demo reads stored seven questions without upload, model call or answ
   await page.getByRole('button',{name:'준비 완료'}).click();
   await expect.poll(()=>page.evaluate(()=>scrollY)).toBe(0);
   for(let i=0;i<7;i++){
-    const image=page.getByRole('img',{name:`질문 연결 원본 포트폴리오 ${i+1}페이지`});
-    await expect(image).toBeVisible();await expect.poll(()=>image.evaluate(el=>(el as HTMLImageElement).naturalWidth)).toBe(1);
+    await expect(page.getByText('이미지 공개 불가',{exact:true})).toBeVisible();
+    await expect(page.locator('.question-layout img')).toHaveCount(0);
     await expect(page.locator('.question-layout h3')).toHaveText(result.questions[i].prompt);
     await expect(page.locator('blockquote, pre')).toHaveCount(0);
     await expect(page.getByText(/예제 포트폴리오는/)).toHaveCount(0);
-    await expect(page.getByRole('link',{name:'전체 포트폴리오 보기 ↗'})).toHaveAttribute('href','/api/examples/design/portfolio');
+    await expect(page.getByRole('link',{name:'전체 포트폴리오 보기 ↗'})).toHaveCount(0);
     expect(await page.locator('.question-layout').evaluate(el=>{
-      const source=el.querySelector('.question-originals')!,question=el.querySelector('h3')!,answer=el.querySelector('textarea')!;
-      return !!(source.compareDocumentPosition(question)&Node.DOCUMENT_POSITION_FOLLOWING)&&!!(question.compareDocumentPosition(answer)&Node.DOCUMENT_POSITION_FOLLOWING);
+      const question=el.querySelector('h3')!,answer=el.querySelector('textarea')!;
+      return !!(question.compareDocumentPosition(answer)&Node.DOCUMENT_POSITION_FOLLOWING);
     })).toBe(true);
     await page.getByRole('button',{name:i===6?'제출하고 완료':'제출하고 다음',exact:true}).click();
   }
