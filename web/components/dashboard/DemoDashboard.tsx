@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Header } from '../Header';
 import { Stat } from '../Stat';
-import { PortfolioImages } from '../PortfolioImages';
 import { ExampleScoreSummary } from './ScorePanel';
 import { fetchExample } from '@/lib/client';
 import type { Track } from '@/lib/types';
@@ -77,8 +76,7 @@ export function DemoDashboard() {
               {item.result.questions.map((q, i) => <details className="source-preview" key={q.id} open={i === 0}>
                 <summary>{q.projectTitle} · 질문 {i + 1} 연결 코드</summary><pre>{q.quotes.join('\n\n')}</pre>
               </details>)}
-            </> : item.portfolioUrl ? <PortfolioDocument key={`${revision}:${item.track}`} url={item.portfolioUrl} candidate={item.candidate} pageCount={item.result.pageCount} /> :
-              <p className="empty-state">등록된 원본 포트폴리오가 없어요.</p>}
+            </> : <p className="empty-state">이미지 공개 불가</p>}
           </div> : <>
             {item.sampleScores ? <ExampleScoreSummary score={item.sampleScores} /> : null}
             <p className="screen-subtitle">예시 답변은 화면 체험용으로 작성했으며 실제 포트폴리오 작성자의 답변이 아니에요.</p>
@@ -86,7 +84,7 @@ export function DemoDashboard() {
               const answer = item.sampleAnswers?.find(a => a.questionId === q.id)?.answer;
               const score = item.sampleScores?.items.find(s => s.questionId === q.id)?.score;
               return <article className="qa-item" key={q.id}>
-                {q.pages.length > 0 && <PortfolioImages key={revision} images={(item.images ?? []).filter(image => q.pages.includes(image.page))} label={item.candidate} thumbnails />}
+                {q.pages.length > 0 ? <p className="screen-subtitle">이미지 공개 불가</p> : null}
                 <h3 className="qa-prompt">{i + 1}. {q.prompt}</h3>
                 <p className="qa-meta">{q.projectTitle}{q.pages.length ? ` · ${q.pages.join(', ')}페이지` : ''}</p>
                 <div><p className="qa-meta">예시 답변</p><div className="qa-answer" data-empty={!answer}>{answer ?? '이 질문의 예시 답변은 아직 등록되지 않았어요.'}</div></div>
@@ -98,22 +96,5 @@ export function DemoDashboard() {
         </section>}
       </>}
     </main>
-  </div>;
-}
-
-function PortfolioDocument({ url, candidate, pageCount }: { url: string; candidate: string; pageCount: number }) {
-  const [attempt, setAttempt] = useState(0);
-  const source = `${url}?retry=${attempt}`;
-  return <div className="portfolio-pages">
-    <div className="dash-title-row">
-      <p className="screen-subtitle">전체 포트폴리오 · {pageCount}페이지</p>
-      <div className="history-actions">
-        <a className="text-button" href={source} target="_blank" rel="noopener noreferrer">전체 PDF 새 탭으로 열기</a>
-        <button className="text-button" onClick={() => setAttempt(n => n + 1)}>PDF 다시 불러오기</button>
-      </div>
-    </div>
-    <object key={attempt} className="portfolio-document card" data={`${source}#view=FitH`} type="application/pdf" aria-label={`${candidate} 전체 포트폴리오`}>
-      <p className="empty-state">미리보기가 표시되지 않으면 새 탭으로 열어주세요. <a href={source} target="_blank" rel="noopener noreferrer">전체 PDF 열기</a></p>
-    </object>
   </div>;
 }
